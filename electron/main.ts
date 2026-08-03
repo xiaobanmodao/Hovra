@@ -17,6 +17,7 @@ import {
   type MouseController,
 } from "./mouseController";
 import { systemMouse } from "./systemMouseAdapter";
+import { toOverlayPoint } from "./overlayCoordinates";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -171,8 +172,9 @@ function setCursorOverlayState(
   if (!cursorOverlay || cursorOverlay.isDestroyed() || !Number.isFinite(x) || !Number.isFinite(y)) {
     return;
   }
+  const point = toOverlayPoint({ x, y }, screen.getPrimaryDisplay().bounds);
   cursorOverlay.webContents.executeJavaScript(
-    `window.postMessage(${JSON.stringify({ type: "gesture-overlay", x, y, visible: true, state })}, "*")`,
+    `window.postMessage(${JSON.stringify({ type: "gesture-overlay", x: point.x, y: point.y, visible: true, state })}, "*")`,
   ).catch(() => undefined);
 }
 
