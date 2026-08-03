@@ -11,54 +11,13 @@ import {
   pauseForLifecycle,
   registerMouseControllerIpc,
   type MouseController,
-  type SystemMouseAdapter,
 } from "./mouseController";
+import { systemMouse } from "./systemMouseAdapter";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
 app.enableSandbox();
-
-interface NutJsModule {
-  Button: { LEFT: unknown };
-  Point: new (x: number, y: number) => unknown;
-  mouse: {
-    move(path: unknown): Promise<void>;
-    click(button: unknown): Promise<void>;
-    pressButton(button: unknown): Promise<void>;
-    releaseButton(button: unknown): Promise<void>;
-  };
-  straightTo(point: unknown): unknown;
-}
-
-const nutJsPackageName = "@nut-tree/nut-js";
-let nutJsPromise: Promise<NutJsModule> | undefined;
-
-function loadNutJs(): Promise<NutJsModule> {
-  nutJsPromise ??= import(
-    /* @vite-ignore */ nutJsPackageName
-  ) as Promise<NutJsModule>;
-  return nutJsPromise;
-}
-
-const systemMouse: SystemMouseAdapter = {
-  async move(x, y) {
-    const { mouse, Point, straightTo } = await loadNutJs();
-    await mouse.move(straightTo(new Point(x, y)));
-  },
-  async click() {
-    const { Button, mouse } = await loadNutJs();
-    await mouse.click(Button.LEFT);
-  },
-  async press() {
-    const { Button, mouse } = await loadNutJs();
-    await mouse.pressButton(Button.LEFT);
-  },
-  async release() {
-    const { Button, mouse } = await loadNutJs();
-    await mouse.releaseButton(Button.LEFT);
-  },
-};
 
 let isAppActive = false;
 let mouseController: MouseController | undefined;
@@ -111,6 +70,10 @@ function createMainWindow(): BrowserWindow {
     });
   });
 
+  if (mainWindow.isFocused()) {
+    isAppActive = true;
+  }
+
   return mainWindow;
 }
 
@@ -124,7 +87,6 @@ void app.whenReady().then(() => {
   });
   registerMouseControllerIpc(ipcMain, mouseController);
 
-  isAppActive = true;
   createMainWindow();
 
   app.on("activate", () => {

@@ -68,6 +68,34 @@ describe("createMouseController", () => {
   });
 
   it.each([
+    ["move", (controller: MouseController) => controller.move(120, 80)],
+    ["click", (controller: MouseController) => controller.click()],
+    ["mouseDown", (controller: MouseController) => controller.mouseDown()],
+  ])(
+    "does not send %s when the app deactivates while permission is pending",
+    async (_name, invoke) => {
+      let resolvePermission: ((granted: boolean) => void) | undefined;
+      deps.permission.mockImplementation(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolvePermission = resolve;
+          }),
+      );
+      const controller = createMouseController(deps);
+
+      const action = invoke(controller);
+      await vi.waitFor(() => expect(resolvePermission).toBeTypeOf("function"));
+      deps.isActive.mockReturnValue(false);
+      resolvePermission?.(true);
+      await action;
+
+      expect(deps.mouse.move).not.toHaveBeenCalled();
+      expect(deps.mouse.click).not.toHaveBeenCalled();
+      expect(deps.mouse.press).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     [Number.NaN, 0],
     [Number.POSITIVE_INFINITY, 0],
     [0, Number.NEGATIVE_INFINITY],

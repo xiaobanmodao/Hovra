@@ -45,7 +45,11 @@ export function createMouseController(
   }
 
   async function canAct(): Promise<boolean> {
-    return deps.isActive() && (await deps.permission());
+    if (!deps.isActive() || !(await deps.permission())) {
+      return false;
+    }
+
+    return deps.isActive();
   }
 
   async function releasePressedButton(): Promise<void> {
