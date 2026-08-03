@@ -1,4 +1,5 @@
 import { GestureEngine } from "./gestureEngine";
+import { DEFAULT_GESTURE_SETTINGS } from "./config";
 import {
   INDEX_FINGER_TIP,
   MIDDLE_FINGER_TIP,
@@ -38,6 +39,30 @@ const pinchedHand = (): Landmark[] => handWithTips(
   { x: 0.03, y: 0 },
   { x: 0.05, y: 0 },
 );
+
+const handWithPinchDistance = (distance: number): Landmark[] => handWithTips(
+  { x: 0, y: 0 },
+  { x: distance, y: 0 },
+  { x: 0.05, y: 0 },
+);
+
+it("uses injected pinch and drag thresholds without mutating them", () => {
+  const settings = {
+    ...DEFAULT_GESTURE_SETTINGS,
+    pinchDistance: 0.1,
+    dragHoldMs: 600,
+  };
+  const engine = new GestureEngine(settings);
+
+  expect(engine.update(handWithPinchDistance(0.08), 0).state).toBe("pinching");
+  expect(engine.update(handWithPinchDistance(0.08), 500).dragStart).toBe(false);
+  expect(engine.update(handWithPinchDistance(0.08), 600).dragStart).toBe(true);
+  expect(settings).toEqual({
+    ...DEFAULT_GESTURE_SETTINGS,
+    pinchDistance: 0.1,
+    dragHoldMs: 600,
+  });
+});
 
 it("transitions between paused, tracking, pinching, clicking, dragging, and lost", () => {
   const engine = new GestureEngine();

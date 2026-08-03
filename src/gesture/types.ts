@@ -14,6 +14,14 @@ export type GestureOutput = {
   dragEnd: boolean;
 };
 
+export type GestureSettings = {
+  pinchDistance: number;
+  dragHoldMs: number;
+  openPalmMinTipDistance: number;
+  cursorSmoothingFactor: number;
+  cameraStaleFrameMs: number;
+};
+
 export const WRIST = 0;
 export const THUMB_TIP = 4;
 export const INDEX_FINGER_TIP = 8;

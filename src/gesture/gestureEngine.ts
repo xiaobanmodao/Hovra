@@ -1,4 +1,4 @@
-import { DRAG_HOLD_MS, OPEN_PALM_MIN_TIP_DISTANCE, PINCH_DISTANCE } from "./config";
+import { DEFAULT_GESTURE_SETTINGS } from "./config";
 import {
   INDEX_FINGER_TIP,
   MIDDLE_FINGER_TIP,
@@ -7,6 +7,7 @@ import {
   THUMB_TIP,
   WRIST,
   type GestureOutput,
+  type GestureSettings,
   type GestureState,
   type Landmark,
 } from "./types";
@@ -17,6 +18,11 @@ const distanceBetween = (first: Landmark, second: Landmark): number =>
 export class GestureEngine {
   private state: GestureState = "lost";
   private pinchStartedAt: number | null = null;
+  private readonly settings: GestureSettings;
+
+  constructor(settings: GestureSettings = DEFAULT_GESTURE_SETTINGS) {
+    this.settings = { ...settings };
+  }
 
   update(landmarks: Landmark[] | null, nowMs: number): GestureOutput {
     if (!landmarks) {
@@ -44,7 +50,8 @@ export class GestureEngine {
         this.pinchStartedAt = nowMs;
       }
 
-      const shouldStartDrag = this.state !== "dragging" && nowMs - this.pinchStartedAt >= DRAG_HOLD_MS;
+      const shouldStartDrag = this.state !== "dragging"
+        && nowMs - this.pinchStartedAt >= this.settings.dragHoldMs;
       if (shouldStartDrag) {
         this.state = "dragging";
         return this.output(cursor, false, true, false);
@@ -73,14 +80,14 @@ export class GestureEngine {
     ];
 
     return Boolean(wrist) && fingertips.every(
-      (tip) => tip !== undefined && distanceBetween(wrist, tip) > OPEN_PALM_MIN_TIP_DISTANCE,
+      (tip) => tip !== undefined && distanceBetween(wrist, tip) > this.settings.openPalmMinTipDistance,
     );
   }
 
   private isPinching(landmarks: Landmark[]): boolean {
     const thumb = landmarks[THUMB_TIP];
     const index = landmarks[INDEX_FINGER_TIP];
-    return Boolean(thumb && index) && distanceBetween(thumb, index) <= PINCH_DISTANCE;
+    return Boolean(thumb && index) && distanceBetween(thumb, index) <= this.settings.pinchDistance;
   }
 
   private output(cursor: Landmark | null, click: boolean, dragStart: boolean, dragEnd: boolean): GestureOutput {
