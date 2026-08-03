@@ -9,12 +9,13 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "vitest": "latest",
-    "typescript": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "latest",
