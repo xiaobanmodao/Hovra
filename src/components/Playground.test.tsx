@@ -84,4 +84,42 @@ describe("Playground", () => {
 
     expect(card).toHaveStyle({ left: "160px", top: "80px" });
   });
+
+  it("keeps the whole dragged card inside the playground surface", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("draggable-card")) {
+        return rect(20, 30, 120, 90);
+      }
+      if (this.classList.contains("playground-surface")) {
+        return rect(10, 20, 320, 240);
+      }
+      return rect(0, 0, 0, 0);
+    });
+
+    const { rerender } = render(
+      <Playground
+        cursor={{ x: 50, y: 50 }}
+        output={{ ...idle, state: "pinching", dragStart: true }}
+      />,
+    );
+
+    rerender(
+      <Playground
+        cursor={{ x: 500, y: 500 }}
+        output={{ ...idle, state: "dragging" }}
+      />,
+    );
+
+    const card = screen.getByTestId("draggable-card");
+    expect(card).toHaveStyle({ left: "200px", top: "150px" });
+
+    rerender(
+      <Playground
+        cursor={{ x: -100, y: -100 }}
+        output={{ ...idle, state: "dragging" }}
+      />,
+    );
+
+    expect(card).toHaveStyle({ left: "0px", top: "0px" });
+  });
 });

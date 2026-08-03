@@ -108,12 +108,12 @@ h2 {
 }
 
 .status-panel strong {
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: #eaf2fc;
   font-size: 0.9rem;
-  text-overflow: ellipsis;
+  line-height: 1.4;
   text-transform: capitalize;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .gesture-workspace {
@@ -188,6 +188,41 @@ h2 {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 0.8rem;
   pointer-events: none;
+}
+
+.camera-error {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  gap: 1rem;
+  padding: 2rem;
+  place-content: center;
+  color: #eef5ff;
+  background: rgba(3, 9, 19, 0.88);
+  text-align: center;
+}
+
+.camera-error p {
+  max-width: 28rem;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.camera-error button {
+  justify-self: center;
+  padding: 0.65rem 1rem;
+  border: 1px solid rgba(99, 215, 238, 0.55);
+  border-radius: 0.7rem;
+  color: #07101f;
+  background: #8fe2f2;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.camera-error button:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
 }
 
 .gesture-hint {

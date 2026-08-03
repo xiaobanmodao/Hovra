@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { Landmark } from "../gesture/types";
 
 type CameraStageProps = {
@@ -6,6 +6,7 @@ type CameraStageProps = {
   landmarks: Landmark[] | null;
   onCameraReady: () => void;
   onCameraError: (message: string) => void;
+  onCameraRetry: () => void;
 };
 
 const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
@@ -18,7 +19,7 @@ const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
 
 const cameraErrorMessage = (error: unknown): string => {
   if (error instanceof DOMException && error.name === "NotAllowedError") {
-    return "Camera permission was denied. Allow camera access and reload to try again.";
+    return "Camera permission was denied. Allow camera access, then retry.";
   }
 
   if (error instanceof DOMException && error.name === "NotFoundError") {
@@ -33,9 +34,12 @@ export function CameraStage({
   landmarks,
   onCameraReady,
   onCameraError,
+  onCameraRetry,
 }: CameraStageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hasDrawnLandmarksRef = useRef(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [retryAttempt, setRetryAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -52,12 +56,16 @@ export function CameraStage({
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
-      onCameraError("Camera stream ended. Reconnect the camera and reload to try again.");
+      const message = "Camera stream ended. Reconnect the camera, then retry.";
+      setCameraError(message);
+      onCameraError(message);
     };
 
     const startCamera = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        onCameraError("This browser does not support camera access.");
+        const message = "This browser does not support camera access.";
+        setCameraError(message);
+        onCameraError(message);
         return;
       }
 
@@ -79,7 +87,9 @@ export function CameraStage({
         }
       } catch (error) {
         if (active) {
-          onCameraError(cameraErrorMessage(error));
+          const message = cameraErrorMessage(error);
+          setCameraError(message);
+          onCameraError(message);
         }
       }
     };
@@ -98,7 +108,13 @@ export function CameraStage({
         videoRef.current.srcObject = null;
       }
     };
-  }, [onCameraError, videoRef]);
+  }, [onCameraError, retryAttempt, videoRef]);
+
+  const retryCamera = () => {
+    setCameraError(null);
+    onCameraRetry();
+    setRetryAttempt((attempt) => attempt + 1);
+  };
 
   const drawOverlay = useCallback((points: Landmark[] | null) => {
     const canvas = canvasRef.current;
@@ -179,6 +195,12 @@ export function CameraStage({
         />
         <canvas ref={canvasRef} aria-hidden="true" />
         <div className="camera-reticle" aria-hidden="true" />
+        {cameraError && (
+          <div className="camera-error" role="alert">
+            <p>{cameraError}</p>
+            <button type="button" onClick={retryCamera}>Retry camera</button>
+          </div>
+        )}
       </div>
     </section>
   );

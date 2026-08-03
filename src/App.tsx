@@ -48,6 +48,14 @@ function App() {
     setOutput(nextOutput);
   }, [engine]);
 
+  const handleCameraRetry = useCallback(() => {
+    setCameraReady(false);
+    setCameraStatus("Requesting access");
+    setTrackerStatus("Waiting for camera");
+    setLandmarks(null);
+    setOutput(engine.update(null, performance.now()));
+  }, [engine]);
+
   useEffect(() => {
     if (!cameraReady) {
       return;
@@ -179,6 +187,7 @@ function App() {
           landmarks={landmarks}
           onCameraReady={handleCameraReady}
           onCameraError={handleCameraError}
+          onCameraRetry={handleCameraRetry}
         />
         <Playground cursor={cursor} output={output} />
       </div>

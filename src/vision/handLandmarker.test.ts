@@ -18,7 +18,9 @@ it("creates a video-mode landmarker that detects one hand", async () => {
   mediaPipe.createFromOptions.mockResolvedValue(landmarker);
 
   await expect(createHandLandmarker()).resolves.toBe(landmarker);
-  expect(mediaPipe.forVisionTasks).toHaveBeenCalledOnce();
+  expect(mediaPipe.forVisionTasks).toHaveBeenCalledWith(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm",
+  );
   expect(mediaPipe.createFromOptions).toHaveBeenCalledWith(wasmFileset, expect.objectContaining({
     runningMode: "VIDEO",
     numHands: 1,

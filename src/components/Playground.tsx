@@ -57,9 +57,18 @@ export function Playground({ cursor, output }: PlaygroundProps) {
     }
 
     const surfaceBounds = surfaceRef.current.getBoundingClientRect();
+    const cardBounds = cardRef.current?.getBoundingClientRect();
+    if (!cardBounds) {
+      return;
+    }
+
+    const maxX = Math.max(0, surfaceBounds.width - cardBounds.width);
+    const maxY = Math.max(0, surfaceBounds.height - cardBounds.height);
+    const nextX = cursor.x - surfaceBounds.left - dragOffsetRef.current.x;
+    const nextY = cursor.y - surfaceBounds.top - dragOffsetRef.current.y;
     setCardPosition({
-      x: cursor.x - surfaceBounds.left - dragOffsetRef.current.x,
-      y: cursor.y - surfaceBounds.top - dragOffsetRef.current.y,
+      x: Math.min(maxX, Math.max(0, nextX)),
+      y: Math.min(maxY, Math.max(0, nextY)),
     });
   }, [cursor, output.state]);
 
