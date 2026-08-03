@@ -15,6 +15,7 @@ interface CapturedIpcSecurity {
 
 const mainMocks = vi.hoisted(() => ({
   appHandlers: new Map<string, (...args: unknown[]) => void>(),
+  screenHandlers: new Map<string, (...args: unknown[]) => void>(),
   controllerDependencies: undefined as CapturedControllerDependencies | undefined,
   ipcSecurity: undefined as CapturedIpcSecurity | undefined,
   ipcHandlers: new Map<string, (event: unknown) => Promise<unknown>>(),
@@ -41,6 +42,7 @@ const mainMocks = vi.hoisted(() => ({
     loadURL: ReturnType<typeof vi.fn>;
     setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
+    setBounds: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -67,6 +69,7 @@ vi.mock("electron", () => {
     loadFile = vi.fn().mockResolvedValue(undefined);
     setIgnoreMouseEvents = vi.fn();
     destroy = vi.fn();
+    setBounds = vi.fn();
     isDestroyed = vi.fn().mockReturnValue(false);
     isFocused = vi.fn().mockReturnValue(false);
 
@@ -101,6 +104,9 @@ vi.mock("electron", () => {
       getPrimaryDisplay: vi.fn(() => ({
         bounds: { x: -1440, y: 0, width: 1440, height: 900 },
       })),
+      on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+        mainMocks.screenHandlers.set(event, listener);
+      }),
     },
     shell: { openExternal: mainMocks.openExternal },
     systemPreferences: {
@@ -147,6 +153,7 @@ async function bootMain(devServerUrl: string | undefined) {
 
 beforeEach(() => {
   mainMocks.appHandlers.clear();
+  mainMocks.screenHandlers.clear();
   mainMocks.controllerDependencies = undefined;
   mainMocks.ipcSecurity = undefined;
   mainMocks.ipcHandlers.clear();
@@ -201,6 +208,21 @@ describe("main BrowserWindow security", () => {
     destroyed();
 
     expect(overlay.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("resizes the cursor overlay when primary display metrics change", async () => {
+    await bootMain("http://localhost:5173");
+    const overlay = mainMocks.windows[1];
+    const displayMetricsChanged = mainMocks.screenHandlers.get("display-metrics-changed");
+
+    displayMetricsChanged?.();
+
+    expect(overlay.setBounds).toHaveBeenCalledWith({
+      x: -1440,
+      y: 0,
+      width: 1440,
+      height: 900,
+    });
   });
 
   it("loads only the packaged renderer file in production", async () => {

@@ -168,6 +168,14 @@ function createCursorOverlay(): BrowserWindow {
   return overlay;
 }
 
+function syncCursorOverlayBounds(): void {
+  if (!cursorOverlay || cursorOverlay.isDestroyed()) {
+    return;
+  }
+
+  cursorOverlay.setBounds(screen.getPrimaryDisplay().bounds);
+}
+
 function setCursorOverlayState(
   x: number,
   y: number,
@@ -271,6 +279,7 @@ void app.whenReady().then(() => {
     overlay: { show: setCursorOverlayState, hide: hideCursorOverlay },
   });
   createMainWindow();
+  screen.on("display-metrics-changed", syncCursorOverlayBounds);
   registerMouseControllerIpc(ipcMain, mouseController, {
     isTrustedEvent: isTrustedRendererEvent,
     canActivate: canActivateRendererEvent,
