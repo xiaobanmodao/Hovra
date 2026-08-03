@@ -3,6 +3,8 @@
 .superpowers/
 node_modules/
 dist/
+.vite/
+out/
 coverage/
 *.tsbuildinfo
 vite.config.d.ts
