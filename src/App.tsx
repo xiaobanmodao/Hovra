@@ -4,6 +4,7 @@ import { CalibrationPanel } from "./components/CalibrationPanel";
 import { CameraStage } from "./components/CameraStage";
 import { Playground } from "./components/Playground";
 import { StatusPanel } from "./components/StatusPanel";
+import { SystemControlPanel } from "./components/SystemControlPanel";
 import { mapMirroredPoint, smoothPoint, type Point } from "./cursor/cursorController";
 import { DEFAULT_GESTURE_SETTINGS } from "./gesture/config";
 import { GestureEngine } from "./gesture/gestureEngine";
@@ -30,8 +31,14 @@ const clampToViewport = (point: Point): Point => ({
 });
 
 function App() {
+  const desktopBridge = window.gestureDesktop;
   const videoRef = useRef<HTMLVideoElement>(null);
   const cursorRef = useRef<Point | null>(null);
+  const systemControlActiveRef = useRef(false);
+  const pendingPauseRef = useRef<Promise<void> | null>(null);
+  const mountedRef = useRef(true);
+  const lastDispatchedOutputRef = useRef<GestureOutput>(INITIAL_OUTPUT);
+  const safetyGenerationRef = useRef(0);
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_GESTURE_SETTINGS }));
   const engine = useMemo(() => new GestureEngine(settings), [settings]);
   const engineRef = useRef(engine);
@@ -43,6 +50,7 @@ function App() {
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [output, setOutput] = useState<GestureOutput>(INITIAL_OUTPUT);
   const [cursor, setCursor] = useState<Point | null>(null);
+  const [systemControlEnabled, setSystemControlEnabled] = useState(false);
   const pinchDistance = useMemo(() => {
     const thumb = landmarks?.[THUMB_TIP];
     const index = landmarks?.[INDEX_FINGER_TIP];
@@ -75,6 +83,109 @@ function App() {
     setOutput(engineRef.current.update(null, performance.now()));
     setSettings(nextSettings);
   }, []);
+
+  const pauseSystemControl = useCallback((): Promise<void> => {
+    systemControlActiveRef.current = false;
+    safetyGenerationRef.current += 1;
+
+    if (pendingPauseRef.current) {
+      return pendingPauseRef.current;
+    }
+
+    if (!desktopBridge) {
+      if (mountedRef.current) {
+        setSystemControlEnabled(false);
+      }
+      return Promise.resolve();
+    }
+
+    const pause = (async () => {
+      try {
+        await desktopBridge.mouseUp();
+      } catch {
+        // The renderer must still deactivate if the main process is shutting down.
+      } finally {
+        if (mountedRef.current) {
+          setSystemControlEnabled(false);
+        }
+        pendingPauseRef.current = null;
+      }
+    })();
+    pendingPauseRef.current = pause;
+    return pause;
+  }, [desktopBridge]);
+
+  const enableSystemControl = useCallback(async () => {
+    if (!desktopBridge) {
+      return;
+    }
+
+    if (pendingPauseRef.current) {
+      await pendingPauseRef.current;
+    }
+
+    const safetyGeneration = safetyGenerationRef.current;
+    try {
+      const permission = await desktopBridge.getPermissionStatus();
+      if (
+        permission === "granted"
+        && safetyGeneration === safetyGenerationRef.current
+        && mountedRef.current
+      ) {
+        systemControlActiveRef.current = true;
+        setSystemControlEnabled(true);
+      }
+    } catch {
+      await pauseSystemControl();
+    }
+  }, [desktopBridge, pauseSystemControl]);
+
+  useEffect(() => {
+    const handleSafetyPause = () => {
+      void pauseSystemControl();
+    };
+
+    window.addEventListener("blur", handleSafetyPause);
+    const unsubscribe = desktopBridge?.onSafetyPause(handleSafetyPause);
+    return () => {
+      window.removeEventListener("blur", handleSafetyPause);
+      unsubscribe?.();
+    };
+  }, [desktopBridge, pauseSystemControl]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    void pauseSystemControl();
+  }, [pauseSystemControl]);
+
+  useEffect(() => {
+    if (lastDispatchedOutputRef.current === output) {
+      return;
+    }
+    lastDispatchedOutputRef.current = output;
+
+    if (!desktopBridge || !systemControlActiveRef.current) {
+      return;
+    }
+
+    if (output.state === "lost" || output.state === "paused") {
+      void pauseSystemControl();
+      return;
+    }
+
+    if (cursor) {
+      void desktopBridge.move(cursor.x, cursor.y).catch(() => pauseSystemControl());
+    }
+    if (output.click) {
+      void desktopBridge.click().catch(() => pauseSystemControl());
+    }
+    if (output.dragStart) {
+      void desktopBridge.mouseDown().catch(() => pauseSystemControl());
+    }
+    if (output.dragEnd) {
+      void desktopBridge.mouseUp().catch(() => pauseSystemControl());
+    }
+  }, [cursor, desktopBridge, output, pauseSystemControl]);
 
   useEffect(() => {
     if (!cameraReady) {
@@ -199,6 +310,12 @@ function App() {
         camera={cameraStatus}
         tracker={trackerStatus}
         gesture={output.state}
+      />
+
+      <SystemControlPanel
+        enabled={systemControlEnabled}
+        onEnable={enableSystemControl}
+        onPause={pauseSystemControl}
       />
 
       <CalibrationPanel

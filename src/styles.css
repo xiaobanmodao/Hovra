@@ -116,6 +116,79 @@ h2 {
   white-space: normal;
 }
 
+.system-control-panel {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.55fr) minmax(18rem, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid #253955;
+  border-radius: 1rem;
+  background: rgba(12, 28, 49, 0.96);
+}
+
+.system-control-panel .eyebrow {
+  margin-bottom: 0.25rem;
+}
+
+.system-control-panel h2 {
+  font-size: 1.1rem;
+}
+
+.system-control-copy {
+  min-width: 0;
+}
+
+.system-control-copy strong {
+  color: #eef5ff;
+}
+
+.system-control-copy p {
+  margin: 0.2rem 0 0;
+  color: #8fa4bd;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.system-control-panel.is-denied .system-control-copy strong {
+  color: #ffd28a;
+}
+
+.system-control-panel.is-granted .system-control-copy strong {
+  color: #8fe2f2;
+}
+
+.system-control-button {
+  min-height: 2.6rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid rgba(99, 215, 238, 0.48);
+  border-radius: 0.7rem;
+  color: #e6fbff;
+  background: rgba(99, 215, 238, 0.12);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.system-control-button:hover:not(:disabled) {
+  border-color: rgba(99, 215, 238, 0.78);
+  background: rgba(99, 215, 238, 0.2);
+}
+
+.system-control-button:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.system-control-button:disabled {
+  border-color: #35465b;
+  color: #70839a;
+  background: rgba(53, 70, 91, 0.2);
+  cursor: not-allowed;
+}
+
 .calibration-panel {
   margin-bottom: 1rem;
   overflow: hidden;
@@ -498,6 +571,15 @@ h2 {
     display: grid;
   }
 
+  .system-control-panel {
+    grid-template-columns: 1fr auto;
+  }
+
+  .system-control-copy {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
   .calibration-content {
     grid-template-columns: 1fr;
   }
@@ -515,6 +597,19 @@ h2 {
 
   .status-panel {
     grid-template-columns: 1fr;
+  }
+
+  .system-control-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .system-control-copy {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .system-control-button {
+    width: 100%;
   }
 
   .calibration-diagnostics,

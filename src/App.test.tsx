@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
+import type { GestureDesktopApi } from "./electron.d";
 import type { GestureSettings, Landmark } from "./gesture/types";
 
 const vision = vi.hoisted(() => ({
@@ -65,6 +66,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  delete window.gestureDesktop;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vision.close.mockReset();
@@ -72,6 +74,105 @@ afterEach(() => {
   vision.detectFirstHand.mockReset();
   gestureEngine.createdWith.mockReset();
 });
+
+const desktopApi = (): GestureDesktopApi => ({
+  getPermissionStatus: vi.fn().mockResolvedValue("granted"),
+  move: vi.fn().mockResolvedValue(undefined),
+  click: vi.fn().mockResolvedValue(undefined),
+  mouseDown: vi.fn().mockResolvedValue(undefined),
+  mouseUp: vi.fn().mockResolvedValue(undefined),
+  onSafetyPause: vi.fn(() => vi.fn()),
+});
+
+const trackingHandAt = (x: number, y: number): Landmark[] => {
+  const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+  hand[4] = { x: x - 0.25, y: y - 0.25 };
+  hand[8] = { x, y };
+  return hand;
+};
+
+const openPalmAt = (x: number, y: number): Landmark[] => {
+  const hand = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5 }));
+  hand[8] = { x, y };
+  hand[12] = { x: 0.5, y: 0.1 };
+  hand[16] = { x: 0.8, y: 0.2 };
+  hand[20] = { x: 0.9, y: 0.5 };
+  hand[4] = { x: 0.15, y: 0.75 };
+  return hand;
+};
+
+const deferred = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+};
+
+const renderDesktopApp = async () => {
+  const stream = Object.assign(new EventTarget(), {
+    getTracks: () => [],
+  }) as unknown as MediaStream;
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+  });
+
+  let nextFrame: FrameRequestCallback | null = null;
+  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+    nextFrame = callback;
+    return 1;
+  }));
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
+  let detectedHand: Landmark[] | null = trackingHandAt(0.4, 0.4);
+  vision.detectFirstHand.mockImplementation(() => detectedHand);
+  const bridge = desktopApi();
+  window.gestureDesktop = bridge;
+
+  const rendered = render(<App />);
+  const video = screen.getByLabelText(/mirrored camera preview/i) as HTMLVideoElement;
+  Object.defineProperty(video, "readyState", {
+    configurable: true,
+    value: HTMLMediaElement.HAVE_CURRENT_DATA,
+  });
+  Object.defineProperty(video, "currentTime", {
+    configurable: true,
+    value: 0,
+    writable: true,
+  });
+  fireEvent.loadedData(video);
+  await waitFor(() => expect(nextFrame).not.toBeNull());
+
+  let videoTime = 0;
+  const runAnimationFrame = (nowMs: number) => {
+    act(() => nextFrame?.(nowMs));
+  };
+  const runFrame = (nowMs: number, hand: Landmark[] | null = detectedHand) => {
+    detectedHand = hand;
+    videoTime += 1;
+    video.currentTime = videoTime;
+    runAnimationFrame(nowMs);
+  };
+
+  runFrame(16);
+  const enable = await screen.findByRole("button", { name: "Enable system control" });
+  await waitFor(() => expect(enable).toBeEnabled());
+  fireEvent.click(enable);
+  await screen.findByText("Enabled");
+
+  return { ...rendered, bridge, runAnimationFrame, runFrame, video };
+};
+
+const startDesktopDrag = async (
+  runFrame: (nowMs: number, hand?: Landmark[] | null) => void,
+  bridge: GestureDesktopApi,
+) => {
+  const hand = pinchedHandAt(0.4, 0.4);
+  runFrame(100, hand);
+  runFrame(500, hand);
+  await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
+};
 
 it("renders the hand gesture demo heading", () => {
   render(<App />);
@@ -320,4 +421,64 @@ it("ends an active drag and cleans up recognition when the camera stream becomes
   expect(track.stop).toHaveBeenCalledOnce();
   expect(vision.close).toHaveBeenCalledOnce();
   expect(cancelAnimationFrame).toHaveBeenCalledWith(7);
+});
+
+it("dispatches cursor movement, short clicks, and drag button transitions while enabled", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+
+  runFrame(50, trackingHandAt(0.45, 0.45));
+  await waitFor(() => expect(bridge.move).toHaveBeenCalled());
+
+  runFrame(100, pinchedHandAt(0.45, 0.45));
+  runFrame(200, trackingHandAt(0.45, 0.45));
+  await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
+
+  runFrame(300, pinchedHandAt(0.45, 0.45));
+  runFrame(700, pinchedHandAt(0.45, 0.45));
+  await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
+
+  runFrame(800, trackingHandAt(0.45, 0.45));
+  await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
+});
+
+it.each(["lost", "open-palm", "stale-frame", "window-blur"] as const)(
+  "awaits mouse release before showing system control paused on %s safety",
+  async (safety) => {
+    const { bridge, runAnimationFrame, runFrame, video } = await renderDesktopApp();
+    await startDesktopDrag(runFrame, bridge);
+    const release = deferred();
+    vi.mocked(bridge.mouseUp).mockImplementation(() => release.promise);
+
+    if (safety === "lost") {
+      runFrame(600, null);
+    } else if (safety === "open-palm") {
+      runFrame(600, openPalmAt(0.4, 0.1));
+    } else if (safety === "stale-frame") {
+      Object.defineProperty(video, "readyState", {
+        configurable: true,
+        value: HTMLMediaElement.HAVE_METADATA,
+      });
+      runAnimationFrame(1_100);
+    } else {
+      act(() => window.dispatchEvent(new Event("blur")));
+    }
+
+    expect(bridge.mouseUp).toHaveBeenCalledOnce();
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
+
+    await act(async () => {
+      release.resolve();
+      await release.promise;
+    });
+    await screen.findByText("Paused");
+  },
+);
+
+it("requests a mouse release when the renderer unmounts", async () => {
+  const { bridge, runFrame, unmount } = await renderDesktopApp();
+  await startDesktopDrag(runFrame, bridge);
+
+  unmount();
+
+  expect(bridge.mouseUp).toHaveBeenCalledOnce();
 });
