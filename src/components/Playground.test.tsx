@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GestureOutput } from "../gesture/types";
 import { Playground } from "./Playground";
@@ -90,5 +90,51 @@ describe("Playground", () => {
     );
 
     expect(card).toHaveStyle({ left: "784px", top: "648px" });
+  });
+
+  it("keeps both fixed interaction objects visible when the viewport shrinks", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("draggable-card")
+        ? rect(136, 205, 224, 104)
+        : this.classList.contains("click-target")
+          ? rect(848, 32, 144, 144)
+          : rect(0, 0, 0, 0);
+    });
+
+    const { rerender, unmount } = render(
+      <Playground
+        cursor={{ x: 180, y: 240 }}
+        output={{ ...idle, state: "pinching", dragStart: true }}
+      />,
+    );
+
+    rerender(
+      <Playground
+        cursor={{ x: 980, y: 760 }}
+        output={{ ...idle, state: "dragging" }}
+      />,
+    );
+
+    vi.stubGlobal("innerWidth", 600);
+    vi.stubGlobal("innerHeight", 180);
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    expect(screen.getByText(/pinch here/i).parentElement).toHaveStyle({
+      left: "440px",
+      top: "20px",
+    });
+    expect(screen.getByTestId("draggable-card")).toHaveStyle({
+      left: "360px",
+      top: "60px",
+    });
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    unmount();
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

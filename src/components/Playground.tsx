@@ -32,7 +32,7 @@ const containsPoint = (bounds: DOMRect, point: Point): boolean => (
 
 export function Playground({ cursor, output }: PlaygroundProps) {
   const [clickCount, setClickCount] = useState(0);
-  const [clickTargetPosition] = useState<Position>(getInitialTargetPosition);
+  const [clickTargetPosition, setClickTargetPosition] = useState<Position>(getInitialTargetPosition);
   const [cardPosition, setCardPosition] = useState<Position>({ x: 136, y: 205 });
   const clickTargetRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -92,6 +92,45 @@ export function Playground({ cursor, output }: PlaygroundProps) {
       dragOffsetRef.current = null;
     }
   }, [output.dragEnd]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const targetBounds = clickTargetRef.current?.getBoundingClientRect();
+      if (targetBounds) {
+        setClickTargetPosition((position) => {
+          const nextPosition = clampToViewport(
+            position,
+            { width: targetBounds.width, height: targetBounds.height },
+            getViewport(),
+            VIEWPORT_MARGIN,
+          );
+
+          return nextPosition.x === position.x && nextPosition.y === position.y
+            ? position
+            : nextPosition;
+        });
+      }
+
+      const cardBounds = cardRef.current?.getBoundingClientRect();
+      if (cardBounds) {
+        setCardPosition((position) => {
+          const nextPosition = clampToViewport(
+            position,
+            { width: cardBounds.width, height: cardBounds.height },
+            getViewport(),
+            VIEWPORT_MARGIN,
+          );
+
+          return nextPosition.x === position.x && nextPosition.y === position.y
+            ? position
+            : nextPosition;
+        });
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
     <section className="playground" aria-labelledby="playground-title">

@@ -30,6 +30,7 @@ After starting the demo locally, perform these acceptance checks:
 - [ ] Move the index finger and observe the cursor move.
 - [ ] Perform a short pinch on the target and observe exactly one click.
 - [ ] Hold a pinch for at least 350 ms, move, then release; confirm the card moves.
+- [ ] Confirm both objects can be operated anywhere in the current viewport and remain visible after resizing.
 - [ ] Open the palm and confirm the cursor no longer moves.
 - [ ] Remove the hand and confirm the status changes to `lost`.
 - [ ] Reload the page, deny camera access, and confirm guidance appears.
