@@ -128,6 +128,77 @@ it("propagates calibration settings and displays the live two-dimensional pinch 
   expect(screen.getByText("Pinch distance").nextElementSibling).toHaveTextContent("0.040");
 });
 
+it("ends an active drag before replacing the engine when calibration settings change", async () => {
+  const stream = Object.assign(new EventTarget(), {
+    getTracks: () => [],
+  }) as unknown as MediaStream;
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+  });
+
+  let nextFrame: FrameRequestCallback | null = null;
+  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+    nextFrame = callback;
+    return 1;
+  }));
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
+  const startingCursor = {
+    x: 1 - 50 / window.innerWidth,
+    y: 50 / window.innerHeight,
+  };
+  let detectedHand = pinchedHandAt(startingCursor.x, startingCursor.y);
+  vision.detectFirstHand.mockImplementation(() => detectedHand);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains("draggable-card")) {
+      return rect(20, 30, 120, 90);
+    }
+    return rect(0, 0, 0, 0);
+  });
+
+  render(<App />);
+  const video = screen.getByLabelText(/mirrored camera preview/i) as HTMLVideoElement;
+  Object.defineProperty(video, "readyState", {
+    configurable: true,
+    value: HTMLMediaElement.HAVE_CURRENT_DATA,
+  });
+  Object.defineProperty(video, "currentTime", {
+    configurable: true,
+    value: 1,
+    writable: true,
+  });
+  fireEvent.loadedData(video);
+  await waitFor(() => expect(nextFrame).not.toBeNull());
+
+  act(() => nextFrame?.(16));
+  video.currentTime = 2;
+  act(() => nextFrame?.(400));
+
+  const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
+  const card = screen.getByTestId("draggable-card");
+  expect(status).toHaveTextContent(/gesturedragging/i);
+  expect(card).toHaveStyle({ left: "20px", top: "30px" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Increase drag hold" }));
+
+  expect(status).toHaveTextContent(/gesturelost/i);
+  expect(card).not.toHaveClass("is-dragging");
+
+  const distantCursor = {
+    x: 1 - 800 / window.innerWidth,
+    y: 400 / window.innerHeight,
+  };
+  detectedHand = pinchedHandAt(distantCursor.x, distantCursor.y);
+  video.currentTime = 3;
+  act(() => nextFrame?.(500));
+  video.currentTime = 4;
+  act(() => nextFrame?.(900));
+
+  expect(status).toHaveTextContent(/gesturedragging/i);
+  expect(card).toHaveStyle({ left: "20px", top: "30px" });
+});
+
 it("marks a stalled frame lost when video readiness drops during a drag", async () => {
   const stream = Object.assign(new EventTarget(), {
     getTracks: () => [],

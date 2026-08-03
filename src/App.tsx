@@ -11,6 +11,7 @@ import {
   INDEX_FINGER_TIP,
   THUMB_TIP,
   type GestureOutput,
+  type GestureSettings,
   type Landmark,
 } from "./gesture/types";
 import { createHandLandmarker, detectFirstHand } from "./vision/handLandmarker";
@@ -68,6 +69,11 @@ function App() {
     setTrackerStatus("Waiting for camera");
     setLandmarks(null);
     setOutput(engineRef.current.update(null, performance.now()));
+  }, []);
+
+  const handleSettingsChange = useCallback((nextSettings: GestureSettings) => {
+    setOutput(engineRef.current.update(null, performance.now()));
+    setSettings(nextSettings);
   }, []);
 
   useEffect(() => {
@@ -197,7 +203,7 @@ function App() {
 
       <CalibrationPanel
         settings={settings}
-        onSettingsChange={setSettings}
+        onSettingsChange={handleSettingsChange}
         pinchDistance={pinchDistance}
         gestureState={output.state}
         cursor={cursor}
