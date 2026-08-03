@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
-import type { Landmark } from "./gesture/types";
+import type { GestureSettings, Landmark } from "./gesture/types";
 
 const vision = vi.hoisted(() => ({
   close: vi.fn(),
@@ -8,10 +8,27 @@ const vision = vi.hoisted(() => ({
   detectFirstHand: vi.fn(),
 }));
 
+const gestureEngine = vi.hoisted(() => ({
+  createdWith: vi.fn(),
+}));
+
 vi.mock("./vision/handLandmarker", () => ({
   createHandLandmarker: vision.createHandLandmarker,
   detectFirstHand: vision.detectFirstHand,
 }));
+
+vi.mock("./gesture/gestureEngine", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./gesture/gestureEngine")>();
+
+  return {
+    GestureEngine: class extends actual.GestureEngine {
+      constructor(settings?: GestureSettings) {
+        super(settings);
+        gestureEngine.createdWith(settings);
+      }
+    },
+  };
+});
 
 import App from "./App";
 
@@ -53,11 +70,62 @@ afterEach(() => {
   vision.close.mockReset();
   vision.createHandLandmarker.mockReset();
   vision.detectFirstHand.mockReset();
+  gestureEngine.createdWith.mockReset();
 });
 
 it("renders the hand gesture demo heading", () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: /hand gesture/i })).toBeInTheDocument();
+});
+
+it("propagates calibration settings and displays the live two-dimensional pinch distance", async () => {
+  const stream = Object.assign(new EventTarget(), {
+    getTracks: () => [],
+  }) as unknown as MediaStream;
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+  });
+
+  let nextFrame: FrameRequestCallback | null = null;
+  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+    nextFrame = callback;
+    return 1;
+  }));
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
+  const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+  hand[4] = { x: 0.2, y: 0.3 };
+  hand[8] = { x: 0.24, y: 0.3 };
+  vision.detectFirstHand.mockReturnValue(hand);
+
+  render(<App />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Increase drag hold" }));
+  expect(gestureEngine.createdWith).toHaveBeenLastCalledWith(
+    expect.objectContaining({ dragHoldMs: 400 }),
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
+  expect(gestureEngine.createdWith).toHaveBeenLastCalledWith(
+    expect.objectContaining({ dragHoldMs: 350 }),
+  );
+
+  const video = screen.getByLabelText(/mirrored camera preview/i) as HTMLVideoElement;
+  Object.defineProperty(video, "readyState", {
+    configurable: true,
+    value: HTMLMediaElement.HAVE_CURRENT_DATA,
+  });
+  Object.defineProperty(video, "currentTime", {
+    configurable: true,
+    value: 1,
+  });
+  fireEvent.loadedData(video);
+
+  await waitFor(() => expect(nextFrame).not.toBeNull());
+  act(() => nextFrame?.(16));
+
+  expect(screen.getByText("Pinch distance").nextElementSibling).toHaveTextContent("0.040");
 });
 
 it("marks a stalled frame lost when video readiness drops during a drag", async () => {
@@ -108,7 +176,8 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
   video.currentTime = 2;
   act(() => nextFrame?.(400));
   expect(vision.detectFirstHand).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole("status")).toHaveTextContent(/gesturedragging/i);
+  const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
+  expect(status).toHaveTextContent(/gesturedragging/i);
   const card = screen.getByTestId("draggable-card");
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
 
@@ -118,8 +187,8 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
   });
   act(() => nextFrame?.(950));
   expect(vision.detectFirstHand).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole("status")).toHaveTextContent(/camera frame stalled/i);
-  expect(screen.getByRole("status")).toHaveTextContent(/gesturelost/i);
+  expect(status).toHaveTextContent(/camera frame stalled/i);
+  expect(status).toHaveTextContent(/gesturelost/i);
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
 });
 
@@ -168,13 +237,14 @@ it("ends an active drag and cleans up recognition when the camera stream becomes
   act(() => nextFrame?.(16));
   video.currentTime = 2;
   act(() => nextFrame?.(400));
-  expect(screen.getByRole("status")).toHaveTextContent(/gesturedragging/i);
+  const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
+  expect(status).toHaveTextContent(/gesturedragging/i);
   const card = screen.getByTestId("draggable-card");
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
 
   act(() => stream.dispatchEvent(new Event("inactive")));
 
-  expect(screen.getByRole("status")).toHaveTextContent(/gesturelost/i);
+  expect(status).toHaveTextContent(/gesturelost/i);
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
   expect(track.stop).toHaveBeenCalledOnce();
   expect(vision.close).toHaveBeenCalledOnce();

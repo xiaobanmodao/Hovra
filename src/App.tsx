@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HandLandmarker } from "@mediapipe/tasks-vision";
+import { CalibrationPanel } from "./components/CalibrationPanel";
 import { CameraStage } from "./components/CameraStage";
 import { Playground } from "./components/Playground";
 import { StatusPanel } from "./components/StatusPanel";
 import { mapMirroredPoint, smoothPoint, type Point } from "./cursor/cursorController";
-import { CAMERA_STALE_FRAME_MS, CURSOR_SMOOTHING_FACTOR } from "./gesture/config";
+import { DEFAULT_GESTURE_SETTINGS } from "./gesture/config";
 import { GestureEngine } from "./gesture/gestureEngine";
-import type { GestureOutput, Landmark } from "./gesture/types";
+import {
+  INDEX_FINGER_TIP,
+  THUMB_TIP,
+  type GestureOutput,
+  type Landmark,
+} from "./gesture/types";
 import { createHandLandmarker, detectFirstHand } from "./vision/handLandmarker";
 
 const INITIAL_OUTPUT: GestureOutput = {
@@ -25,7 +31,10 @@ const clampToViewport = (point: Point): Point => ({
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cursorRef = useRef<Point | null>(null);
-  const [engine] = useState(() => new GestureEngine());
+  const [settings, setSettings] = useState(() => ({ ...DEFAULT_GESTURE_SETTINGS }));
+  const engine = useMemo(() => new GestureEngine(settings), [settings]);
+  const engineRef = useRef(engine);
+  engineRef.current = engine;
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraStatus, setCameraStatus] = useState("Requesting access");
   const [trackerStatus, setTrackerStatus] = useState("Waiting for camera");
@@ -33,6 +42,11 @@ function App() {
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [output, setOutput] = useState<GestureOutput>(INITIAL_OUTPUT);
   const [cursor, setCursor] = useState<Point | null>(null);
+  const pinchDistance = useMemo(() => {
+    const thumb = landmarks?.[THUMB_TIP];
+    const index = landmarks?.[INDEX_FINGER_TIP];
+    return thumb && index ? Math.hypot(thumb.x - index.x, thumb.y - index.y) : null;
+  }, [landmarks]);
 
   const handleCameraReady = useCallback(() => {
     setCameraReady(true);
@@ -40,21 +54,21 @@ function App() {
   }, []);
 
   const handleCameraError = useCallback((message: string) => {
-    const nextOutput = engine.update(null, performance.now());
+    const nextOutput = engineRef.current.update(null, performance.now());
     setCameraReady(false);
     setCameraStatus(message);
     setTrackerStatus("Unavailable");
     setLandmarks(null);
     setOutput(nextOutput);
-  }, [engine]);
+  }, []);
 
   const handleCameraRetry = useCallback(() => {
     setCameraReady(false);
     setCameraStatus("Requesting access");
     setTrackerStatus("Waiting for camera");
     setLandmarks(null);
-    setOutput(engine.update(null, performance.now()));
-  }, [engine]);
+    setOutput(engineRef.current.update(null, performance.now()));
+  }, []);
 
   useEffect(() => {
     if (!cameraReady) {
@@ -134,7 +148,7 @@ function App() {
               height: window.innerHeight,
             });
             const smoothed = cursorRef.current
-              ? smoothPoint(cursorRef.current, mapped, CURSOR_SMOOTHING_FACTOR)
+              ? smoothPoint(cursorRef.current, mapped, settings.cursorSmoothingFactor)
               : mapped;
             const nextCursor = clampToViewport(smoothed);
             cursorRef.current = nextCursor;
@@ -144,7 +158,7 @@ function App() {
 
         if (
           lastFreshFrameAt !== null
-          && nowMs - lastFreshFrameAt >= CAMERA_STALE_FRAME_MS
+          && nowMs - lastFreshFrameAt >= settings.cameraStaleFrameMs
           && !staleFrameHandled
         ) {
           staleFrameHandled = true;
@@ -163,7 +177,7 @@ function App() {
       active = false;
       cancelAnimationFrame(animationFrame);
     };
-  }, [engine, landmarker]);
+  }, [engine, landmarker, settings.cameraStaleFrameMs, settings.cursorSmoothingFactor]);
 
   return (
     <main className="app-shell">
@@ -179,6 +193,14 @@ function App() {
         camera={cameraStatus}
         tracker={trackerStatus}
         gesture={output.state}
+      />
+
+      <CalibrationPanel
+        settings={settings}
+        onSettingsChange={setSettings}
+        pinchDistance={pinchDistance}
+        gestureState={output.state}
+        cursor={cursor}
       />
 
       <div className="gesture-workspace">

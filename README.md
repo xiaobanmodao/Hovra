@@ -41,3 +41,26 @@ Camera permission, a connected camera, and a browser that supports `getUserMedia
 are required for the interactive checks. If a physical camera or permission prompt
 is unavailable in the test environment, perform these steps on a local desktop
 browser before accepting the demo.
+
+## Microsoft Edge calibration record
+
+Run this checklist in a current desktop version of Microsoft Edge with the
+calibration panel expanded. Adjust one setting at a time and record the final
+values and observations from the same camera session.
+
+- [ ] Movement: move the index finger throughout the viewport; note cursor responsiveness, stability and any jitter.
+- [ ] Click: perform at least five short pinches on the target; note missed clicks or duplicate clicks.
+- [ ] Drag: hold a pinch past the configured delay, move the card, then release; note drag-start timing and release reliability.
+- [ ] Pause: open the palm while moving; note whether cursor movement pauses promptly and resumes cleanly.
+
+Record the Edge test result before accepting tuned defaults:
+
+- Date / Edge version / operating system: `________________`
+- Camera and lighting: `________________`
+- Final pinch threshold: `________` (default `0.055`)
+- Final cursor smoothing factor: `________` (default `0.20`)
+- Final drag hold: `________ ms` (default `350 ms`)
+- Movement observations: `________________`
+- Click observations: `________________`
+- Drag observations: `________________`
+- Pause observations: `________________`
