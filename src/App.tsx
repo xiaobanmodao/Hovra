@@ -98,8 +98,11 @@ function App() {
       }
 
       const video = videoRef.current;
-      if (video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        if (video.currentTime !== lastVideoTime) {
+      if (video) {
+        if (
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+          && video.currentTime !== lastVideoTime
+        ) {
           lastVideoTime = video.currentTime;
           lastFreshFrameAt = nowMs;
           staleFrameHandled = false;
@@ -129,7 +132,9 @@ function App() {
             cursorRef.current = nextCursor;
             setCursor(nextCursor);
           }
-        } else if (
+        }
+
+        if (
           lastFreshFrameAt !== null
           && nowMs - lastFreshFrameAt >= CAMERA_STALE_FRAME_MS
           && !staleFrameHandled

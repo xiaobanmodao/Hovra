@@ -60,7 +60,7 @@ it("renders the hand gesture demo heading", () => {
   expect(screen.getByRole("heading", { name: /hand gesture/i })).toBeInTheDocument();
 });
 
-it("processes each camera frame once and marks a frozen frame as stalled", async () => {
+it("marks a stalled frame lost when video readiness drops during a drag", async () => {
   const stream = Object.assign(new EventTarget(), {
     getTracks: () => [],
   }) as unknown as MediaStream;
@@ -115,6 +115,10 @@ it("processes each camera frame once and marks a frozen frame as stalled", async
   const card = screen.getByTestId("draggable-card");
   expect(card).toHaveStyle({ left: "10px", top: "10px" });
 
+  Object.defineProperty(video, "readyState", {
+    configurable: true,
+    value: HTMLMediaElement.HAVE_METADATA,
+  });
   act(() => nextFrame?.(950));
   expect(vision.detectFirstHand).toHaveBeenCalledTimes(2);
   expect(screen.getByRole("status")).toHaveTextContent(/camera frame stalled/i);
