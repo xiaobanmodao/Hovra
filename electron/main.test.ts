@@ -34,10 +34,12 @@ const mainMocks = vi.hoisted(() => ({
       mainFrame: { url: string; top?: unknown; frameToken?: string };
       on: ReturnType<typeof vi.fn>;
       send: ReturnType<typeof vi.fn>;
+      executeJavaScript: ReturnType<typeof vi.fn>;
       setWindowOpenHandler: ReturnType<typeof vi.fn>;
     };
     loadFile: ReturnType<typeof vi.fn>;
     loadURL: ReturnType<typeof vi.fn>;
+    setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -57,10 +59,12 @@ vi.mock("electron", () => {
       },
       on: vi.fn(),
       send: vi.fn(),
+      executeJavaScript: vi.fn().mockResolvedValue(undefined),
       setWindowOpenHandler: vi.fn(),
     };
     loadURL = vi.fn().mockResolvedValue(undefined);
     loadFile = vi.fn().mockResolvedValue(undefined);
+    setIgnoreMouseEvents = vi.fn();
     isDestroyed = vi.fn().mockReturnValue(false);
     isFocused = vi.fn().mockReturnValue(false);
 
@@ -135,7 +139,7 @@ async function bootMain(devServerUrl: string | undefined) {
     MAIN_WINDOW_VITE_NAME: "main_window",
   });
   await import("./main");
-  await vi.waitFor(() => expect(mainMocks.windows).toHaveLength(1));
+  await vi.waitFor(() => expect(mainMocks.windows.length).toBeGreaterThanOrEqual(1));
   return mainMocks.windows[0];
 }
 
@@ -158,10 +162,31 @@ describe("main BrowserWindow security", () => {
         nodeIntegration: false,
         sandbox: true,
         webSecurity: true,
+        backgroundThrottling: false,
       },
     });
     expect(window.loadURL).toHaveBeenCalledWith("http://localhost:5173");
     expect(window.loadFile).not.toHaveBeenCalled();
+  });
+
+  it("creates a mouse-transparent, unfocusable cursor overlay", async () => {
+    await bootMain("http://localhost:5173");
+
+    expect(mainMocks.windows).toHaveLength(2);
+    const overlay = mainMocks.windows[1];
+    expect(overlay.options).toMatchObject({
+      transparent: true,
+      frame: false,
+      alwaysOnTop: true,
+      focusable: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        webSecurity: true,
+      },
+    });
+    expect(overlay.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
   });
 
   it("loads only the packaged renderer file in production", async () => {

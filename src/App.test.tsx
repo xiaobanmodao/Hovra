@@ -463,7 +463,7 @@ it("dispatches hover movement, short clicks, and drag-aware movement while enabl
   );
 });
 
-it.each(["lost", "open-palm", "stale-frame", "window-blur"] as const)(
+it.each(["lost", "open-palm", "stale-frame"] as const)(
   "awaits mouse release before showing system control paused on %s safety",
   async (safety) => {
     const { bridge, runAnimationFrame, runFrame, video } = await renderDesktopApp();
@@ -481,8 +481,6 @@ it.each(["lost", "open-palm", "stale-frame", "window-blur"] as const)(
         value: HTMLMediaElement.HAVE_METADATA,
       });
       runAnimationFrame(1_100);
-    } else {
-      act(() => window.dispatchEvent(new Event("blur")));
     }
 
     expect(bridge.releaseAndPause).toHaveBeenCalledOnce();
@@ -495,6 +493,16 @@ it.each(["lost", "open-palm", "stale-frame", "window-blur"] as const)(
     await screen.findByText("Paused");
   },
 );
+
+it("keeps system control enabled when the app window loses focus", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  await startDesktopDrag(runFrame, bridge);
+
+  act(() => window.dispatchEvent(new Event("blur")));
+
+  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
+  expect(screen.getByText("Enabled")).toBeInTheDocument();
+});
 
 it("requests a mouse release when the renderer unmounts", async () => {
   const { bridge, runFrame, unmount } = await renderDesktopApp();

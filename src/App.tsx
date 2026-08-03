@@ -147,10 +147,8 @@ function App() {
       void pauseSystemControl();
     };
 
-    window.addEventListener("blur", handleSafetyPause);
     const unsubscribe = desktopBridge?.onSafetyPause(handleSafetyPause);
     return () => {
-      window.removeEventListener("blur", handleSafetyPause);
       unsubscribe?.();
     };
   }, [desktopBridge, pauseSystemControl]);

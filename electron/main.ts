@@ -28,6 +28,7 @@ app.enableSandbox();
 
 let isAppActive = false;
 let mainWindow: BrowserWindow | undefined;
+let cursorOverlay: BrowserWindow | undefined;
 let activationFrame: WebFrameMain | undefined;
 let mouseController: MouseController | undefined;
 let quitCleanupStarted = false;
@@ -44,11 +45,13 @@ function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: false,
     },
   });
 
   mainWindow = createdWindow;
   activationFrame = undefined;
+  createCursorOverlay();
 
   createdWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   createdWindow.webContents.on("will-navigate", (event) => {
@@ -119,23 +122,7 @@ function createMainWindow(): BrowserWindow {
     isAppActive = true;
   });
   createdWindow.on("blur", () => {
-    if (!mouseController) {
-      isAppActive = false;
-      return;
-    }
-
-    void pauseForLifecycle(mouseController, {
-      deactivate: () => {
-        isAppActive = false;
-      },
-      finally: () => {
-        if (!createdWindow.isDestroyed()) {
-          createdWindow.webContents.send("gesture:safety-pause");
-        }
-      },
-    }).catch((error: unknown) => {
-      console.error("Failed to release the mouse after window blur", error);
-    });
+    // Global gesture control intentionally remains active across app switches.
   });
 
   if (createdWindow.isFocused()) {
@@ -143,6 +130,59 @@ function createMainWindow(): BrowserWindow {
   }
 
   return createdWindow;
+}
+
+function createCursorOverlay(): BrowserWindow {
+  const bounds = screen.getPrimaryDisplay().bounds;
+  const overlay = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    focusable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: true,
+    webPreferences: {
+      preload: path.join(__dirname, "overlayPreload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+    },
+  });
+
+  overlay.setIgnoreMouseEvents(true, { forward: true });
+  overlay.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  overlay.webContents.on("will-navigate", (event) => event.preventDefault());
+  void overlay.loadURL(`data:text/html,${encodeURIComponent(`<!doctype html><style>html,body{margin:0;background:transparent;overflow:hidden}.cursor{position:fixed;width:28px;height:28px;border:3px solid #7cf7ff;border-radius:50%;box-sizing:border-box;transform:translate(-50%,-50%);display:none;box-shadow:0 0 12px #00d9ff}.cursor.dragging{border-color:#ffcc66;box-shadow:0 0 12px #ff9900}</style><div id="cursor" class="cursor"></div><script>window.addEventListener('message',event=>{const state=event.data;if(!state||state.type!=='gesture-overlay')return;const cursor=document.getElementById('cursor');cursor.style.left=state.x+'px';cursor.style.top=state.y+'px';cursor.style.display=state.visible?'block':'none';cursor.className='cursor '+state.state})</script>`)} `);
+  cursorOverlay = overlay;
+  return overlay;
+}
+
+function setCursorOverlayState(
+  x: number,
+  y: number,
+  state: "tracking" | "dragging",
+): void {
+  if (!cursorOverlay || cursorOverlay.isDestroyed() || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return;
+  }
+  cursorOverlay.webContents.executeJavaScript(
+    `window.postMessage(${JSON.stringify({ type: "gesture-overlay", x, y, visible: true, state })}, "*")`,
+  ).catch(() => undefined);
+}
+
+function hideCursorOverlay(): void {
+  if (!cursorOverlay || cursorOverlay.isDestroyed()) {
+    return;
+  }
+  cursorOverlay.webContents.executeJavaScript(
+    `window.postMessage(${JSON.stringify({ type: "gesture-overlay", x: 0, y: 0, visible: false, state: "tracking" })}, "*")`,
+  ).catch(() => undefined);
 }
 
 function releaseForRendererLifecycle(reason: string): Promise<void> {
@@ -222,6 +262,7 @@ void app.whenReady().then(() => {
       systemPreferences.isTrustedAccessibilityClient(false),
     isActive: () => isAppActive,
     mouse: systemMouse,
+    overlay: { show: setCursorOverlayState, hide: hideCursorOverlay },
   });
   createMainWindow();
   registerMouseControllerIpc(ipcMain, mouseController, {

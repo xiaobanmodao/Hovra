@@ -12,6 +12,10 @@ export interface MouseControllerDependencies {
   permission(): boolean | Promise<boolean>;
   isActive(): boolean;
   mouse: SystemMouseAdapter;
+  overlay?: {
+    show(x: number, y: number, state: "tracking" | "dragging"): void;
+    hide(): void;
+  };
 }
 
 export interface MouseController {
@@ -115,6 +119,7 @@ export function createMouseController(
         }
 
         await deps.mouse.move(x, y);
+        deps.overlay?.show(x, y, "tracking");
       });
     },
 
@@ -130,6 +135,7 @@ export function createMouseController(
         }
 
         await deps.mouse.drag(x, y);
+        deps.overlay?.show(x, y, "dragging");
       });
     },
 
@@ -163,6 +169,7 @@ export function createMouseController(
     releaseAndPause(): Promise<void> {
       isSessionActive = false;
       activationGeneration += 1;
+      deps.overlay?.hide();
       return queueAction(releasePressedButton);
     },
   };
