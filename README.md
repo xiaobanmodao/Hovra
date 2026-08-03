@@ -21,6 +21,36 @@ Open the localhost URL printed by Vite in a current desktop browser. This demo i
 browser-only: camera processing stays on the device and no video frames are
 uploaded.
 
+## macOS desktop verification
+
+Use this checklist on a Mac with a camera before accepting the Electron package.
+Do not enable system control until you are ready to test the physical pointer.
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Start the desktop app:
+
+   ```bash
+   npm run electron:dev
+   ```
+
+3. In macOS, open **System Settings → Privacy & Security → Accessibility** and
+   enable the running Hand Gesture Control app. Return to the app and confirm its
+   system-control status changes from **Permission required** to **Paused**.
+4. Click **Enable system control**, then verify a tracked index finger moves the
+   system pointer, a short pinch clicks, and a held pinch starts and releases a
+   drag.
+5. Verify every safety pause: click **Pause system control**; open the palm;
+   remove the hand or stop the camera stream; move focus away from the app; and
+   deactivate the app. Each action must pause control and release any held mouse
+   button.
+6. Start a drag, quit the app while the mouse button is held, and confirm the
+   system pointer is released.
+
 ## Manual verification checklist
 
 After starting the demo locally, perform these acceptance checks:
