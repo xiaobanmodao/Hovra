@@ -78,6 +78,17 @@ describe("CalibrationPanel", () => {
     expect(increment).toBeDisabled();
   });
 
+  it("adjusts the normalized horizontal cursor offset in one-percent steps", () => {
+    const onSettingsChange = vi.fn();
+    render(<CalibrationPanelHarness onSettingsChange={onSettingsChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Increase horizontal cursor offset" }));
+
+    expect(onSettingsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursorOffsetX: 0.01 }),
+    );
+  });
+
   it.each(Object.values(CALIBRATION_CONTROL_METADATA))(
     "applies the exact $label step and disables controls at both bounds",
     ({

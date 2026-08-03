@@ -19,6 +19,8 @@ export type GestureSettings = {
   dragHoldMs: number;
   openPalmMinTipDistance: number;
   cursorSmoothingFactor: number;
+  cursorOffsetX: number;
+  cursorOffsetY: number;
   cameraStaleFrameMs: number;
 };
 

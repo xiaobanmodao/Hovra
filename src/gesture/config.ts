@@ -1,6 +1,6 @@
 import type { GestureSettings } from "./types";
 
-export type CalibrationSettingKey = "pinchDistance" | "cursorSmoothingFactor" | "dragHoldMs";
+export type CalibrationSettingKey = "pinchDistance" | "cursorSmoothingFactor" | "cursorOffsetX" | "cursorOffsetY" | "dragHoldMs";
 
 export type CalibrationControlMetadata = {
   key: CalibrationSettingKey;
@@ -18,6 +18,8 @@ export const DEFAULT_GESTURE_SETTINGS: Readonly<GestureSettings> = {
   dragHoldMs: 350,
   openPalmMinTipDistance: 0.18,
   cursorSmoothingFactor: 0.2,
+  cursorOffsetX: 0,
+  cursorOffsetY: 0,
   cameraStaleFrameMs: 500,
 };
 
@@ -38,6 +40,24 @@ export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[]
     min: 0.05,
     max: 1,
     step: 0.05,
+    precision: 2,
+  },
+  {
+    key: "cursorOffsetX",
+    label: "Horizontal cursor offset",
+    accessibleLabel: "horizontal cursor offset",
+    min: -0.15,
+    max: 0.15,
+    step: 0.01,
+    precision: 2,
+  },
+  {
+    key: "cursorOffsetY",
+    label: "Vertical cursor offset",
+    accessibleLabel: "vertical cursor offset",
+    min: -0.15,
+    max: 0.15,
+    step: 0.01,
     precision: 2,
   },
   {

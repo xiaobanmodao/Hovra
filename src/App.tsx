@@ -29,6 +29,11 @@ const clampToViewport = (point: Point): Point => ({
   y: Math.min(window.innerHeight, Math.max(0, point.y)),
 });
 
+const clampNormalizedPoint = (point: Point): Point => ({
+  x: Math.min(1, Math.max(0, point.x)),
+  y: Math.min(1, Math.max(0, point.y)),
+});
+
 function App() {
   const desktopBridge = window.gestureDesktop;
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -276,12 +281,16 @@ function App() {
             const smoothed = normalizedCursorRef.current
               ? smoothPoint(normalizedCursorRef.current, mapped, settings.cursorSmoothingFactor)
               : mapped;
+            const calibrated = clampNormalizedPoint({
+              x: smoothed.x + settings.cursorOffsetX,
+              y: smoothed.y + settings.cursorOffsetY,
+            });
             const nextCursor = clampToViewport({
-              x: smoothed.x * window.innerWidth,
-              y: smoothed.y * window.innerHeight,
+              x: calibrated.x * window.innerWidth,
+              y: calibrated.y * window.innerHeight,
             });
             normalizedCursorRef.current = smoothed;
-            setSystemCursor(smoothed);
+            setSystemCursor(calibrated);
             setCursor(nextCursor);
           }
         }
@@ -307,7 +316,7 @@ function App() {
       active = false;
       cancelAnimationFrame(animationFrame);
     };
-  }, [engine, landmarker, settings.cameraStaleFrameMs, settings.cursorSmoothingFactor]);
+  }, [engine, landmarker, settings.cameraStaleFrameMs, settings.cursorOffsetX, settings.cursorOffsetY, settings.cursorSmoothingFactor]);
 
   return (
     <main className="app-shell">
