@@ -33,8 +33,9 @@ const clampToViewport = (point: Point): Point => ({
 function App() {
   const desktopBridge = window.gestureDesktop;
   const videoRef = useRef<HTMLVideoElement>(null);
-  const cursorRef = useRef<Point | null>(null);
+  const normalizedCursorRef = useRef<Point | null>(null);
   const systemControlActiveRef = useRef(false);
+  const activationPendingRef = useRef(false);
   const pendingPauseRef = useRef<Promise<void> | null>(null);
   const mountedRef = useRef(true);
   const lastDispatchedOutputRef = useRef<GestureOutput>(INITIAL_OUTPUT);
@@ -50,6 +51,7 @@ function App() {
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [output, setOutput] = useState<GestureOutput>(INITIAL_OUTPUT);
   const [cursor, setCursor] = useState<Point | null>(null);
+  const [systemCursor, setSystemCursor] = useState<Point | null>(null);
   const [systemControlEnabled, setSystemControlEnabled] = useState(false);
   const pinchDistance = useMemo(() => {
     const thumb = landmarks?.[THUMB_TIP];
@@ -86,6 +88,7 @@ function App() {
 
   const pauseSystemControl = useCallback((): Promise<void> => {
     systemControlActiveRef.current = false;
+    activationPendingRef.current = false;
     safetyGenerationRef.current += 1;
 
     if (pendingPauseRef.current) {
@@ -101,7 +104,7 @@ function App() {
 
     const pause = (async () => {
       try {
-        await desktopBridge.mouseUp();
+        await desktopBridge.releaseAndPause();
       } catch {
         // The renderer must still deactivate if the main process is shutting down.
       } finally {
@@ -125,15 +128,19 @@ function App() {
     }
 
     const safetyGeneration = safetyGenerationRef.current;
+    activationPendingRef.current = true;
     try {
-      const permission = await desktopBridge.getPermissionStatus();
+      const activated = await desktopBridge.activate();
+      activationPendingRef.current = false;
       if (
-        permission === "granted"
+        activated
         && safetyGeneration === safetyGenerationRef.current
         && mountedRef.current
       ) {
         systemControlActiveRef.current = true;
         setSystemControlEnabled(true);
+      } else {
+        await pauseSystemControl();
       }
     } catch {
       await pauseSystemControl();
@@ -164,17 +171,23 @@ function App() {
     }
     lastDispatchedOutputRef.current = output;
 
-    if (!desktopBridge || !systemControlActiveRef.current) {
+    if (!desktopBridge) {
       return;
     }
 
     if (output.state === "lost" || output.state === "paused") {
-      void pauseSystemControl();
+      if (systemControlActiveRef.current || activationPendingRef.current) {
+        void pauseSystemControl();
+      }
       return;
     }
 
-    if (cursor) {
-      void desktopBridge.move(cursor.x, cursor.y).catch(() => pauseSystemControl());
+    if (!systemControlActiveRef.current) {
+      return;
+    }
+
+    if (systemCursor) {
+      void desktopBridge.move(systemCursor.x, systemCursor.y).catch(() => pauseSystemControl());
     }
     if (output.click) {
       void desktopBridge.click().catch(() => pauseSystemControl());
@@ -185,7 +198,7 @@ function App() {
     if (output.dragEnd) {
       void desktopBridge.mouseUp().catch(() => pauseSystemControl());
     }
-  }, [cursor, desktopBridge, output, pauseSystemControl]);
+  }, [desktopBridge, output, pauseSystemControl, systemCursor]);
 
   useEffect(() => {
     if (!cameraReady) {
@@ -261,14 +274,18 @@ function App() {
 
           if (nextOutput.cursor && nextOutput.state !== "paused" && nextOutput.state !== "lost") {
             const mapped = mapMirroredPoint(nextOutput.cursor, {
-              width: window.innerWidth,
-              height: window.innerHeight,
+              width: 1,
+              height: 1,
             });
-            const smoothed = cursorRef.current
-              ? smoothPoint(cursorRef.current, mapped, settings.cursorSmoothingFactor)
+            const smoothed = normalizedCursorRef.current
+              ? smoothPoint(normalizedCursorRef.current, mapped, settings.cursorSmoothingFactor)
               : mapped;
-            const nextCursor = clampToViewport(smoothed);
-            cursorRef.current = nextCursor;
+            const nextCursor = clampToViewport({
+              x: smoothed.x * window.innerWidth,
+              y: smoothed.y * window.innerHeight,
+            });
+            normalizedCursorRef.current = smoothed;
+            setSystemCursor(smoothed);
             setCursor(nextCursor);
           }
         }

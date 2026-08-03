@@ -77,10 +77,13 @@ afterEach(() => {
 
 const desktopApi = (): GestureDesktopApi => ({
   getPermissionStatus: vi.fn().mockResolvedValue("granted"),
+  activate: vi.fn().mockResolvedValue(true),
   move: vi.fn().mockResolvedValue(undefined),
   click: vi.fn().mockResolvedValue(undefined),
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),
+  releaseAndPause: vi.fn().mockResolvedValue(undefined),
+  openAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
   onSafetyPause: vi.fn(() => vi.fn()),
 });
 
@@ -109,7 +112,10 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-const renderDesktopApp = async () => {
+const renderDesktopApp = async (options: {
+  bridge?: GestureDesktopApi;
+  enable?: boolean;
+} = {}) => {
   const stream = Object.assign(new EventTarget(), {
     getTracks: () => [],
   }) as unknown as MediaStream;
@@ -127,7 +133,7 @@ const renderDesktopApp = async () => {
   vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
   let detectedHand: Landmark[] | null = trackingHandAt(0.4, 0.4);
   vision.detectFirstHand.mockImplementation(() => detectedHand);
-  const bridge = desktopApi();
+  const bridge = options.bridge ?? desktopApi();
   window.gestureDesktop = bridge;
 
   const rendered = render(<App />);
@@ -158,10 +164,12 @@ const renderDesktopApp = async () => {
   runFrame(16);
   const enable = await screen.findByRole("button", { name: "Enable system control" });
   await waitFor(() => expect(enable).toBeEnabled());
-  fireEvent.click(enable);
-  await screen.findByText("Enabled");
+  if (options.enable !== false) {
+    fireEvent.click(enable);
+    await screen.findByText("Enabled");
+  }
 
-  return { ...rendered, bridge, runAnimationFrame, runFrame, video };
+  return { ...rendered, bridge, enable, runAnimationFrame, runFrame, video };
 };
 
 const startDesktopDrag = async (
@@ -428,6 +436,7 @@ it("dispatches cursor movement, short clicks, and drag button transitions while 
 
   runFrame(50, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.move).toHaveBeenCalled());
+  expect(bridge.move).toHaveBeenLastCalledWith(0.59, 0.41000000000000003);
 
   runFrame(100, pinchedHandAt(0.45, 0.45));
   runFrame(200, trackingHandAt(0.45, 0.45));
@@ -447,7 +456,7 @@ it.each(["lost", "open-palm", "stale-frame", "window-blur"] as const)(
     const { bridge, runAnimationFrame, runFrame, video } = await renderDesktopApp();
     await startDesktopDrag(runFrame, bridge);
     const release = deferred();
-    vi.mocked(bridge.mouseUp).mockImplementation(() => release.promise);
+    vi.mocked(bridge.releaseAndPause).mockImplementation(() => release.promise);
 
     if (safety === "lost") {
       runFrame(600, null);
@@ -463,7 +472,7 @@ it.each(["lost", "open-palm", "stale-frame", "window-blur"] as const)(
       act(() => window.dispatchEvent(new Event("blur")));
     }
 
-    expect(bridge.mouseUp).toHaveBeenCalledOnce();
+    expect(bridge.releaseAndPause).toHaveBeenCalledOnce();
     expect(screen.getByText("Enabled")).toBeInTheDocument();
 
     await act(async () => {
@@ -480,5 +489,42 @@ it("requests a mouse release when the renderer unmounts", async () => {
 
   unmount();
 
-  expect(bridge.mouseUp).toHaveBeenCalledOnce();
+  expect(bridge.releaseAndPause).toHaveBeenCalledOnce();
+});
+
+it("reconciles a rejected main-process activation and remains paused", async () => {
+  const bridge = desktopApi();
+  vi.mocked(bridge.activate).mockResolvedValue(false);
+  window.gestureDesktop = bridge;
+
+  render(<App />);
+  const enable = await screen.findByRole("button", { name: "Enable system control" });
+  await waitFor(() => expect(enable).toBeEnabled());
+  fireEvent.click(enable);
+
+  await waitFor(() => expect(bridge.activate).toHaveBeenCalledOnce());
+  expect(screen.getByText("Paused")).toBeInTheDocument();
+  expect(bridge.move).not.toHaveBeenCalled();
+  expect(bridge.click).not.toHaveBeenCalled();
+  expect(bridge.mouseDown).not.toHaveBeenCalled();
+});
+
+it("cancels a pending main-process activation when tracking becomes lost", async () => {
+  let resolveActivation!: (active: boolean) => void;
+  const activation = new Promise<boolean>((resolve) => {
+    resolveActivation = resolve;
+  });
+  const bridge = desktopApi();
+  vi.mocked(bridge.activate).mockReturnValue(activation);
+  const { enable, runFrame } = await renderDesktopApp({ bridge, enable: false });
+
+  fireEvent.click(enable);
+  await waitFor(() => expect(bridge.activate).toHaveBeenCalledOnce());
+  runFrame(100, null);
+
+  await waitFor(() => expect(bridge.releaseAndPause).toHaveBeenCalledOnce());
+  resolveActivation(true);
+  await activation;
+  await screen.findByText("Paused");
+  expect(screen.queryByText("Enabled")).not.toBeInTheDocument();
 });

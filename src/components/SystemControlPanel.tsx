@@ -90,20 +90,33 @@ export function SystemControlPanel({
       </div>
 
       {permission !== "browser" && (
-        <button
-          className="system-control-button"
-          type="button"
-          disabled={permission !== "granted"}
-          onClick={() => {
-            if (enabled) {
-              void onPause();
-            } else if (permission === "granted") {
-              void onEnable();
-            }
-          }}
-        >
-          {enabled ? "Pause system control" : "Enable system control"}
-        </button>
+        <div className="system-control-actions">
+          <button
+            className="system-control-button"
+            type="button"
+            disabled={permission !== "granted"}
+            onClick={() => {
+              if (enabled) {
+                void onPause();
+              } else if (permission === "granted") {
+                void onEnable();
+              }
+            }}
+          >
+            {enabled ? "Pause system control" : "Enable system control"}
+          </button>
+          {permission === "denied" && (
+            <button
+              className="system-control-settings-button"
+              type="button"
+              onClick={() => {
+                void bridge?.openAccessibilitySettings();
+              }}
+            >
+              Open Accessibility Settings
+            </button>
+          )}
+        </div>
       )}
     </section>
   );

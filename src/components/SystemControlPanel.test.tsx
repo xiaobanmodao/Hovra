@@ -7,10 +7,13 @@ const desktopApi = (
   permission: "granted" | "denied",
 ): GestureDesktopApi => ({
   getPermissionStatus: vi.fn().mockResolvedValue(permission),
+  activate: vi.fn().mockResolvedValue(true),
   move: vi.fn().mockResolvedValue(undefined),
   click: vi.fn().mockResolvedValue(undefined),
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),
+  releaseAndPause: vi.fn().mockResolvedValue(undefined),
+  openAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
   onSafetyPause: vi.fn(() => vi.fn()),
 });
 
@@ -21,7 +24,8 @@ afterEach(() => {
 });
 
 it("keeps system control paused and disables enable while Accessibility permission is denied", async () => {
-  window.gestureDesktop = desktopApi("denied");
+  const bridge = desktopApi("denied");
+  window.gestureDesktop = bridge;
 
   render(
     <SystemControlPanel
@@ -34,6 +38,9 @@ it("keeps system control paused and disables enable while Accessibility permissi
   expect(await screen.findByText("Permission required")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Enable system control" })).toBeDisabled();
   expect(screen.getByText(/privacy & security.*accessibility/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Open Accessibility Settings" }));
+  expect(bridge.openAccessibilitySettings).toHaveBeenCalledOnce();
 });
 
 it("enables system control only after granted permission and an explicit click", async () => {

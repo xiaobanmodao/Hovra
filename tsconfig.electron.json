@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["DOM", "ES2020"],
+    "types": ["node", "electron", "vitest/globals"]
+  },
+  "include": [
+    "electron/**/*.ts",
+    "forge.config.ts",
+    "vite.config.ts"
+  ]
+}

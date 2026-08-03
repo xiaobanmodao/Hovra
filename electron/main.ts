@@ -2,9 +2,12 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  screen,
+  shell,
   systemPreferences,
 } from "electron";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   createMouseController,
@@ -17,15 +20,19 @@ import { systemMouse } from "./systemMouseAdapter";
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
+const ACCESSIBILITY_SETTINGS_URL =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+
 app.enableSandbox();
 
 let isAppActive = false;
+let mainWindow: BrowserWindow | undefined;
 let mouseController: MouseController | undefined;
 let quitCleanupStarted = false;
 let quitCleanupComplete = false;
 
 function createMainWindow(): BrowserWindow {
-  const mainWindow = new BrowserWindow({
+  const createdWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -33,24 +40,27 @@ function createMainWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webSecurity: true,
     },
   });
 
+  mainWindow = createdWindow;
+
+  createdWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  createdWindow.webContents.on("will-navigate", (event) => {
+    event.preventDefault();
+  });
+
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    void createdWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    void mainWindow.loadFile(
-      path.join(
-        __dirname,
-        `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`,
-      ),
-    );
+    void createdWindow.loadFile(getPackagedRendererPath());
   }
 
-  mainWindow.on("focus", () => {
+  createdWindow.on("focus", () => {
     isAppActive = true;
   });
-  mainWindow.on("blur", () => {
+  createdWindow.on("blur", () => {
     if (!mouseController) {
       isAppActive = false;
       return;
@@ -61,8 +71,8 @@ function createMainWindow(): BrowserWindow {
         isAppActive = false;
       },
       finally: () => {
-        if (!mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("gesture:safety-pause");
+        if (!createdWindow.isDestroyed()) {
+          createdWindow.webContents.send("gesture:safety-pause");
         }
       },
     }).catch((error: unknown) => {
@@ -70,11 +80,49 @@ function createMainWindow(): BrowserWindow {
     });
   });
 
-  if (mainWindow.isFocused()) {
+  if (createdWindow.isFocused()) {
     isAppActive = true;
   }
 
-  return mainWindow;
+  return createdWindow;
+}
+
+function getPackagedRendererPath(): string {
+  return path.join(
+    __dirname,
+    `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`,
+  );
+}
+
+function isTrustedRendererEvent(event: unknown): boolean {
+  if (typeof event !== "object" || event === null || !mainWindow) {
+    return false;
+  }
+
+  const candidate = event as {
+    sender?: unknown;
+    senderFrame?: { url?: unknown; top?: unknown } | null;
+  };
+  const frame = candidate.senderFrame;
+  if (
+    candidate.sender !== mainWindow.webContents
+    || !frame
+    || frame.top !== frame
+    || typeof frame.url !== "string"
+  ) {
+    return false;
+  }
+
+  try {
+    const frameUrl = new URL(frame.url);
+    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+      return frameUrl.origin === new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL).origin;
+    }
+
+    return frameUrl.href === pathToFileURL(getPackagedRendererPath()).href;
+  } catch {
+    return false;
+  }
 }
 
 void app.whenReady().then(() => {
@@ -85,9 +133,18 @@ void app.whenReady().then(() => {
     isActive: () => isAppActive,
     mouse: systemMouse,
   });
-  registerMouseControllerIpc(ipcMain, mouseController);
-
   createMainWindow();
+  registerMouseControllerIpc(ipcMain, mouseController, {
+    isTrustedEvent: isTrustedRendererEvent,
+    getPrimaryDisplayBounds: () => ({ ...screen.getPrimaryDisplay().bounds }),
+  });
+  ipcMain.handle("gesture:open-accessibility-settings", async (event) => {
+    if (process.platform !== "darwin" || !isTrustedRendererEvent(event)) {
+      return;
+    }
+
+    await shell.openExternal(ACCESSIBILITY_SETTINGS_URL);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

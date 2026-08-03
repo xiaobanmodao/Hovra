@@ -22,10 +22,13 @@ import "./preload";
 
 type ExposedApi = Record<string, unknown> & {
   getPermissionStatus(): Promise<"granted" | "denied">;
+  activate(): Promise<boolean>;
   move(x: number, y: number): Promise<void>;
   click(): Promise<void>;
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
+  releaseAndPause(): Promise<void>;
+  openAccessibilitySettings(): Promise<void>;
   onSafetyPause(listener: () => void): () => void;
 };
 
@@ -46,16 +49,19 @@ describe("gestureDesktop preload bridge", () => {
     electronMocks.removeListener.mockReset();
   });
 
-  it("exposes only the six gesture desktop methods", () => {
+  it("exposes only fixed gesture and Accessibility capabilities", () => {
     const api = getExposedApi();
 
     expect(Object.keys(api).sort()).toEqual([
+      "activate",
       "click",
       "getPermissionStatus",
       "mouseDown",
       "mouseUp",
       "move",
       "onSafetyPause",
+      "openAccessibilitySettings",
+      "releaseAndPause",
     ]);
     expect(api).not.toHaveProperty("ipcRenderer");
     expect(api).not.toHaveProperty("invoke");
@@ -70,17 +76,23 @@ describe("gestureDesktop preload bridge", () => {
     const api = getExposedApi();
 
     await api.getPermissionStatus();
-    await api.move(120, -40);
+    await api.activate();
+    await api.move(0.25, 0.75);
     await api.click();
     await api.mouseDown();
     await api.mouseUp();
+    await api.releaseAndPause();
+    await api.openAccessibilitySettings();
 
     expect(electronMocks.invoke.mock.calls).toEqual([
       ["gesture:get-permission-status"],
-      ["gesture:move", { x: 120, y: -40 }],
+      ["gesture:activate"],
+      ["gesture:move", { x: 0.25, y: 0.75 }],
       ["gesture:click"],
       ["gesture:mouse-down"],
       ["gesture:mouse-up"],
+      ["gesture:release-and-pause"],
+      ["gesture:open-accessibility-settings"],
     ]);
   });
 
@@ -88,10 +100,12 @@ describe("gestureDesktop preload bridge", () => {
     [Number.NaN, 0],
     [Number.POSITIVE_INFINITY, 0],
     [0, Number.NEGATIVE_INFINITY],
-  ])("rejects non-finite move coordinates (%s, %s)", async (x, y) => {
+    [-0.01, 0],
+    [0, 1.01],
+  ])("rejects out-of-range normalized move coordinates (%s, %s)", async (x, y) => {
     const api = getExposedApi();
 
-    await expect(api.move(x, y)).rejects.toThrow("finite screen coordinates");
+    await expect(api.move(x, y)).rejects.toThrow("normalized coordinates");
     expect(electronMocks.invoke).not.toHaveBeenCalled();
   });
 

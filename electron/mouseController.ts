@@ -15,6 +15,7 @@ export interface MouseControllerDependencies {
 
 export interface MouseController {
   permissionStatus(): Promise<PermissionStatus>;
+  activate(): Promise<boolean>;
   move(x: number, y: number): Promise<void>;
   click(): Promise<void>;
   mouseDown(): Promise<void>;
@@ -29,6 +30,18 @@ export interface IpcMainRegistrar {
   ): void;
 }
 
+export interface ScreenBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface MouseControllerIpcSecurity {
+  isTrustedEvent(event: unknown): boolean;
+  getPrimaryDisplayBounds(): ScreenBounds;
+}
+
 interface LifecyclePauseCallbacks {
   deactivate(): void;
   finally(): void;
@@ -37,6 +50,8 @@ interface LifecyclePauseCallbacks {
 export function createMouseController(
   deps: MouseControllerDependencies,
 ): MouseController {
+  let isSessionActive = false;
+  let activationGeneration = 0;
   let isButtonDown = false;
   let buttonQueue = Promise.resolve();
 
@@ -45,11 +60,11 @@ export function createMouseController(
   }
 
   async function canAct(): Promise<boolean> {
-    if (!deps.isActive() || !(await deps.permission())) {
+    if (!isSessionActive || !deps.isActive() || !(await deps.permission())) {
       return false;
     }
 
-    return deps.isActive();
+    return isSessionActive && deps.isActive();
   }
 
   async function releasePressedButton(): Promise<void> {
@@ -69,6 +84,21 @@ export function createMouseController(
 
   return {
     permissionStatus,
+
+    async activate(): Promise<boolean> {
+      const generation = ++activationGeneration;
+      isSessionActive = false;
+      if (!deps.isActive() || !(await deps.permission())) {
+        return false;
+      }
+
+      if (generation !== activationGeneration || !deps.isActive()) {
+        return false;
+      }
+
+      isSessionActive = true;
+      return true;
+    },
 
     async move(x: number, y: number): Promise<void> {
       if (!Number.isFinite(x) || !Number.isFinite(y) || !(await canAct())) {
@@ -99,15 +129,13 @@ export function createMouseController(
 
     mouseUp(): Promise<void> {
       return queueButtonOperation(async () => {
-        if (!isButtonDown || !(await canAct())) {
-          return;
-        }
-
         await releasePressedButton();
       });
     },
 
     releaseAndPause(): Promise<void> {
+      isSessionActive = false;
+      activationGeneration += 1;
       return queueButtonOperation(releasePressedButton);
     },
   };
@@ -116,20 +144,61 @@ export function createMouseController(
 export function registerMouseControllerIpc(
   ipcMain: IpcMainRegistrar,
   controller: MouseController,
+  security: MouseControllerIpcSecurity,
 ): void {
-  ipcMain.handle("gesture:get-permission-status", () =>
-    controller.permissionStatus(),
-  );
-  ipcMain.handle("gesture:move", async (_event, payload) => {
-    if (!isFiniteMovePayload(payload)) {
+  ipcMain.handle("gesture:get-permission-status", (event) => {
+    if (!security.isTrustedEvent(event)) {
+      return Promise.resolve("denied");
+    }
+
+    return controller.permissionStatus();
+  });
+  ipcMain.handle("gesture:activate", (event) => {
+    if (!security.isTrustedEvent(event)) {
+      return Promise.resolve(false);
+    }
+
+    return controller.activate();
+  });
+  ipcMain.handle("gesture:move", async (event, payload) => {
+    if (!security.isTrustedEvent(event) || !isNormalizedMovePayload(payload)) {
       return;
     }
 
-    await controller.move(payload.x, payload.y);
+    const bounds = security.getPrimaryDisplayBounds();
+    await controller.move(
+      bounds.x + payload.x * Math.max(0, bounds.width - 1),
+      bounds.y + payload.y * Math.max(0, bounds.height - 1),
+    );
   });
-  ipcMain.handle("gesture:click", () => controller.click());
-  ipcMain.handle("gesture:mouse-down", () => controller.mouseDown());
-  ipcMain.handle("gesture:mouse-up", () => controller.mouseUp());
+  ipcMain.handle("gesture:click", (event) => {
+    if (!security.isTrustedEvent(event)) {
+      return Promise.resolve();
+    }
+
+    return controller.click();
+  });
+  ipcMain.handle("gesture:mouse-down", (event) => {
+    if (!security.isTrustedEvent(event)) {
+      return Promise.resolve();
+    }
+
+    return controller.mouseDown();
+  });
+  ipcMain.handle("gesture:mouse-up", (event) => {
+    if (!security.isTrustedEvent(event)) {
+      return Promise.resolve();
+    }
+
+    return controller.mouseUp();
+  });
+  ipcMain.handle("gesture:release-and-pause", (event) => {
+    if (!security.isTrustedEvent(event)) {
+      return Promise.resolve();
+    }
+
+    return controller.releaseAndPause();
+  });
 }
 
 export async function pauseForLifecycle(
@@ -144,7 +213,7 @@ export async function pauseForLifecycle(
   }
 }
 
-function isFiniteMovePayload(
+function isNormalizedMovePayload(
   payload: unknown,
 ): payload is { x: number; y: number } {
   if (typeof payload !== "object" || payload === null) {
@@ -155,7 +224,11 @@ function isFiniteMovePayload(
   return (
     typeof candidate.x === "number" &&
     Number.isFinite(candidate.x) &&
+    candidate.x >= 0 &&
+    candidate.x <= 1 &&
     typeof candidate.y === "number" &&
-    Number.isFinite(candidate.y)
+    Number.isFinite(candidate.y) &&
+    candidate.y >= 0 &&
+    candidate.y <= 1
   );
 }

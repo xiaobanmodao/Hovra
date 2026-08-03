@@ -6,6 +6,8 @@ A browser-only hand gesture control demo. Recognition runs locally in the browse
 
 - `npm run dev` starts the Vite development server.
 - `npm run build` type-checks and creates a production build.
+- `npm run electron:typecheck` type-checks the Electron main/preload/config sources.
+- `npm run electron:make` creates the local macOS package.
 - `npm test` runs the test suite.
 
 ## Run locally
@@ -23,8 +25,17 @@ uploaded.
 
 ## macOS desktop verification
 
-Use this checklist on a Mac with a camera before accepting the Electron package.
-Do not enable system control until you are ready to test the physical pointer.
+Use this checklist on an Apple silicon Mac with a camera before accepting the
+Electron package. Acceptance must use the exact packaged application at
+`out/hand-gesture-control-darwin-arm64/hand-gesture-control.app`, not the Vite
+browser page or `electron:dev`. Do not enable system control until you are ready
+to test the physical pointer.
+
+This locally produced app is unsigned for distribution (there is no Developer ID
+identity; macOS may still show an ad-hoc linker signature) and non-notarized. It
+is intended only for local verification, not distribution. Do not disable
+Gatekeeper system-wide; if macOS blocks the first launch, use Finder's normal
+**Open** confirmation for this specific app.
 
 1. Install dependencies:
 
@@ -32,23 +43,28 @@ Do not enable system control until you are ready to test the physical pointer.
    npm install
    ```
 
-2. Start the desktop app:
+2. Build and package the exact acceptance artifact:
 
    ```bash
-   npm run electron:dev
+   npm run electron:typecheck
+   npm run electron:make
    ```
 
-3. In macOS, open **System Settings → Privacy & Security → Accessibility** and
-   enable the running Hand Gesture Control app. Return to the app and confirm its
-   system-control status changes from **Permission required** to **Paused**.
-4. Click **Enable system control**, then verify a tracked index finger moves the
+3. In Finder, open
+   `out/hand-gesture-control-darwin-arm64/hand-gesture-control.app`. Confirm the
+   running process is this packaged copy before granting any permission.
+4. When the app shows **Permission required**, click **Open Accessibility
+   Settings**. In **System Settings → Privacy & Security → Accessibility**, add
+   or enable that exact packaged `.app`. Return to the app and confirm its status
+   changes from **Permission required** to **Paused**.
+5. Click **Enable system control**, then verify a tracked index finger moves the
    system pointer, a short pinch clicks, and a held pinch starts and releases a
    drag.
-5. Verify every safety pause: click **Pause system control**; open the palm;
+6. Verify every safety pause: click **Pause system control**; open the palm;
    remove the hand or stop the camera stream; move focus away from the app; and
    deactivate the app. Each action must pause control and release any held mouse
    button.
-6. Start a drag, quit the app while the mouse button is held, and confirm the
+7. Start a drag, quit the app while the mouse button is held, and confirm the
    system pointer is released.
 
 ## Manual verification checklist
