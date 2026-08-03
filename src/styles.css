@@ -116,6 +116,160 @@ h2 {
   white-space: normal;
 }
 
+.calibration-panel {
+  margin-bottom: 1rem;
+  overflow: hidden;
+  border: 1px solid #253955;
+  border-radius: 1rem;
+  background: rgba(12, 28, 49, 0.96);
+}
+
+.calibration-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4.8rem;
+  padding: 0.85rem 1rem;
+}
+
+.calibration-heading .eyebrow {
+  margin-bottom: 0.25rem;
+}
+
+.calibration-heading h2 {
+  font-size: 1.1rem;
+}
+
+.calibration-toggle,
+.calibration-stepper button,
+.calibration-reset {
+  border: 1px solid rgba(99, 215, 238, 0.38);
+  color: #dff9ff;
+  background: rgba(99, 215, 238, 0.08);
+  cursor: pointer;
+}
+
+.calibration-toggle {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  place-content: center;
+  font-size: 1.2rem;
+}
+
+.calibration-content {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.8fr) minmax(20rem, 1.2fr) auto;
+  gap: 1rem;
+  padding: 1rem;
+  border-top: 1px solid #253955;
+  align-items: center;
+}
+
+.calibration-content[hidden] {
+  display: none;
+}
+
+.calibration-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.calibration-diagnostics div,
+.calibration-control {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.calibration-diagnostics dt,
+.calibration-control > span {
+  color: #7f94ae;
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.calibration-diagnostics dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #eef5ff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.calibration-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(7.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.calibration-stepper {
+  display: grid;
+  grid-template-columns: 2rem minmax(3.5rem, 1fr) 2rem;
+  overflow: hidden;
+  min-height: 2rem;
+  border: 1px solid #253955;
+  border-radius: 0.55rem;
+  background: #07101f;
+}
+
+.calibration-stepper button {
+  border: 0;
+  border-radius: 0;
+  font-weight: 800;
+}
+
+.calibration-stepper button:disabled {
+  color: #53677f;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.calibration-stepper output {
+  display: grid;
+  padding: 0 0.35rem;
+  border-right: 1px solid #253955;
+  border-left: 1px solid #253955;
+  place-content: center;
+  color: #eef5ff;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.calibration-reset {
+  min-height: 2.25rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.calibration-toggle:hover,
+.calibration-stepper button:not(:disabled):hover,
+.calibration-reset:hover {
+  border-color: rgba(99, 215, 238, 0.7);
+  background: rgba(99, 215, 238, 0.16);
+}
+
+.calibration-toggle:focus-visible,
+.calibration-stepper button:focus-visible,
+.calibration-reset:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
 .gesture-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.18fr) minmax(20rem, 0.82fr);
@@ -344,6 +498,10 @@ h2 {
     display: grid;
   }
 
+  .calibration-content {
+    grid-template-columns: 1fr;
+  }
+
   .gesture-workspace {
     grid-template-columns: 1fr;
   }
@@ -356,6 +514,11 @@ h2 {
   }
 
   .status-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .calibration-diagnostics,
+  .calibration-controls {
     grid-template-columns: 1fr;
   }
 
