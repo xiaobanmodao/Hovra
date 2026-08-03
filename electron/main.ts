@@ -107,6 +107,10 @@ function createMainWindow(): BrowserWindow {
     rendererGeneration += 1;
     activationFrame = undefined;
     void releaseForRendererLifecycle("renderer destruction");
+    if (cursorOverlay && !cursorOverlay.isDestroyed()) {
+      cursorOverlay.destroy();
+    }
+    cursorOverlay = undefined;
     if (mainWindow === createdWindow) {
       mainWindow = undefined;
       isAppActive = false;

@@ -40,6 +40,7 @@ const mainMocks = vi.hoisted(() => ({
     loadFile: ReturnType<typeof vi.fn>;
     loadURL: ReturnType<typeof vi.fn>;
     setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -65,6 +66,7 @@ vi.mock("electron", () => {
     loadURL = vi.fn().mockResolvedValue(undefined);
     loadFile = vi.fn().mockResolvedValue(undefined);
     setIgnoreMouseEvents = vi.fn();
+    destroy = vi.fn();
     isDestroyed = vi.fn().mockReturnValue(false);
     isFocused = vi.fn().mockReturnValue(false);
 
@@ -187,6 +189,18 @@ describe("main BrowserWindow security", () => {
       },
     });
     expect(overlay.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
+  });
+
+  it("destroys the cursor overlay with the main renderer", async () => {
+    const window = await bootMain("http://localhost:5173");
+    const overlay = mainMocks.windows[1];
+    const destroyed = window.webContents.on.mock.calls.find(
+      ([event]) => event === "destroyed",
+    )?.[1] as () => void;
+
+    destroyed();
+
+    expect(overlay.destroy).toHaveBeenCalledOnce();
   });
 
   it("loads only the packaged renderer file in production", async () => {
