@@ -453,8 +453,14 @@ it("dispatches hover movement, short clicks, and drag-aware movement while enabl
   await waitFor(() => expect(bridge.drag).toHaveBeenLastCalledWith(0.5531072, 0.44689280000000003));
   expect(bridge.move).toHaveBeenCalledTimes(moveCountDuringDrag);
 
+  const dragCountBeforeRelease = vi.mocked(bridge.drag).mock.calls.length;
   runFrame(800, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
+  expect(bridge.move).toHaveBeenCalledTimes(moveCountDuringDrag);
+  expect(bridge.drag).toHaveBeenCalledTimes(dragCountBeforeRelease + 1);
+  expect(vi.mocked(bridge.drag).mock.invocationCallOrder.at(-1)).toBeLessThan(
+    vi.mocked(bridge.mouseUp).mock.invocationCallOrder[0],
+  );
 });
 
 it.each(["lost", "open-palm", "stale-frame", "window-blur"] as const)(

@@ -56,7 +56,7 @@ export function createMouseController(
   let isSessionActive = false;
   let activationGeneration = 0;
   let isButtonDown = false;
-  let pressedActionQueue = Promise.resolve();
+  let actionQueue = Promise.resolve();
 
   async function permissionStatus(): Promise<PermissionStatus> {
     return (await deps.permission()) ? "granted" : "denied";
@@ -79,9 +79,9 @@ export function createMouseController(
     isButtonDown = false;
   }
 
-  function queuePressedAction(operation: () => Promise<void>): Promise<void> {
-    const result = pressedActionQueue.then(operation, operation);
-    pressedActionQueue = result.catch(() => undefined);
+  function queueAction(operation: () => Promise<void>): Promise<void> {
+    const result = actionQueue.then(operation, operation);
+    actionQueue = result.catch(() => undefined);
     return result;
   }
 
@@ -103,16 +103,23 @@ export function createMouseController(
       return true;
     },
 
-    async move(x: number, y: number): Promise<void> {
-      if (!Number.isFinite(x) || !Number.isFinite(y) || !(await canAct())) {
-        return;
-      }
+    move(x: number, y: number): Promise<void> {
+      return queueAction(async () => {
+        if (
+          isButtonDown
+          || !Number.isFinite(x)
+          || !Number.isFinite(y)
+          || !(await canAct())
+        ) {
+          return;
+        }
 
-      await deps.mouse.move(x, y);
+        await deps.mouse.move(x, y);
+      });
     },
 
     drag(x: number, y: number): Promise<void> {
-      return queuePressedAction(async () => {
+      return queueAction(async () => {
         if (
           !isButtonDown
           || !Number.isFinite(x)
@@ -126,16 +133,18 @@ export function createMouseController(
       });
     },
 
-    async click(): Promise<void> {
-      if (!(await canAct())) {
-        return;
-      }
+    click(): Promise<void> {
+      return queueAction(async () => {
+        if (isButtonDown || !(await canAct())) {
+          return;
+        }
 
-      await deps.mouse.click();
+        await deps.mouse.click();
+      });
     },
 
     mouseDown(): Promise<void> {
-      return queuePressedAction(async () => {
+      return queueAction(async () => {
         if (isButtonDown || !(await canAct())) {
           return;
         }
@@ -146,7 +155,7 @@ export function createMouseController(
     },
 
     mouseUp(): Promise<void> {
-      return queuePressedAction(async () => {
+      return queueAction(async () => {
         await releasePressedButton();
       });
     },
@@ -154,7 +163,7 @@ export function createMouseController(
     releaseAndPause(): Promise<void> {
       isSessionActive = false;
       activationGeneration += 1;
-      return queuePressedAction(releasePressedButton);
+      return queueAction(releasePressedButton);
     },
   };
 }

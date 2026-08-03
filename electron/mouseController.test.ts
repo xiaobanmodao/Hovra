@@ -21,6 +21,14 @@ function createDependencies() {
   };
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 describe("createMouseController", () => {
   let deps: ReturnType<typeof createDependencies>;
 
@@ -171,6 +179,59 @@ describe("createMouseController", () => {
 
     expect(deps.mouse.drag).toHaveBeenCalledOnce();
     expect(deps.mouse.drag).toHaveBeenCalledWith(320.5, -12);
+  });
+
+  it("drops hover movement and clicks while the tracked button remains down", async () => {
+    const controller = createMouseController(deps);
+    await controller.activate();
+    await controller.mouseDown();
+
+    await Promise.all([
+      controller.move(320.5, -12),
+      controller.click(),
+    ]);
+
+    expect(deps.mouse.move).not.toHaveBeenCalled();
+    expect(deps.mouse.click).not.toHaveBeenCalled();
+
+    await controller.mouseUp();
+    await controller.move(400, 300);
+    await controller.click();
+
+    expect(deps.mouse.move).toHaveBeenCalledWith(400, 300);
+    expect(deps.mouse.click).toHaveBeenCalledOnce();
+  });
+
+  it("finishes a queued terminal drag before releasing and accepting hover", async () => {
+    const controller = createMouseController(deps);
+    await controller.activate();
+    await controller.mouseDown();
+    const drag = deferred();
+    deps.mouse.drag.mockReturnValueOnce(drag.promise);
+
+    const terminalDrag = controller.drag(400, 300);
+    await vi.waitFor(() => expect(deps.mouse.drag).toHaveBeenCalledOnce());
+    const release = controller.mouseUp();
+    const hover = controller.move(420, 310);
+    const click = controller.click();
+
+    await Promise.resolve();
+    expect(deps.mouse.release).not.toHaveBeenCalled();
+    expect(deps.mouse.move).not.toHaveBeenCalled();
+    expect(deps.mouse.click).not.toHaveBeenCalled();
+
+    drag.resolve();
+    await Promise.all([terminalDrag, release, hover, click]);
+
+    expect(deps.mouse.drag.mock.invocationCallOrder[0]).toBeLessThan(
+      deps.mouse.release.mock.invocationCallOrder[0],
+    );
+    expect(deps.mouse.release.mock.invocationCallOrder[0]).toBeLessThan(
+      deps.mouse.move.mock.invocationCallOrder[0],
+    );
+    expect(deps.mouse.move.mock.invocationCallOrder[0]).toBeLessThan(
+      deps.mouse.click.mock.invocationCallOrder[0],
+    );
   });
 
   it("invalidates a queued drag before an unconditional safety release", async () => {

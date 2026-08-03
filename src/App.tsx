@@ -185,7 +185,7 @@ function App() {
       void desktopBridge.mouseDown().catch(() => pauseSystemControl());
     }
     if (systemCursor) {
-      const movement = output.state === "dragging"
+      const movement = output.state === "dragging" || output.dragEnd
         ? desktopBridge.drag(systemCursor.x, systemCursor.y)
         : desktopBridge.move(systemCursor.x, systemCursor.y);
       void movement.catch(() => pauseSystemControl());
