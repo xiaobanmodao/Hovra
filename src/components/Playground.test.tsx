@@ -34,6 +34,20 @@ afterEach(() => {
 });
 
 describe("Playground", () => {
+  it("clamps the card to the origin when it mounts in an undersized viewport", () => {
+    vi.stubGlobal("innerWidth", 180);
+    vi.stubGlobal("innerHeight", 100);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("draggable-card")
+        ? rect(136, 205, 224, 104)
+        : rect(0, 0, 0, 0);
+    });
+
+    render(<Playground cursor={null} output={idle} />);
+
+    expect(screen.getByTestId("draggable-card")).toHaveStyle({ left: "0px", top: "0px" });
+  });
+
   it("counts clicks at the target's fixed viewport position only", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       return this.classList.contains("click-target")
@@ -93,6 +107,8 @@ describe("Playground", () => {
   });
 
   it("keeps both fixed interaction objects visible when the viewport shrinks", () => {
+    const addEventListener = vi.spyOn(window, "addEventListener");
+    const removeEventListener = vi.spyOn(window, "removeEventListener");
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       return this.classList.contains("draggable-card")
         ? rect(136, 205, 224, 104)
@@ -130,11 +146,10 @@ describe("Playground", () => {
       top: "60px",
     });
 
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const resizeListener = addEventListener.mock.calls.find(([eventName]) => eventName === "resize")?.[1];
+    expect(resizeListener).toEqual(expect.any(Function));
+
     unmount();
-    act(() => {
-      window.dispatchEvent(new Event("resize"));
-    });
-    expect(consoleError).not.toHaveBeenCalled();
+    expect(removeEventListener).toHaveBeenCalledWith("resize", resizeListener);
   });
 });

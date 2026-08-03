@@ -10,6 +10,7 @@ type PlaygroundProps = {
 
 const VIEWPORT_MARGIN = 16;
 const CLICK_TARGET_SIZE = 144;
+const CARD_SIZE = { width: 160, height: 118.4 };
 
 const getViewport = () => ({
   width: window.innerWidth,
@@ -19,6 +20,13 @@ const getViewport = () => ({
 const getInitialTargetPosition = (): Position => clampToViewport(
   { x: window.innerWidth - CLICK_TARGET_SIZE - 32, y: 32 },
   { width: CLICK_TARGET_SIZE, height: CLICK_TARGET_SIZE },
+  getViewport(),
+  VIEWPORT_MARGIN,
+);
+
+const getInitialCardPosition = (): Position => clampToViewport(
+  { x: 136, y: 205 },
+  CARD_SIZE,
   getViewport(),
   VIEWPORT_MARGIN,
 );
@@ -33,7 +41,7 @@ const containsPoint = (bounds: DOMRect, point: Point): boolean => (
 export function Playground({ cursor, output }: PlaygroundProps) {
   const [clickCount, setClickCount] = useState(0);
   const [clickTargetPosition, setClickTargetPosition] = useState<Position>(getInitialTargetPosition);
-  const [cardPosition, setCardPosition] = useState<Position>({ x: 136, y: 205 });
+  const [cardPosition, setCardPosition] = useState<Position>(getInitialCardPosition);
   const clickTargetRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef<Point | null>(null);
