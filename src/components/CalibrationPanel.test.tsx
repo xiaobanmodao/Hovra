@@ -143,7 +143,7 @@ describe("CalibrationPanel", () => {
       expect.objectContaining({ dragHoldMs: 400 }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset calibration" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
     const lastCall = onSettingsChange.mock.calls[onSettingsChange.mock.calls.length - 1];
     const resetSettings = lastCall?.[0];
     expect(resetSettings).toEqual(DEFAULT_GESTURE_SETTINGS);

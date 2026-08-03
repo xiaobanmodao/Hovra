@@ -162,7 +162,6 @@ export function CalibrationPanel({
           <button
             type="button"
             className="calibration-reset"
-            aria-label="Reset calibration"
             onClick={() => onSettingsChange({ ...DEFAULT_GESTURE_SETTINGS })}
           >
             Reset defaults
