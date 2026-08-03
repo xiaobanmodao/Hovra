@@ -124,11 +124,14 @@ h2 {
 
 .camera-panel,
 .playground {
-  overflow: hidden;
   border: 1px solid #253955;
   border-radius: 1.25rem;
   background: rgba(12, 28, 49, 0.92);
   box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.18);
+}
+
+.camera-panel {
+  overflow: hidden;
 }
 
 .section-heading {
@@ -234,21 +237,15 @@ h2 {
   text-align: right;
 }
 
-.playground-surface {
-  position: relative;
-  min-height: 23.5rem;
-  overflow: hidden;
-  background:
-    linear-gradient(rgba(99, 215, 238, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 215, 238, 0.04) 1px, transparent 1px),
-    #09182b;
-  background-size: 24px 24px;
+.interaction-layer {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  pointer-events: none;
 }
 
 .click-target {
-  position: absolute;
-  top: 2.2rem;
-  left: 2.2rem;
+  position: fixed;
   display: grid;
   width: 9rem;
   aspect-ratio: 1;
@@ -258,6 +255,7 @@ h2 {
   color: #8fe2f2;
   background: radial-gradient(circle, rgba(49, 188, 210, 0.18), rgba(49, 188, 210, 0.04));
   box-shadow: inset 0 0 2rem rgba(99, 215, 238, 0.08);
+  pointer-events: auto;
   text-align: center;
 }
 
@@ -277,9 +275,7 @@ h2 {
 }
 
 .draggable-card {
-  position: absolute;
-  top: 12.8rem;
-  left: 8.5rem;
+  position: fixed;
   display: grid;
   width: 10rem;
   min-height: 7.4rem;
@@ -290,6 +286,7 @@ h2 {
   color: #f4f8ff;
   background: linear-gradient(145deg, #7f52d5, #4f67d8);
   box-shadow: 0 1rem 2.2rem rgba(9, 13, 42, 0.35);
+  pointer-events: auto;
   transition: box-shadow 120ms ease;
   user-select: none;
 }

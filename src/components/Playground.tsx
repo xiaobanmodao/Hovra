@@ -1,11 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import type { Point } from "../cursor/cursorController";
 import type { GestureOutput } from "../gesture/types";
+import { clampToViewport, type Position } from "./viewportBounds";
 
 type PlaygroundProps = {
   cursor: Point | null;
   output: GestureOutput;
 };
+
+const VIEWPORT_MARGIN = 16;
+const CLICK_TARGET_SIZE = 144;
+
+const getViewport = () => ({
+  width: window.innerWidth,
+  height: window.innerHeight,
+});
+
+const getInitialTargetPosition = (): Position => clampToViewport(
+  { x: window.innerWidth - CLICK_TARGET_SIZE - 32, y: 32 },
+  { width: CLICK_TARGET_SIZE, height: CLICK_TARGET_SIZE },
+  getViewport(),
+  VIEWPORT_MARGIN,
+);
 
 const containsPoint = (bounds: DOMRect, point: Point): boolean => (
   point.x >= bounds.left
@@ -16,10 +32,10 @@ const containsPoint = (bounds: DOMRect, point: Point): boolean => (
 
 export function Playground({ cursor, output }: PlaygroundProps) {
   const [clickCount, setClickCount] = useState(0);
-  const [cardPosition, setCardPosition] = useState<Point | null>(null);
+  const [clickTargetPosition] = useState<Position>(getInitialTargetPosition);
+  const [cardPosition, setCardPosition] = useState<Position>({ x: 136, y: 205 });
   const clickTargetRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const surfaceRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef<Point | null>(null);
 
   useEffect(() => {
@@ -51,25 +67,24 @@ export function Playground({ cursor, output }: PlaygroundProps) {
       output.state !== "dragging"
       || !cursor
       || !dragOffsetRef.current
-      || !surfaceRef.current
     ) {
       return;
     }
 
-    const surfaceBounds = surfaceRef.current.getBoundingClientRect();
     const cardBounds = cardRef.current?.getBoundingClientRect();
     if (!cardBounds) {
       return;
     }
 
-    const maxX = Math.max(0, surfaceBounds.width - cardBounds.width);
-    const maxY = Math.max(0, surfaceBounds.height - cardBounds.height);
-    const nextX = cursor.x - surfaceBounds.left - dragOffsetRef.current.x;
-    const nextY = cursor.y - surfaceBounds.top - dragOffsetRef.current.y;
-    setCardPosition({
-      x: Math.min(maxX, Math.max(0, nextX)),
-      y: Math.min(maxY, Math.max(0, nextY)),
-    });
+    setCardPosition(clampToViewport(
+      {
+        x: cursor.x - dragOffsetRef.current.x,
+        y: cursor.y - dragOffsetRef.current.y,
+      },
+      { width: cardBounds.width, height: cardBounds.height },
+      getViewport(),
+      VIEWPORT_MARGIN,
+    ));
   }, [cursor, output.state]);
 
   useEffect(() => {
@@ -88,8 +103,12 @@ export function Playground({ cursor, output }: PlaygroundProps) {
         <p className="gesture-hint">Short pinch to click. Hold the pinch to drag.</p>
       </div>
 
-      <div ref={surfaceRef} className="playground-surface">
-        <div ref={clickTargetRef} className="click-target">
+      <div className="interaction-layer">
+        <div
+          ref={clickTargetRef}
+          className="click-target"
+          style={{ left: clickTargetPosition.x, top: clickTargetPosition.y }}
+        >
           <span>Pinch here</span>
           <strong>Clicks: {clickCount}</strong>
         </div>
@@ -98,7 +117,7 @@ export function Playground({ cursor, output }: PlaygroundProps) {
           ref={cardRef}
           className={`draggable-card${output.state === "dragging" ? " is-dragging" : ""}`}
           data-testid="draggable-card"
-          style={cardPosition ? { left: cardPosition.x, top: cardPosition.y } : undefined}
+          style={{ left: cardPosition.x, top: cardPosition.y }}
         >
           <span aria-hidden="true">&#x2726;</span>
           <strong>Drag me</strong>

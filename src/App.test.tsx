@@ -83,9 +83,6 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
     if (this.classList.contains("draggable-card")) {
       return rect(20, 30, 120, 90);
     }
-    if (this.classList.contains("playground-surface")) {
-      return rect(10, 20, 320, 240);
-    }
     return rect(0, 0, 0, 0);
   });
 
@@ -113,7 +110,7 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
   expect(vision.detectFirstHand).toHaveBeenCalledTimes(2);
   expect(screen.getByRole("status")).toHaveTextContent(/gesturedragging/i);
   const card = screen.getByTestId("draggable-card");
-  expect(card).toHaveStyle({ left: "10px", top: "10px" });
+  expect(card).toHaveStyle({ left: "20px", top: "30px" });
 
   Object.defineProperty(video, "readyState", {
     configurable: true,
@@ -123,7 +120,7 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
   expect(vision.detectFirstHand).toHaveBeenCalledTimes(2);
   expect(screen.getByRole("status")).toHaveTextContent(/camera frame stalled/i);
   expect(screen.getByRole("status")).toHaveTextContent(/gesturelost/i);
-  expect(card).toHaveStyle({ left: "10px", top: "10px" });
+  expect(card).toHaveStyle({ left: "20px", top: "30px" });
 });
 
 it("ends an active drag and cleans up recognition when the camera stream becomes inactive", async () => {
@@ -151,9 +148,6 @@ it("ends an active drag and cleans up recognition when the camera stream becomes
     if (this.classList.contains("draggable-card")) {
       return rect(20, 30, 120, 90);
     }
-    if (this.classList.contains("playground-surface")) {
-      return rect(10, 20, 320, 240);
-    }
     return rect(0, 0, 0, 0);
   });
 
@@ -176,12 +170,12 @@ it("ends an active drag and cleans up recognition when the camera stream becomes
   act(() => nextFrame?.(400));
   expect(screen.getByRole("status")).toHaveTextContent(/gesturedragging/i);
   const card = screen.getByTestId("draggable-card");
-  expect(card).toHaveStyle({ left: "10px", top: "10px" });
+  expect(card).toHaveStyle({ left: "20px", top: "30px" });
 
   act(() => stream.dispatchEvent(new Event("inactive")));
 
   expect(screen.getByRole("status")).toHaveTextContent(/gesturelost/i);
-  expect(card).toHaveStyle({ left: "10px", top: "10px" });
+  expect(card).toHaveStyle({ left: "20px", top: "30px" });
   expect(track.stop).toHaveBeenCalledOnce();
   expect(vision.close).toHaveBeenCalledOnce();
   expect(cancelAnimationFrame).toHaveBeenCalledWith(7);
