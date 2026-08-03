@@ -28,10 +28,15 @@ export class GestureEngine {
 
     const cursor = landmarks[INDEX_FINGER_TIP] ?? null;
     if (this.isOpenPalm(landmarks)) {
-      const dragEnd = this.state === "dragging";
+      const previousState = this.state;
       this.state = "paused";
       this.pinchStartedAt = null;
-      return this.output(cursor, false, false, dragEnd);
+      return this.output(
+        cursor,
+        previousState === "pinching",
+        false,
+        previousState === "dragging",
+      );
     }
 
     if (this.isPinching(landmarks)) {

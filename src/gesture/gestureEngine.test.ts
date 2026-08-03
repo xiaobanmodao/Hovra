@@ -50,3 +50,34 @@ it("transitions between paused, tracking, pinching, clicking, dragging, and lost
   expect(engine.update(pinchedHand(), 550).dragStart).toBe(true);
   expect(engine.update(null, 570).dragEnd).toBe(true);
 });
+
+it("clicks when a pinch is released into an open palm", () => {
+  const engine = new GestureEngine();
+
+  engine.update(pinchedHand(), 0);
+  const release = engine.update(openHand(), 16);
+
+  expect(release.state).toBe("paused");
+  expect(release.click).toBe(true);
+  expect(release.dragEnd).toBe(false);
+});
+
+it("ends a drag without clicking when released into tracking or an open palm", () => {
+  const engine = new GestureEngine();
+
+  engine.update(pinchedHand(), 0);
+  engine.update(pinchedHand(), 350);
+  const trackingRelease = engine.update(trackingHand(), 366);
+
+  expect(trackingRelease.state).toBe("tracking");
+  expect(trackingRelease.click).toBe(false);
+  expect(trackingRelease.dragEnd).toBe(true);
+
+  engine.update(pinchedHand(), 400);
+  engine.update(pinchedHand(), 750);
+  const openPalmRelease = engine.update(openHand(), 766);
+
+  expect(openPalmRelease.state).toBe("paused");
+  expect(openPalmRelease.click).toBe(false);
+  expect(openPalmRelease.dragEnd).toBe(true);
+});
