@@ -50,6 +50,24 @@ function createMainWindow(): BrowserWindow {
   createdWindow.webContents.on("will-navigate", (event) => {
     event.preventDefault();
   });
+  createdWindow.webContents.on(
+    "did-start-navigation",
+    (details) => {
+      if (details.isMainFrame) {
+        releaseForRendererLifecycle("main-frame navigation");
+      }
+    },
+  );
+  createdWindow.webContents.on("render-process-gone", () => {
+    releaseForRendererLifecycle("renderer process exit");
+  });
+  createdWindow.webContents.on("destroyed", () => {
+    releaseForRendererLifecycle("renderer destruction");
+    if (mainWindow === createdWindow) {
+      mainWindow = undefined;
+      isAppActive = false;
+    }
+  });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     void createdWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -85,6 +103,16 @@ function createMainWindow(): BrowserWindow {
   }
 
   return createdWindow;
+}
+
+function releaseForRendererLifecycle(reason: string): void {
+  if (!mouseController) {
+    return;
+  }
+
+  void mouseController.releaseAndPause().catch((error: unknown) => {
+    console.error(`Failed to release the mouse after ${reason}`, error);
+  });
 }
 
 function getPackagedRendererPath(): string {

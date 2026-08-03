@@ -18,6 +18,13 @@ const mainMocks = vi.hoisted(() => ({
   ipcSecurity: undefined as CapturedIpcSecurity | undefined,
   ipcHandlers: new Map<string, (event: unknown) => Promise<unknown>>(),
   openExternal: vi.fn().mockResolvedValue(undefined),
+  isTrustedAccessibilityClient: vi.fn().mockReturnValue(true),
+  mouse: {
+    move: vi.fn().mockResolvedValue(undefined),
+    click: vi.fn().mockResolvedValue(undefined),
+    press: vi.fn().mockResolvedValue(undefined),
+    release: vi.fn().mockResolvedValue(undefined),
+  },
   windows: [] as Array<{
     options: Record<string, unknown>;
     windowHandlers: Map<string, () => void>;
@@ -81,24 +88,36 @@ vi.mock("electron", () => {
       })),
     },
     shell: { openExternal: mainMocks.openExternal },
-    systemPreferences: { isTrustedAccessibilityClient: vi.fn() },
+    systemPreferences: {
+      isTrustedAccessibilityClient: mainMocks.isTrustedAccessibilityClient,
+    },
   };
 });
 
-vi.mock("./mouseController", () => ({
-  createMouseController: vi.fn((deps: CapturedControllerDependencies) => {
-    mainMocks.controllerDependencies = deps;
-    return {};
-  }),
-  pauseForLifecycle: vi.fn().mockResolvedValue(undefined),
-  registerMouseControllerIpc: vi.fn(
-    (_ipcMain: unknown, _controller: unknown, security: CapturedIpcSecurity) => {
-      mainMocks.ipcSecurity = security;
-    },
-  ),
-}));
+vi.mock("./mouseController", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./mouseController")>();
 
-vi.mock("./systemMouseAdapter", () => ({ systemMouse: {} }));
+  return {
+    ...actual,
+    createMouseController: vi.fn((deps: Parameters<typeof actual.createMouseController>[0]) => {
+      mainMocks.controllerDependencies = deps;
+      const controller = actual.createMouseController(deps);
+      return controller;
+    }),
+    registerMouseControllerIpc: vi.fn(
+      (
+        ipcMain: Parameters<typeof actual.registerMouseControllerIpc>[0],
+        controller: Parameters<typeof actual.registerMouseControllerIpc>[1],
+        security: CapturedIpcSecurity,
+      ) => {
+        mainMocks.ipcSecurity = security;
+        actual.registerMouseControllerIpc(ipcMain, controller, security);
+      },
+    ),
+  };
+});
+
+vi.mock("./systemMouseAdapter", () => ({ systemMouse: mainMocks.mouse }));
 
 async function bootMain(devServerUrl: string | undefined) {
   vi.resetModules();
@@ -165,6 +184,60 @@ describe("main BrowserWindow security", () => {
     navigate?.({ preventDefault });
     expect(preventDefault).toHaveBeenCalledOnce();
   });
+
+  it("releases and invalidates control on main-frame reload until fresh activation", async () => {
+    const window = await bootMain("http://localhost:5173");
+    window.windowHandlers.get("focus")?.();
+    const topFrame: { url: string; top?: unknown } = {
+      url: "http://localhost:5173/index.html",
+    };
+    topFrame.top = topFrame;
+    const trustedEvent = { sender: window.webContents, senderFrame: topFrame };
+
+    await mainMocks.ipcHandlers.get("gesture:activate")?.(trustedEvent);
+    await mainMocks.ipcHandlers.get("gesture:mouse-down")?.(trustedEvent);
+    expect(mainMocks.mouse.press).toHaveBeenCalledOnce();
+
+    const didStartNavigation = window.webContents.on.mock.calls.find(
+      ([event]) => event === "did-start-navigation",
+    )?.[1] as (details: { isMainFrame: boolean }) => void;
+    didStartNavigation({ isMainFrame: false });
+    await Promise.resolve();
+    expect(mainMocks.mouse.release).not.toHaveBeenCalled();
+
+    didStartNavigation({ isMainFrame: true });
+    await vi.waitFor(() => expect(mainMocks.mouse.release).toHaveBeenCalledOnce());
+
+    await mainMocks.ipcHandlers.get("gesture:click")?.(trustedEvent);
+    expect(mainMocks.mouse.click).not.toHaveBeenCalled();
+    expect(mainMocks.controllerDependencies?.isActive()).toBe(true);
+
+    await mainMocks.ipcHandlers.get("gesture:activate")?.(trustedEvent);
+    await mainMocks.ipcHandlers.get("gesture:click")?.(trustedEvent);
+    expect(mainMocks.mouse.click).toHaveBeenCalledOnce();
+  });
+
+  it.each(["render-process-gone", "destroyed"])(
+    "releases a tracked press when webContents emits %s",
+    async (lifecycleEvent) => {
+      const window = await bootMain("http://localhost:5173");
+      window.windowHandlers.get("focus")?.();
+      const topFrame: { url: string; top?: unknown } = {
+        url: "http://localhost:5173/index.html",
+      };
+      topFrame.top = topFrame;
+      const trustedEvent = { sender: window.webContents, senderFrame: topFrame };
+      await mainMocks.ipcHandlers.get("gesture:activate")?.(trustedEvent);
+      await mainMocks.ipcHandlers.get("gesture:mouse-down")?.(trustedEvent);
+
+      const listener = window.webContents.on.mock.calls.find(
+        ([event]) => event === lifecycleEvent,
+      )?.[1] as () => void;
+      listener();
+
+      await vi.waitFor(() => expect(mainMocks.mouse.release).toHaveBeenCalledOnce());
+    },
+  );
 });
 
 describe("main IPC trust boundary", () => {

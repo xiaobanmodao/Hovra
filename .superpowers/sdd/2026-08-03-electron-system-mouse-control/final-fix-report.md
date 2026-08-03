@@ -138,7 +138,7 @@ preload, system-control UI, and App safety/activation behavior.
 
 Fresh final-tree verification:
 
-- `npm test` — 13 files, 82/82 tests passed.
+- `npm test` — 13 files, 85/85 tests passed.
 - `npm run build` — renderer TypeScript and Vite production build passed.
 - `npm run electron:typecheck` — Electron main/preload/tests/config passed.
 - `npm run electron:make` — Forge built main, preload, renderer, rebuilt the one
@@ -159,3 +159,40 @@ All Electron, Accessibility, shell, screen, and RobotJS interactions in automate
 tests were mocked. Packaging and artifact inspection were read-only with respect
 to runtime behavior. The app was not launched, System Settings was not opened,
 no permission choice was made, and no physical pointer event was emitted.
+
+## Final fix round: renderer reload and replacement
+
+### Root cause
+
+The main-owned activation session was invalidated on window blur and explicit
+renderer safety requests, but it survived a focused renderer reload. Electron's
+programmatic `webContents.reload()` does not pass through `will-navigate`, so a
+replacement renderer sharing the trusted `webContents` and URL could resume
+action IPC using the prior session without a fresh explicit activation.
+
+### Fix
+
+- Main now listens for `did-start-navigation` and calls the controller's
+  idempotent `releaseAndPause()` for every main-frame navigation, including reload.
+- Subframe navigation does not affect the system-control session.
+- `render-process-gone` and `webContents` `destroyed` also release and invalidate
+  the session, covering renderer crash, termination, and window teardown.
+- Reload invalidation deliberately does not clear focused-window activity. The
+  replacement renderer can therefore request a fresh explicit activation while
+  the window remains focused, but action IPC remains inert until it does so.
+- WebContents destruction clears the current trusted-window reference and active
+  state after initiating release.
+
+### Regression evidence
+
+The new integration regression uses the real `MouseController` and registered IPC
+handlers with only Electron and RobotJS boundaries mocked. It activates, tracks a
+press, simulates a main-frame reload, observes one release, proves a subsequent
+click is inert, then explicitly activates again and proves the click is accepted.
+Separate cases verify release on `render-process-gone` and `destroyed`. The RED
+run failed all three cases because none of those lifecycle listeners existed.
+
+Fresh final-fix verification passed: `npm test` (13 files, 85/85 tests),
+`npm run electron:typecheck`, `npm run build`, and `npm run electron:make` for
+darwin/arm64. Artifact generation remained successful and the packaged app was
+not launched.
