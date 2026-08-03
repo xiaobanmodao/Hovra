@@ -31,7 +31,7 @@ const mainMocks = vi.hoisted(() => ({
     options: Record<string, unknown>;
     windowHandlers: Map<string, () => void>;
     webContents: {
-      mainFrame: { url: string; top?: unknown };
+      mainFrame: { url: string; top?: unknown; frameToken?: string };
       on: ReturnType<typeof vi.fn>;
       send: ReturnType<typeof vi.fn>;
       setWindowOpenHandler: ReturnType<typeof vi.fn>;
@@ -53,6 +53,7 @@ vi.mock("electron", () => {
       mainFrame: { url: "http://localhost:5173/index.html" } as {
         url: string;
         top?: unknown;
+        frameToken?: string;
       },
       on: vi.fn(),
       send: vi.fn(),
@@ -290,6 +291,32 @@ describe("main BrowserWindow security", () => {
 });
 
 describe("main IPC trust boundary", () => {
+  it("accepts activation from a distinct wrapper for the active renderer frame", async () => {
+    const window = await bootMain("http://localhost:5173");
+    window.windowHandlers.get("focus")?.();
+    const activeFrame: { url: string; frameToken: string; top?: unknown } = {
+      url: "http://localhost:5173/index.html",
+      frameToken: "active-renderer-frame",
+    };
+    activeFrame.top = activeFrame;
+    window.webContents.mainFrame = activeFrame;
+    const senderFrame: { url: string; frameToken: string; top?: unknown } = {
+      url: "http://localhost:5173/index.html",
+      frameToken: "active-renderer-frame",
+    };
+    senderFrame.top = senderFrame;
+    const event = { sender: window.webContents, senderFrame };
+    const domReady = window.webContents.on.mock.calls.find(
+      ([eventName]) => eventName === "dom-ready",
+    )?.[1] as () => void;
+
+    domReady();
+    await vi.waitFor(() => {
+      expect(mainMocks.ipcSecurity?.canActivate(event)).toBe(true);
+    });
+    await expect(mainMocks.ipcHandlers.get("gesture:activate")?.(event)).resolves.toBe(true);
+  });
+
   it("accepts only the main window top frame at the configured origin", async () => {
     const window = await bootMain("http://localhost:5173");
     const topFrame: { url: string; top?: unknown } = {

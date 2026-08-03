@@ -198,7 +198,21 @@ function canActivateRendererEvent(event: unknown): boolean {
     return false;
   }
 
-  return (event as { senderFrame?: unknown }).senderFrame === activationFrame;
+  const senderFrame = (event as { senderFrame?: unknown }).senderFrame;
+  if (senderFrame === activationFrame) {
+    return true;
+  }
+
+  if (typeof senderFrame !== "object" || senderFrame === null) {
+    return false;
+  }
+
+  const frameToken = (senderFrame as { frameToken?: unknown }).frameToken;
+  return (
+    typeof frameToken === "string"
+    && frameToken.length > 0
+    && frameToken === activationFrame.frameToken
+  );
 }
 
 void app.whenReady().then(() => {
