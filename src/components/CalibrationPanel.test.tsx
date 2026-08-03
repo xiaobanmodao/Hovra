@@ -1,7 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_GESTURE_SETTINGS } from "../gesture/config";
+import {
+  CALIBRATION_CONTROL_METADATA,
+  DEFAULT_GESTURE_SETTINGS,
+} from "../gesture/config";
 import type { GestureSettings, GestureState } from "../gesture/types";
 import type { Point } from "../cursor/cursorController";
 import { CalibrationPanel } from "./CalibrationPanel";
@@ -75,35 +78,16 @@ describe("CalibrationPanel", () => {
     expect(increment).toBeDisabled();
   });
 
-  it.each([
-    {
-      label: "pinch threshold",
-      key: "pinchDistance" as const,
-      min: 0.025,
-      max: 0.1,
-      step: 0.005,
-    },
-    {
-      label: "cursor smoothing",
-      key: "cursorSmoothingFactor" as const,
-      min: 0.05,
-      max: 1,
-      step: 0.05,
-    },
-    {
-      label: "drag hold",
-      key: "dragHoldMs" as const,
-      min: 150,
-      max: 1000,
-      step: 50,
-    },
-  ])("applies the exact $label step and disables controls at both bounds", ({
+  it.each(Object.values(CALIBRATION_CONTROL_METADATA))(
+    "applies the exact $label step and disables controls at both bounds",
+    ({
     label,
+    accessibleLabel,
     key,
     min,
     max,
     step,
-  }) => {
+    }) => {
     const onSettingsChange = vi.fn();
     const initialSettings = { ...DEFAULT_GESTURE_SETTINGS, [key]: min + step };
     const { rerender } = render(
@@ -114,7 +98,7 @@ describe("CalibrationPanel", () => {
       />,
     );
 
-    const decrement = screen.getByRole("button", { name: `Decrease ${label}` });
+    const decrement = screen.getByRole("button", { name: `Decrease ${accessibleLabel}` });
     fireEvent.click(decrement);
     expect(onSettingsChange).toHaveBeenLastCalledWith(expect.objectContaining({ [key]: min }));
     expect(decrement).toBeDisabled();
@@ -128,11 +112,12 @@ describe("CalibrationPanel", () => {
       />,
     );
 
-    const increment = screen.getByRole("button", { name: `Increase ${label}` });
+    const increment = screen.getByRole("button", { name: `Increase ${accessibleLabel}` });
     fireEvent.click(increment);
     expect(onSettingsChange).toHaveBeenLastCalledWith(expect.objectContaining({ [key]: max }));
     expect(increment).toBeDisabled();
-  });
+    },
+  );
 
   it("resets changed settings with a fresh copy of the defaults", () => {
     const onSettingsChange = vi.fn();

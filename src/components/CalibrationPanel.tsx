@@ -1,6 +1,10 @@
 import { useId, useState } from "react";
 import type { Point } from "../cursor/cursorController";
-import { DEFAULT_GESTURE_SETTINGS } from "../gesture/config";
+import {
+  CALIBRATION_CONTROL_METADATA,
+  DEFAULT_GESTURE_SETTINGS,
+  type CalibrationControlMetadata,
+} from "../gesture/config";
 import type { GestureSettings, GestureState } from "../gesture/types";
 
 type CalibrationPanelProps = {
@@ -79,15 +83,18 @@ export function CalibrationPanel({
   const contentId = useId();
 
   const changeSetting = <Key extends keyof GestureSettings>(
-    key: Key,
+    metadata: CalibrationControlMetadata & { key: Key },
     adjustment: number,
-    min: number,
-    max: number,
-    precision: number,
   ) => {
-    const value = boundedStep(settings[key], adjustment, min, max, precision);
-    if (value !== settings[key]) {
-      onSettingsChange({ ...settings, [key]: value });
+    const value = boundedStep(
+      settings[metadata.key],
+      adjustment,
+      metadata.min,
+      metadata.max,
+      metadata.precision,
+    );
+    if (value !== settings[metadata.key]) {
+      onSettingsChange({ ...settings, [metadata.key]: value });
     }
   };
 
@@ -127,36 +134,22 @@ export function CalibrationPanel({
           </dl>
 
           <div className="calibration-controls">
-            <SettingControl
-              label="Pinch threshold"
-              accessibleLabel="pinch threshold"
-              value={settings.pinchDistance}
-              displayValue={settings.pinchDistance.toFixed(3)}
-              min={0.025}
-              max={0.1}
-              onDecrease={() => changeSetting("pinchDistance", -0.005, 0.025, 0.1, 3)}
-              onIncrease={() => changeSetting("pinchDistance", 0.005, 0.025, 0.1, 3)}
-            />
-            <SettingControl
-              label="Cursor smoothing"
-              accessibleLabel="cursor smoothing"
-              value={settings.cursorSmoothingFactor}
-              displayValue={settings.cursorSmoothingFactor.toFixed(2)}
-              min={0.05}
-              max={1}
-              onDecrease={() => changeSetting("cursorSmoothingFactor", -0.05, 0.05, 1, 2)}
-              onIncrease={() => changeSetting("cursorSmoothingFactor", 0.05, 0.05, 1, 2)}
-            />
-            <SettingControl
-              label="Drag hold"
-              accessibleLabel="drag hold"
-              value={settings.dragHoldMs}
-              displayValue={`${settings.dragHoldMs} ms`}
-              min={150}
-              max={1000}
-              onDecrease={() => changeSetting("dragHoldMs", -50, 150, 1000, 0)}
-              onIncrease={() => changeSetting("dragHoldMs", 50, 150, 1000, 0)}
-            />
+            {CALIBRATION_CONTROL_METADATA.map((metadata) => {
+              const value = settings[metadata.key];
+              return (
+                <SettingControl
+                  key={metadata.key}
+                  label={metadata.label}
+                  accessibleLabel={metadata.accessibleLabel}
+                  value={value}
+                  displayValue={`${value.toFixed(metadata.precision)}${metadata.unit ? ` ${metadata.unit}` : ""}`}
+                  min={metadata.min}
+                  max={metadata.max}
+                  onDecrease={() => changeSetting(metadata, -metadata.step)}
+                  onIncrease={() => changeSetting(metadata, metadata.step)}
+                />
+              );
+            })}
           </div>
 
           <button

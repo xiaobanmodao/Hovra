@@ -64,6 +64,21 @@ it("uses injected pinch and drag thresholds without mutating them", () => {
   });
 });
 
+it("clicks when a short pinch using non-default settings is released", () => {
+  const engine = new GestureEngine({
+    ...DEFAULT_GESTURE_SETTINGS,
+    pinchDistance: 0.1,
+    dragHoldMs: 600,
+  });
+
+  engine.update(handWithPinchDistance(0.08), 0);
+  const release = engine.update(trackingHand(), 500);
+
+  expect(release.state).toBe("tracking");
+  expect(release.click).toBe(true);
+  expect(release.dragEnd).toBe(false);
+});
+
 it("transitions between paused, tracking, pinching, clicking, dragging, and lost", () => {
   const engine = new GestureEngine();
 
