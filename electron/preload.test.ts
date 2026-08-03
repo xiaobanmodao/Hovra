@@ -24,6 +24,7 @@ type ExposedApi = Record<string, unknown> & {
   getPermissionStatus(): Promise<"granted" | "denied">;
   activate(): Promise<boolean>;
   move(x: number, y: number): Promise<void>;
+  drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
@@ -55,6 +56,7 @@ describe("gestureDesktop preload bridge", () => {
     expect(Object.keys(api).sort()).toEqual([
       "activate",
       "click",
+      "drag",
       "getPermissionStatus",
       "mouseDown",
       "mouseUp",
@@ -78,6 +80,7 @@ describe("gestureDesktop preload bridge", () => {
     await api.getPermissionStatus();
     await api.activate();
     await api.move(0.25, 0.75);
+    await api.drag(0.75, 0.25);
     await api.click();
     await api.mouseDown();
     await api.mouseUp();
@@ -88,6 +91,7 @@ describe("gestureDesktop preload bridge", () => {
       ["gesture:get-permission-status"],
       ["gesture:activate"],
       ["gesture:move", { x: 0.25, y: 0.75 }],
+      ["gesture:drag", { x: 0.75, y: 0.25 }],
       ["gesture:click"],
       ["gesture:mouse-down"],
       ["gesture:mouse-up"],
@@ -106,6 +110,13 @@ describe("gestureDesktop preload bridge", () => {
     const api = getExposedApi();
 
     await expect(api.move(x, y)).rejects.toThrow("normalized coordinates");
+    expect(electronMocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid normalized drag coordinates before IPC", async () => {
+    const api = getExposedApi();
+
+    await expect(api.drag(-0.01, 0.5)).rejects.toThrow("normalized coordinates");
     expect(electronMocks.invoke).not.toHaveBeenCalled();
   });
 

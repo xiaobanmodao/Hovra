@@ -9,6 +9,7 @@ const desktopApi = (
   getPermissionStatus: vi.fn().mockResolvedValue(permission),
   activate: vi.fn().mockResolvedValue(true),
   move: vi.fn().mockResolvedValue(undefined),
+  drag: vi.fn().mockResolvedValue(undefined),
   click: vi.fn().mockResolvedValue(undefined),
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),

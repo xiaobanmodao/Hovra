@@ -8,9 +8,8 @@ import { SystemControlPanel } from "./components/SystemControlPanel";
 import { mapMirroredPoint, smoothPoint, type Point } from "./cursor/cursorController";
 import { DEFAULT_GESTURE_SETTINGS } from "./gesture/config";
 import { GestureEngine } from "./gesture/gestureEngine";
+import { thumbIndexDistance } from "./gesture/landmarkMetrics";
 import {
-  INDEX_FINGER_TIP,
-  THUMB_TIP,
   type GestureOutput,
   type GestureSettings,
   type Landmark,
@@ -53,11 +52,7 @@ function App() {
   const [cursor, setCursor] = useState<Point | null>(null);
   const [systemCursor, setSystemCursor] = useState<Point | null>(null);
   const [systemControlEnabled, setSystemControlEnabled] = useState(false);
-  const pinchDistance = useMemo(() => {
-    const thumb = landmarks?.[THUMB_TIP];
-    const index = landmarks?.[INDEX_FINGER_TIP];
-    return thumb && index ? Math.hypot(thumb.x - index.x, thumb.y - index.y) : null;
-  }, [landmarks]);
+  const pinchDistance = useMemo(() => thumbIndexDistance(landmarks), [landmarks]);
 
   const handleCameraReady = useCallback(() => {
     setCameraReady(true);
@@ -186,14 +181,17 @@ function App() {
       return;
     }
 
+    if (output.dragStart) {
+      void desktopBridge.mouseDown().catch(() => pauseSystemControl());
+    }
     if (systemCursor) {
-      void desktopBridge.move(systemCursor.x, systemCursor.y).catch(() => pauseSystemControl());
+      const movement = output.state === "dragging"
+        ? desktopBridge.drag(systemCursor.x, systemCursor.y)
+        : desktopBridge.move(systemCursor.x, systemCursor.y);
+      void movement.catch(() => pauseSystemControl());
     }
     if (output.click) {
       void desktopBridge.click().catch(() => pauseSystemControl());
-    }
-    if (output.dragStart) {
-      void desktopBridge.mouseDown().catch(() => pauseSystemControl());
     }
     if (output.dragEnd) {
       void desktopBridge.mouseUp().catch(() => pauseSystemControl());

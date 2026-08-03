@@ -34,7 +34,7 @@ vi.mock("./gesture/gestureEngine", async (importOriginal) => {
 import App from "./App";
 
 const pinchedHandAt = (x: number, y: number): Landmark[] => {
-  const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+  const hand: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
   hand[4] = { x: x - 0.03, y };
   hand[8] = { x, y };
   return hand;
@@ -79,6 +79,7 @@ const desktopApi = (): GestureDesktopApi => ({
   getPermissionStatus: vi.fn().mockResolvedValue("granted"),
   activate: vi.fn().mockResolvedValue(true),
   move: vi.fn().mockResolvedValue(undefined),
+  drag: vi.fn().mockResolvedValue(undefined),
   click: vi.fn().mockResolvedValue(undefined),
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),
@@ -187,7 +188,7 @@ it("renders the hand gesture demo heading", () => {
   expect(screen.getByRole("heading", { name: /hand gesture/i })).toBeInTheDocument();
 });
 
-it("propagates calibration settings and displays the live two-dimensional pinch distance", async () => {
+it("propagates calibration settings and displays the live three-dimensional pinch distance", async () => {
   const stream = Object.assign(new EventTarget(), {
     getTracks: () => [],
   }) as unknown as MediaStream;
@@ -203,9 +204,9 @@ it("propagates calibration settings and displays the live two-dimensional pinch 
   }));
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
-  const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
-  hand[4] = { x: 0.2, y: 0.3 };
-  hand[8] = { x: 0.24, y: 0.3 };
+  const hand: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+  hand[4] = { x: 0.2, y: 0.3, z: 0 };
+  hand[8] = { x: 0.24, y: 0.3, z: 0.03 };
   vision.detectFirstHand.mockReturnValue(hand);
 
   render(<App />);
@@ -234,7 +235,7 @@ it("propagates calibration settings and displays the live two-dimensional pinch 
   await waitFor(() => expect(nextFrame).not.toBeNull());
   act(() => nextFrame?.(16));
 
-  expect(screen.getByText("Pinch distance").nextElementSibling).toHaveTextContent("0.040");
+  expect(screen.getByText("Pinch distance").nextElementSibling).toHaveTextContent("0.050");
 });
 
 it("ends an active drag before replacing the engine when calibration settings change", async () => {
@@ -431,7 +432,7 @@ it("ends an active drag and cleans up recognition when the camera stream becomes
   expect(cancelAnimationFrame).toHaveBeenCalledWith(7);
 });
 
-it("dispatches cursor movement, short clicks, and drag button transitions while enabled", async () => {
+it("dispatches hover movement, short clicks, and drag-aware movement while enabled", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
 
   runFrame(50, trackingHandAt(0.45, 0.45));
@@ -445,6 +446,12 @@ it("dispatches cursor movement, short clicks, and drag button transitions while 
   runFrame(300, pinchedHandAt(0.45, 0.45));
   runFrame(700, pinchedHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
+  await waitFor(() => expect(bridge.drag).toHaveBeenCalledWith(0.566384, 0.43361600000000006));
+
+  const moveCountDuringDrag = vi.mocked(bridge.move).mock.calls.length;
+  runFrame(750, pinchedHandAt(0.5, 0.5));
+  await waitFor(() => expect(bridge.drag).toHaveBeenLastCalledWith(0.5531072, 0.44689280000000003));
+  expect(bridge.move).toHaveBeenCalledTimes(moveCountDuringDrag);
 
   runFrame(800, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());

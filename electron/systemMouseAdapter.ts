@@ -6,6 +6,9 @@ export const systemMouse: SystemMouseAdapter = {
   async move(x, y) {
     robot.moveMouse(x, y);
   },
+  async drag(x, y) {
+    robot.dragMouse(x, y);
+  },
   async click() {
     robot.mouseClick("left");
   },

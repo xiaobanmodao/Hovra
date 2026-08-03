@@ -13,6 +13,7 @@ function createDependencies() {
     isActive: vi.fn<() => boolean>().mockReturnValue(true),
     mouse: {
       move: vi.fn<(x: number, y: number) => Promise<void>>().mockResolvedValue(),
+      drag: vi.fn<(x: number, y: number) => Promise<void>>().mockResolvedValue(),
       click: vi.fn<() => Promise<void>>().mockResolvedValue(),
       press: vi.fn<() => Promise<void>>().mockResolvedValue(),
       release: vi.fn<() => Promise<void>>().mockResolvedValue(),
@@ -156,6 +157,43 @@ describe("createMouseController", () => {
     expect(deps.mouse.click).toHaveBeenCalledOnce();
   });
 
+  it("drags only after a tracked press and stops after release", async () => {
+    const controller = createMouseController(deps);
+    await controller.activate();
+
+    await controller.drag(200, 100);
+    await Promise.all([
+      controller.mouseDown(),
+      controller.drag(320.5, -12),
+    ]);
+    await controller.mouseUp();
+    await controller.drag(400, 300);
+
+    expect(deps.mouse.drag).toHaveBeenCalledOnce();
+    expect(deps.mouse.drag).toHaveBeenCalledWith(320.5, -12);
+  });
+
+  it("invalidates a queued drag before an unconditional safety release", async () => {
+    const controller = createMouseController(deps);
+    await controller.activate();
+    await controller.mouseDown();
+
+    let resolvePermission: ((granted: boolean) => void) | undefined;
+    deps.permission.mockImplementation(
+      () => new Promise<boolean>((resolve) => {
+        resolvePermission = resolve;
+      }),
+    );
+    const drag = controller.drag(400, 300);
+    await vi.waitFor(() => expect(resolvePermission).toBeTypeOf("function"));
+    const release = controller.releaseAndPause();
+    resolvePermission?.(true);
+
+    await Promise.all([drag, release]);
+    expect(deps.mouse.drag).not.toHaveBeenCalled();
+    expect(deps.mouse.release).toHaveBeenCalledOnce();
+  });
+
   it("presses and releases the left button idempotently", async () => {
     const controller = createMouseController(deps);
     await controller.activate();
@@ -215,6 +253,7 @@ function createControllerDouble(): MouseController {
     permissionStatus: vi.fn().mockResolvedValue("granted"),
     activate: vi.fn().mockResolvedValue(true),
     move: vi.fn().mockResolvedValue(undefined),
+    drag: vi.fn().mockResolvedValue(undefined),
     click: vi.fn().mockResolvedValue(undefined),
     mouseDown: vi.fn().mockResolvedValue(undefined),
     mouseUp: vi.fn().mockResolvedValue(undefined),
@@ -259,6 +298,7 @@ describe("main-process mouse IPC", () => {
     expect([...handlers.keys()].sort()).toEqual([
       "gesture:activate",
       "gesture:click",
+      "gesture:drag",
       "gesture:get-permission-status",
       "gesture:mouse-down",
       "gesture:mouse-up",
@@ -267,12 +307,17 @@ describe("main-process mouse IPC", () => {
     ]);
 
     await handlers.get("gesture:move")?.(trustedEvent, { x: 0.25, y: 0.5 });
+    await handlers.get("gesture:drag")?.(trustedEvent, { x: 0.75, y: 0.25 });
+    await handlers.get("gesture:drag")?.(trustedEvent, { x: -0.01, y: 0.25 });
+    await handlers.get("gesture:drag")?.(trustedEvent, { x: 0.75 });
     await handlers.get("gesture:move")?.(trustedEvent, { x: Number.NaN, y: 0.5 });
     await handlers.get("gesture:move")?.(trustedEvent, { x: 2, y: 0.5 });
     await handlers.get("gesture:move")?.(trustedEvent, { x: 0.25 });
 
     expect(controller.move).toHaveBeenCalledTimes(1);
     expect(controller.move).toHaveBeenCalledWith(-1134.25, 532.5);
+    expect(controller.drag).toHaveBeenCalledOnce();
+    expect(controller.drag).toHaveBeenCalledWith(-378.75, 287.25);
   });
 
   it("forwards activation, permission, release, and button actions for the trusted top frame", async () => {
@@ -395,6 +440,7 @@ describe("main-process mouse IPC", () => {
     ).resolves.toBe("denied");
     await expect(handlers.get("gesture:activate")?.(untrustedEvent)).resolves.toBe(false);
     await handlers.get("gesture:move")?.(untrustedEvent, { x: 0.5, y: 0.5 });
+    await handlers.get("gesture:drag")?.(untrustedEvent, { x: 0.5, y: 0.5 });
     await handlers.get("gesture:click")?.(untrustedEvent);
     await handlers.get("gesture:mouse-down")?.(untrustedEvent);
     await handlers.get("gesture:mouse-up")?.(untrustedEvent);
@@ -403,6 +449,7 @@ describe("main-process mouse IPC", () => {
     expect(controller.permissionStatus).not.toHaveBeenCalled();
     expect(controller.activate).not.toHaveBeenCalled();
     expect(controller.move).not.toHaveBeenCalled();
+    expect(controller.drag).not.toHaveBeenCalled();
     expect(controller.click).not.toHaveBeenCalled();
     expect(controller.mouseDown).not.toHaveBeenCalled();
     expect(controller.mouseUp).not.toHaveBeenCalled();

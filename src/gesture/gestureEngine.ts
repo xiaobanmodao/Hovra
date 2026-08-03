@@ -1,19 +1,16 @@
 import { DEFAULT_GESTURE_SETTINGS } from "./config";
+import { landmarkDistance, thumbIndexDistance } from "./landmarkMetrics";
 import {
   INDEX_FINGER_TIP,
   MIDDLE_FINGER_TIP,
   PINKY_TIP,
   RING_FINGER_TIP,
-  THUMB_TIP,
   WRIST,
   type GestureOutput,
   type GestureSettings,
   type GestureState,
   type Landmark,
 } from "./types";
-
-const distanceBetween = (first: Landmark, second: Landmark): number =>
-  Math.hypot(first.x - second.x, first.y - second.y, (first.z ?? 0) - (second.z ?? 0));
 
 export class GestureEngine {
   private state: GestureState = "lost";
@@ -80,14 +77,13 @@ export class GestureEngine {
     ];
 
     return Boolean(wrist) && fingertips.every(
-      (tip) => tip !== undefined && distanceBetween(wrist, tip) > this.settings.openPalmMinTipDistance,
+      (tip) => tip !== undefined && landmarkDistance(wrist, tip) > this.settings.openPalmMinTipDistance,
     );
   }
 
   private isPinching(landmarks: Landmark[]): boolean {
-    const thumb = landmarks[THUMB_TIP];
-    const index = landmarks[INDEX_FINGER_TIP];
-    return Boolean(thumb && index) && distanceBetween(thumb, index) <= this.settings.pinchDistance;
+    const distance = thumbIndexDistance(landmarks);
+    return distance !== null && distance <= this.settings.pinchDistance;
   }
 
   private output(cursor: Landmark | null, click: boolean, dragStart: boolean, dragEnd: boolean): GestureOutput {

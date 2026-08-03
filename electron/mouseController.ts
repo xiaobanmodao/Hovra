@@ -2,6 +2,7 @@ export type PermissionStatus = "granted" | "denied";
 
 export interface SystemMouseAdapter {
   move(x: number, y: number): Promise<void>;
+  drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
   press(): Promise<void>;
   release(): Promise<void>;
@@ -17,6 +18,7 @@ export interface MouseController {
   permissionStatus(): Promise<PermissionStatus>;
   activate(): Promise<boolean>;
   move(x: number, y: number): Promise<void>;
+  drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
@@ -54,7 +56,7 @@ export function createMouseController(
   let isSessionActive = false;
   let activationGeneration = 0;
   let isButtonDown = false;
-  let buttonQueue = Promise.resolve();
+  let pressedActionQueue = Promise.resolve();
 
   async function permissionStatus(): Promise<PermissionStatus> {
     return (await deps.permission()) ? "granted" : "denied";
@@ -77,9 +79,9 @@ export function createMouseController(
     isButtonDown = false;
   }
 
-  function queueButtonOperation(operation: () => Promise<void>): Promise<void> {
-    const result = buttonQueue.then(operation, operation);
-    buttonQueue = result.catch(() => undefined);
+  function queuePressedAction(operation: () => Promise<void>): Promise<void> {
+    const result = pressedActionQueue.then(operation, operation);
+    pressedActionQueue = result.catch(() => undefined);
     return result;
   }
 
@@ -109,6 +111,21 @@ export function createMouseController(
       await deps.mouse.move(x, y);
     },
 
+    drag(x: number, y: number): Promise<void> {
+      return queuePressedAction(async () => {
+        if (
+          !isButtonDown
+          || !Number.isFinite(x)
+          || !Number.isFinite(y)
+          || !(await canAct())
+        ) {
+          return;
+        }
+
+        await deps.mouse.drag(x, y);
+      });
+    },
+
     async click(): Promise<void> {
       if (!(await canAct())) {
         return;
@@ -118,7 +135,7 @@ export function createMouseController(
     },
 
     mouseDown(): Promise<void> {
-      return queueButtonOperation(async () => {
+      return queuePressedAction(async () => {
         if (isButtonDown || !(await canAct())) {
           return;
         }
@@ -129,7 +146,7 @@ export function createMouseController(
     },
 
     mouseUp(): Promise<void> {
-      return queueButtonOperation(async () => {
+      return queuePressedAction(async () => {
         await releasePressedButton();
       });
     },
@@ -137,7 +154,7 @@ export function createMouseController(
     releaseAndPause(): Promise<void> {
       isSessionActive = false;
       activationGeneration += 1;
-      return queueButtonOperation(releasePressedButton);
+      return queuePressedAction(releasePressedButton);
     },
   };
 }
@@ -168,6 +185,17 @@ export function registerMouseControllerIpc(
 
     const bounds = security.getPrimaryDisplayBounds();
     await controller.move(
+      bounds.x + payload.x * Math.max(0, bounds.width - 1),
+      bounds.y + payload.y * Math.max(0, bounds.height - 1),
+    );
+  });
+  ipcMain.handle("gesture:drag", async (event, payload) => {
+    if (!security.isTrustedEvent(event) || !isNormalizedMovePayload(payload)) {
+      return;
+    }
+
+    const bounds = security.getPrimaryDisplayBounds();
+    await controller.drag(
       bounds.x + payload.x * Math.max(0, bounds.width - 1),
       bounds.y + payload.y * Math.max(0, bounds.height - 1),
     );

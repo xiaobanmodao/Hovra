@@ -22,6 +22,7 @@ const mainMocks = vi.hoisted(() => ({
   isTrustedAccessibilityClient: vi.fn().mockReturnValue(true),
   mouse: {
     move: vi.fn().mockResolvedValue(undefined),
+    drag: vi.fn().mockResolvedValue(undefined),
     click: vi.fn().mockResolvedValue(undefined),
     press: vi.fn().mockResolvedValue(undefined),
     release: vi.fn().mockResolvedValue(undefined),

@@ -79,6 +79,26 @@ it("clicks when a short pinch using non-default settings is released", () => {
   expect(release.dragEnd).toBe(false);
 });
 
+it("uses the shared three-dimensional pinch metric for thresholding", () => {
+  const hand = handWithTips(
+    { x: 0, y: 0, z: 0 },
+    { x: 0.04, y: 0, z: 0.04 },
+    { x: 0.05, y: 0 },
+  );
+
+  const strictEngine = new GestureEngine({
+    ...DEFAULT_GESTURE_SETTINGS,
+    pinchDistance: 0.055,
+  });
+  const permissiveEngine = new GestureEngine({
+    ...DEFAULT_GESTURE_SETTINGS,
+    pinchDistance: 0.06,
+  });
+
+  expect(strictEngine.update(hand, 0).state).toBe("tracking");
+  expect(permissiveEngine.update(hand, 0).state).toBe("pinching");
+});
+
 it("transitions between paused, tracking, pinching, clicking, dragging, and lost", () => {
   const engine = new GestureEngine();
 

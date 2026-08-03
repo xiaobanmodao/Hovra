@@ -4,6 +4,7 @@ const channels = {
   getPermissionStatus: "gesture:get-permission-status",
   activate: "gesture:activate",
   move: "gesture:move",
+  drag: "gesture:drag",
   click: "gesture:click",
   mouseDown: "gesture:mouse-down",
   mouseUp: "gesture:mouse-up",
@@ -18,22 +19,10 @@ const gestureDesktop = {
   getPermissionStatus: (): Promise<PermissionStatus> =>
     ipcRenderer.invoke(channels.getPermissionStatus),
   activate: (): Promise<boolean> => ipcRenderer.invoke(channels.activate),
-  move: (x: number, y: number): Promise<void> => {
-    if (
-      !Number.isFinite(x)
-      || x < 0
-      || x > 1
-      || !Number.isFinite(y)
-      || y < 0
-      || y > 1
-    ) {
-      return Promise.reject(
-        new TypeError("Mouse movement requires normalized coordinates from 0 to 1"),
-      );
-    }
-
-    return ipcRenderer.invoke(channels.move, { x, y });
-  },
+  move: (x: number, y: number): Promise<void> =>
+    invokeNormalizedMovement(channels.move, x, y),
+  drag: (x: number, y: number): Promise<void> =>
+    invokeNormalizedMovement(channels.drag, x, y),
   click: (): Promise<void> => ipcRenderer.invoke(channels.click),
   mouseDown: (): Promise<void> => ipcRenderer.invoke(channels.mouseDown),
   mouseUp: (): Promise<void> => ipcRenderer.invoke(channels.mouseUp),
@@ -50,5 +39,26 @@ const gestureDesktop = {
     };
   },
 };
+
+function invokeNormalizedMovement(
+  channel: typeof channels.move | typeof channels.drag,
+  x: number,
+  y: number,
+): Promise<void> {
+  if (
+    !Number.isFinite(x)
+    || x < 0
+    || x > 1
+    || !Number.isFinite(y)
+    || y < 0
+    || y > 1
+  ) {
+    return Promise.reject(
+      new TypeError("Mouse movement requires normalized coordinates from 0 to 1"),
+    );
+  }
+
+  return ipcRenderer.invoke(channel, { x, y });
+}
 
 contextBridge.exposeInMainWorld("gestureDesktop", gestureDesktop);
