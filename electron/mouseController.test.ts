@@ -235,6 +235,7 @@ describe("main-process mouse IPC", () => {
   };
   const authorization = {
     isTrustedEvent: (event: unknown) => event === trustedEvent,
+    canActivate: (event: unknown) => event === trustedEvent,
     getPrimaryDisplayBounds: () => ({ x: -1512, y: 42, width: 1512, height: 982 }),
   };
 
@@ -303,6 +304,25 @@ describe("main-process mouse IPC", () => {
     expect(controller.mouseDown).toHaveBeenCalledOnce();
     expect(controller.mouseUp).toHaveBeenCalledOnce();
     expect(controller.releaseAndPause).toHaveBeenCalledOnce();
+  });
+
+  it("rejects activation from a trusted frame while its renderer-ready gate is closed", async () => {
+    const handlers = new Map<
+      string,
+      (event: unknown, payload?: unknown) => Promise<unknown>
+    >();
+    const controller = createControllerDouble();
+    registerMouseControllerIpc(
+      { handle: (channel, handler) => handlers.set(channel, handler) },
+      controller,
+      {
+        ...authorization,
+        canActivate: () => false,
+      },
+    );
+
+    await expect(handlers.get("gesture:activate")?.(trustedEvent)).resolves.toBe(false);
+    expect(controller.activate).not.toHaveBeenCalled();
   });
 
   it("keeps mapped points inside the inclusive primary-display edges", async () => {

@@ -138,7 +138,7 @@ preload, system-control UI, and App safety/activation behavior.
 
 Fresh final-tree verification:
 
-- `npm test` — 13 files, 85/85 tests passed.
+- `npm test` — 13 files, 86/86 tests passed.
 - `npm run build` — renderer TypeScript and Vite production build passed.
 - `npm run electron:typecheck` — Electron main/preload/tests/config passed.
 - `npm run electron:make` — Forge built main, preload, renderer, rebuilt the one
@@ -196,3 +196,53 @@ Fresh final-fix verification passed: `npm test` (13 files, 85/85 tests),
 `npm run electron:typecheck`, `npm run build`, and `npm run electron:make` for
 darwin/arm64. Artifact generation remained successful and the packaged app was
 not launched.
+
+## Final reload fix round 2: activation during navigation
+
+### Root cause
+
+The navigation-start release invalidated the current session, but the trusted
+departing frame could still invoke `gesture:activate` after
+`did-start-navigation` and before document commit. Because the trusted sender and
+URL remained the same across reload, that late activation could survive into the
+replacement document.
+
+### Fix
+
+- Main now keeps activation eligibility separate from general trusted IPC access.
+  Permission queries and unconditional safety release retain their narrow trusted
+  access, while `gesture:activate` additionally requires the current verified
+  activation frame.
+- Main-frame navigation increments a renderer generation, clears the activation
+  frame synchronously, and initiates the first idempotent release. The departing
+  frame therefore cannot reactivate during navigation.
+- At top-level `dom-ready`, main captures the replacement
+  `webContents.mainFrame`, performs a second idempotent release, and opens the
+  activation gate only after that release settles and only if the window, frame,
+  and renderer generation are still current.
+- The activation gate is bound to the replacement `WebFrameMain` identity, so an
+  event from the departing frame remains ineligible even though both frames have
+  the same `webContents` and URL.
+- Same-document main-frame navigation reopens the gate for the unchanged frame
+  only after its release settles. Subframe navigation does not change generation,
+  activation eligibility, or mouse state.
+- Renderer crash and destruction increment the generation and clear activation
+  eligibility before release, preventing an older readiness continuation from
+  reopening the gate.
+
+### Regression evidence
+
+- A controller IPC regression first failed because a trusted event still reached
+  `controller.activate()` while its readiness gate was closed.
+- The main integration regression now uses distinct departing and replacement
+  `WebFrameMain` objects. It proves the departing frame can activate before
+  navigation, cannot activate after navigation starts, and remains ineligible
+  after replacement readiness. It also proves replacement actions remain inert
+  until that replacement frame performs a fresh explicit activation.
+- The same test proves subframe navigation neither releases the tracked press nor
+  closes activation eligibility.
+
+Fresh round-2 verification passed: `npm test` (13 files, 86/86 tests),
+`npm run electron:typecheck`, `npm run build`, and `npm run electron:make` for
+darwin/arm64. `git diff --check` passed before commit. The app was not launched,
+no Accessibility choice was made, and no real mouse operation was called.

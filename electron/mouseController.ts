@@ -39,6 +39,7 @@ export interface ScreenBounds {
 
 export interface MouseControllerIpcSecurity {
   isTrustedEvent(event: unknown): boolean;
+  canActivate(event: unknown): boolean;
   getPrimaryDisplayBounds(): ScreenBounds;
 }
 
@@ -154,7 +155,7 @@ export function registerMouseControllerIpc(
     return controller.permissionStatus();
   });
   ipcMain.handle("gesture:activate", (event) => {
-    if (!security.isTrustedEvent(event)) {
+    if (!security.isTrustedEvent(event) || !security.canActivate(event)) {
       return Promise.resolve(false);
     }
 

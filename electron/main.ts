@@ -5,6 +5,7 @@ import {
   screen,
   shell,
   systemPreferences,
+  type WebFrameMain,
 } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -27,11 +28,13 @@ app.enableSandbox();
 
 let isAppActive = false;
 let mainWindow: BrowserWindow | undefined;
+let activationFrame: WebFrameMain | undefined;
 let mouseController: MouseController | undefined;
 let quitCleanupStarted = false;
 let quitCleanupComplete = false;
 
 function createMainWindow(): BrowserWindow {
+  let rendererGeneration = 0;
   const createdWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -45,6 +48,7 @@ function createMainWindow(): BrowserWindow {
   });
 
   mainWindow = createdWindow;
+  activationFrame = undefined;
 
   createdWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   createdWindow.webContents.on("will-navigate", (event) => {
@@ -54,15 +58,51 @@ function createMainWindow(): BrowserWindow {
     "did-start-navigation",
     (details) => {
       if (details.isMainFrame) {
-        releaseForRendererLifecycle("main-frame navigation");
+        rendererGeneration += 1;
+        activationFrame = undefined;
+        const generation = rendererGeneration;
+        const frame = createdWindow.webContents.mainFrame;
+        const release = releaseForRendererLifecycle("main-frame navigation");
+
+        if (details.isSameDocument) {
+          void release.then(() => {
+            if (
+              generation === rendererGeneration
+              && mainWindow === createdWindow
+              && !createdWindow.isDestroyed()
+              && createdWindow.webContents.mainFrame === frame
+            ) {
+              activationFrame = frame;
+            }
+          });
+        }
       }
     },
   );
+  createdWindow.webContents.on("dom-ready", () => {
+    const generation = rendererGeneration;
+    const frame = createdWindow.webContents.mainFrame;
+    activationFrame = undefined;
+    void releaseForRendererLifecycle("renderer readiness").then(() => {
+      if (
+        generation === rendererGeneration
+        && mainWindow === createdWindow
+        && !createdWindow.isDestroyed()
+        && createdWindow.webContents.mainFrame === frame
+      ) {
+        activationFrame = frame;
+      }
+    });
+  });
   createdWindow.webContents.on("render-process-gone", () => {
-    releaseForRendererLifecycle("renderer process exit");
+    rendererGeneration += 1;
+    activationFrame = undefined;
+    void releaseForRendererLifecycle("renderer process exit");
   });
   createdWindow.webContents.on("destroyed", () => {
-    releaseForRendererLifecycle("renderer destruction");
+    rendererGeneration += 1;
+    activationFrame = undefined;
+    void releaseForRendererLifecycle("renderer destruction");
     if (mainWindow === createdWindow) {
       mainWindow = undefined;
       isAppActive = false;
@@ -105,12 +145,12 @@ function createMainWindow(): BrowserWindow {
   return createdWindow;
 }
 
-function releaseForRendererLifecycle(reason: string): void {
+function releaseForRendererLifecycle(reason: string): Promise<void> {
   if (!mouseController) {
-    return;
+    return Promise.resolve();
   }
 
-  void mouseController.releaseAndPause().catch((error: unknown) => {
+  return mouseController.releaseAndPause().catch((error: unknown) => {
     console.error(`Failed to release the mouse after ${reason}`, error);
   });
 }
@@ -153,6 +193,14 @@ function isTrustedRendererEvent(event: unknown): boolean {
   }
 }
 
+function canActivateRendererEvent(event: unknown): boolean {
+  if (!activationFrame || typeof event !== "object" || event === null) {
+    return false;
+  }
+
+  return (event as { senderFrame?: unknown }).senderFrame === activationFrame;
+}
+
 void app.whenReady().then(() => {
   mouseController = createMouseController({
     permission: () =>
@@ -164,6 +212,7 @@ void app.whenReady().then(() => {
   createMainWindow();
   registerMouseControllerIpc(ipcMain, mouseController, {
     isTrustedEvent: isTrustedRendererEvent,
+    canActivate: canActivateRendererEvent,
     getPrimaryDisplayBounds: () => ({ ...screen.getPrimaryDisplay().bounds }),
   });
   ipcMain.handle("gesture:open-accessibility-settings", async (event) => {

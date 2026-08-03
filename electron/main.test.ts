@@ -9,6 +9,7 @@ interface CapturedControllerDependencies {
 
 interface CapturedIpcSecurity {
   isTrustedEvent(event: unknown): boolean;
+  canActivate(event: unknown): boolean;
   getPrimaryDisplayBounds(): { x: number; y: number; width: number; height: number };
 }
 
@@ -29,6 +30,7 @@ const mainMocks = vi.hoisted(() => ({
     options: Record<string, unknown>;
     windowHandlers: Map<string, () => void>;
     webContents: {
+      mainFrame: { url: string; top?: unknown };
       on: ReturnType<typeof vi.fn>;
       send: ReturnType<typeof vi.fn>;
       setWindowOpenHandler: ReturnType<typeof vi.fn>;
@@ -47,6 +49,10 @@ vi.mock("electron", () => {
     options: Record<string, unknown>;
     windowHandlers = new Map<string, () => void>();
     webContents = {
+      mainFrame: { url: "http://localhost:5173/index.html" } as {
+        url: string;
+        top?: unknown;
+      },
       on: vi.fn(),
       send: vi.fn(),
       setWindowOpenHandler: vi.fn(),
@@ -58,6 +64,7 @@ vi.mock("electron", () => {
 
     constructor(options: Record<string, unknown>) {
       this.options = options;
+      this.webContents.mainFrame.top = this.webContents.mainFrame;
       mainMocks.windows.push(this);
     }
 
@@ -188,14 +195,25 @@ describe("main BrowserWindow security", () => {
   it("releases and invalidates control on main-frame reload until fresh activation", async () => {
     const window = await bootMain("http://localhost:5173");
     window.windowHandlers.get("focus")?.();
-    const topFrame: { url: string; top?: unknown } = {
+    const departingFrame: { url: string; top?: unknown } = {
       url: "http://localhost:5173/index.html",
     };
-    topFrame.top = topFrame;
-    const trustedEvent = { sender: window.webContents, senderFrame: topFrame };
+    departingFrame.top = departingFrame;
+    window.webContents.mainFrame = departingFrame;
+    const domReady = window.webContents.on.mock.calls.find(
+      ([event]) => event === "dom-ready",
+    )?.[1] as () => void;
+    domReady();
+    const departingEvent = {
+      sender: window.webContents,
+      senderFrame: departingFrame,
+    };
+    await vi.waitFor(() => {
+      expect(mainMocks.ipcSecurity?.canActivate(departingEvent)).toBe(true);
+    });
 
-    await mainMocks.ipcHandlers.get("gesture:activate")?.(trustedEvent);
-    await mainMocks.ipcHandlers.get("gesture:mouse-down")?.(trustedEvent);
+    await mainMocks.ipcHandlers.get("gesture:activate")?.(departingEvent);
+    await mainMocks.ipcHandlers.get("gesture:mouse-down")?.(departingEvent);
     expect(mainMocks.mouse.press).toHaveBeenCalledOnce();
 
     const didStartNavigation = window.webContents.on.mock.calls.find(
@@ -204,16 +222,38 @@ describe("main BrowserWindow security", () => {
     didStartNavigation({ isMainFrame: false });
     await Promise.resolve();
     expect(mainMocks.mouse.release).not.toHaveBeenCalled();
+    expect(mainMocks.ipcSecurity?.canActivate(departingEvent)).toBe(true);
 
     didStartNavigation({ isMainFrame: true });
+    expect(mainMocks.ipcSecurity?.canActivate(departingEvent)).toBe(false);
+    await expect(
+      mainMocks.ipcHandlers.get("gesture:activate")?.(departingEvent),
+    ).resolves.toBe(false);
     await vi.waitFor(() => expect(mainMocks.mouse.release).toHaveBeenCalledOnce());
 
-    await mainMocks.ipcHandlers.get("gesture:click")?.(trustedEvent);
+    await mainMocks.ipcHandlers.get("gesture:click")?.(departingEvent);
     expect(mainMocks.mouse.click).not.toHaveBeenCalled();
     expect(mainMocks.controllerDependencies?.isActive()).toBe(true);
 
-    await mainMocks.ipcHandlers.get("gesture:activate")?.(trustedEvent);
-    await mainMocks.ipcHandlers.get("gesture:click")?.(trustedEvent);
+    const replacementFrame: { url: string; top?: unknown } = {
+      url: "http://localhost:5173/index.html",
+    };
+    replacementFrame.top = replacementFrame;
+    window.webContents.mainFrame = replacementFrame;
+    const replacementEvent = {
+      sender: window.webContents,
+      senderFrame: replacementFrame,
+    };
+    domReady();
+    await vi.waitFor(() => {
+      expect(mainMocks.ipcSecurity?.canActivate(replacementEvent)).toBe(true);
+    });
+    expect(mainMocks.ipcSecurity?.canActivate(departingEvent)).toBe(false);
+
+    await mainMocks.ipcHandlers.get("gesture:click")?.(replacementEvent);
+    expect(mainMocks.mouse.click).not.toHaveBeenCalled();
+    await mainMocks.ipcHandlers.get("gesture:activate")?.(replacementEvent);
+    await mainMocks.ipcHandlers.get("gesture:click")?.(replacementEvent);
     expect(mainMocks.mouse.click).toHaveBeenCalledOnce();
   });
 
@@ -226,7 +266,15 @@ describe("main BrowserWindow security", () => {
         url: "http://localhost:5173/index.html",
       };
       topFrame.top = topFrame;
+      window.webContents.mainFrame = topFrame;
       const trustedEvent = { sender: window.webContents, senderFrame: topFrame };
+      const domReady = window.webContents.on.mock.calls.find(
+        ([event]) => event === "dom-ready",
+      )?.[1] as () => void;
+      domReady();
+      await vi.waitFor(() => {
+        expect(mainMocks.ipcSecurity?.canActivate(trustedEvent)).toBe(true);
+      });
       await mainMocks.ipcHandlers.get("gesture:activate")?.(trustedEvent);
       await mainMocks.ipcHandlers.get("gesture:mouse-down")?.(trustedEvent);
 
