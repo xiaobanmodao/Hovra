@@ -1,6 +1,7 @@
 import { DEFAULT_PINCH_BOUNDARIES, type PinchBoundaries } from "./config";
 
 export const PINCH_CALIBRATION_STORAGE_KEY = "gesture-control.pinch-calibration.v1";
+export const PINCH_CALIBRATION_REQUIRED_GAP = 0.06;
 
 export type PinchCalibrationSample = {
   imageRatio: number;
@@ -20,6 +21,37 @@ export type PinchCalibrationProfile = {
   boundaries: PinchBoundaries;
   baselineNoise: number;
 };
+
+export type PinchCalibrationChannel = "image" | "world" | "depth";
+
+export type PinchCalibrationGap = {
+  channel: PinchCalibrationChannel;
+  contact: number;
+  separate: number;
+  gap: number;
+  requiredGap: number;
+  pass: boolean;
+};
+
+export type PinchCalibrationAnalysis = {
+  boundaries: PinchBoundaries;
+  gaps: PinchCalibrationGap[];
+  passed: boolean;
+};
+
+export class PinchCalibrationSeparationError extends TypeError {
+  readonly analysis: PinchCalibrationAnalysis;
+
+  constructor(analysis: PinchCalibrationAnalysis) {
+    const failedChannels = analysis.gaps
+      .filter((gap) => !gap.pass)
+      .map((gap) => gap.channel)
+      .join(", ");
+    super(`Pinch calibration positive and negative samples overlap: ${failedChannels}`);
+    this.name = "PinchCalibrationSeparationError";
+    this.analysis = analysis;
+  }
+}
 
 export function fitPinchCalibration(samples: CalibrationSamples): PinchCalibrationProfile {
   if (samples.positives.length < 10) {
@@ -99,15 +131,38 @@ function validateSamples(samples: CalibrationSamples): void {
 }
 
 function validateBoundarySeparation(boundaries: PinchBoundaries): void {
-  for (const [contact, separate] of [
-    [boundaries.imageContact, boundaries.imageSeparate],
-    [boundaries.worldContact, boundaries.worldSeparate],
-    [boundaries.depthContact, boundaries.depthSeparate],
-  ]) {
-    if (!isFiniteNonNegative(contact) || !isFiniteNonNegative(separate) || separate - contact < 0.06) {
-      throw new TypeError("Pinch calibration positive and negative samples overlap");
-    }
+  const analysis = analyzePinchCalibrationBoundaries(boundaries);
+  if (!analysis.passed) {
+    throw new PinchCalibrationSeparationError(analysis);
   }
+}
+
+export function analyzePinchCalibrationBoundaries(
+  boundaries: PinchBoundaries,
+): PinchCalibrationAnalysis {
+  const pairs: Array<[PinchCalibrationChannel, number, number]> = [
+    ["image", boundaries.imageContact, boundaries.imageSeparate],
+    ["world", boundaries.worldContact, boundaries.worldSeparate],
+    ["depth", boundaries.depthContact, boundaries.depthSeparate],
+  ];
+  const gaps = pairs.map(([channel, contact, separate]): PinchCalibrationGap => {
+    const gap = separate - contact;
+    return {
+      channel,
+      contact,
+      separate,
+      gap,
+      requiredGap: PINCH_CALIBRATION_REQUIRED_GAP,
+      pass: isFiniteNonNegative(contact)
+        && isFiniteNonNegative(separate)
+        && gap >= PINCH_CALIBRATION_REQUIRED_GAP,
+    };
+  });
+  return {
+    boundaries: { ...boundaries },
+    gaps,
+    passed: gaps.every((gap) => gap.pass),
+  };
 }
 
 function quantile(values: number[], probability: number): number {

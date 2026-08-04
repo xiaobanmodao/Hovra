@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   PINCH_CALIBRATION_STORAGE_KEY,
+  PinchCalibrationSeparationError,
   fitPinchCalibration,
   parsePinchCalibration,
   type PinchCalibrationSample,
@@ -56,6 +57,40 @@ describe("pinch calibration", () => {
       negatives: Array(3).fill(negative),
       baselineNoise: [0.01],
     })).toThrow(TypeError);
+  });
+
+  it("reports every calibration channel whose separation is too small", () => {
+    const positives = Array(10).fill(sample(0.25, 0.48, 0.35));
+    const negatives = Array(3).fill(sample(0.48, 0.55, 0.4));
+
+    let error: unknown;
+    try {
+      fitPinchCalibration({ positives, negatives, baselineNoise: [0.01] });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(PinchCalibrationSeparationError);
+    const separationError = error as PinchCalibrationSeparationError;
+    expect(separationError.analysis.passed).toBe(false);
+    expect(separationError.analysis.gaps.filter((gap) => !gap.pass)).toEqual([
+      {
+        channel: "world",
+        contact: 0.5184,
+        separate: 0.55,
+        gap: 0.03160000000000007,
+        requiredGap: 0.06,
+        pass: false,
+      },
+      {
+        channel: "depth",
+        contact: 0.378,
+        separate: 0.4,
+        gap: 0.02200000000000002,
+        requiredGap: 0.06,
+        pass: false,
+      },
+    ]);
   });
 
   it("strictly parses a stored profile and ignores malformed local data", () => {

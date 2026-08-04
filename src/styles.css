@@ -466,6 +466,125 @@ h2 {
   cursor: not-allowed;
 }
 
+.pinch-calibration-wizard > .calibration-sample-step {
+  grid-template-columns: minmax(15rem, 24rem) minmax(18rem, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.calibration-sample-step .calibration-gesture-guide {
+  width: 100%;
+}
+
+.calibration-sample-console {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.calibration-readiness {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 107, 124, 0.44);
+  border-radius: 0.75rem;
+  background: rgba(63, 16, 27, 0.42);
+}
+
+.calibration-readiness[data-state="stabilizing"] {
+  border-color: rgba(255, 211, 122, 0.55);
+  background: rgba(74, 52, 13, 0.38);
+}
+
+.calibration-readiness[data-state="ready"] {
+  border-color: rgba(62, 224, 135, 0.6);
+  background: rgba(12, 70, 48, 0.4);
+  box-shadow: 0 0 1rem rgba(62, 224, 135, 0.12);
+}
+
+.calibration-readiness-copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.calibration-readiness-copy strong {
+  color: #ff91a0;
+  font-size: 0.86rem;
+}
+
+.calibration-readiness[data-state="stabilizing"] .calibration-readiness-copy strong {
+  color: #ffd37a;
+}
+
+.calibration-readiness[data-state="ready"] .calibration-readiness-copy strong {
+  color: #65efa4;
+}
+
+.calibration-readiness-copy p {
+  color: #b8ccdc;
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.calibration-readiness-checks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.calibration-readiness-checks li {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+  padding: 0.42rem;
+  border: 1px solid rgba(255, 107, 124, 0.28);
+  border-radius: 0.55rem;
+  background: rgba(6, 21, 38, 0.56);
+  color: #ff91a0;
+  font-size: 0.66rem;
+  text-align: center;
+}
+
+.calibration-readiness-checks li[data-passed="true"] {
+  border-color: rgba(62, 224, 135, 0.3);
+  color: #65efa4;
+}
+
+.calibration-readiness-checks li span {
+  overflow: hidden;
+  color: #9bb2c5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calibration-readiness-checks li small {
+  color: #7893aa;
+  font-size: 0.58rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.calibration-failure {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 107, 124, 0.5);
+  border-radius: 0.7rem;
+  background: rgba(63, 16, 27, 0.42);
+  color: #ffd5db;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.calibration-failure ul {
+  display: grid;
+  gap: 0.3rem;
+  padding-left: 1.2rem;
+  margin: 0;
+}
+
 .calibration-toggle {
   display: grid;
   width: 2.25rem;
@@ -871,6 +990,10 @@ h2 {
   }
 
   .calibration-content {
+    grid-template-columns: 1fr;
+  }
+
+  .pinch-calibration-wizard > .calibration-sample-step {
     grid-template-columns: 1fr;
   }
 
