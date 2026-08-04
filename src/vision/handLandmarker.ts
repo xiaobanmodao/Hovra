@@ -27,7 +27,10 @@ export const detectFirstHand = (
   onError: ErrorReporter = console.error,
 ): Landmark[] | null => {
   try {
-    return landmarker.detectForVideo(video, nowMs).landmarks[0] ?? null;
+    const landmarks = landmarker.detectForVideo(video, nowMs).landmarks[0];
+    return landmarks?.map(({ x, y, z }) => (
+      z === undefined ? { x, y } : { x, y, z }
+    )) ?? null;
   } catch (error) {
     onError(error);
     return null;

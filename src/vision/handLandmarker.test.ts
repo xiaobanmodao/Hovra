@@ -40,8 +40,24 @@ it("returns landmarks for only the first detected hand", () => {
   };
 
   expect(detectFirstHand(landmarker, document.createElement("video"), 123))
-    .toBe(firstHand);
+    .toEqual(firstHand);
   expect(landmarker.detectForVideo).toHaveBeenCalledWith(expect.any(HTMLVideoElement), 123);
+});
+
+it("normalizes MediaPipe-only landmark fields before handing them to the gesture engine", () => {
+  const firstHand = Array.from({ length: 21 }, (_, index) => ({
+    x: index / 100,
+    y: index / 200,
+    z: -index / 300,
+    visibility: 0.95,
+  }));
+  const landmarker = {
+    detectForVideo: vi.fn().mockReturnValue({ landmarks: [firstHand] }),
+  };
+
+  expect(detectFirstHand(landmarker, document.createElement("video"), 123)).toEqual(
+    firstHand.map(({ x, y, z }) => ({ x, y, z })),
+  );
 });
 
 it("reports a detection failure once and returns null", () => {
