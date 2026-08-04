@@ -81,12 +81,45 @@ const desktopApi = (): GestureDesktopApi => ({
   move: vi.fn().mockResolvedValue(undefined),
   drag: vi.fn().mockResolvedValue(undefined),
   click: vi.fn().mockResolvedValue(undefined),
+  rightClick: vi.fn().mockResolvedValue(undefined),
+  doubleClick: vi.fn().mockResolvedValue(undefined),
+  scroll: vi.fn().mockResolvedValue(undefined),
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),
   releaseAndPause: vi.fn().mockResolvedValue(undefined),
   openAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
   onSafetyPause: vi.fn(() => vi.fn()),
 });
+
+const extendedPinchHandAt = (
+  kind: "left" | "right" | "double",
+  x: number,
+  y: number,
+): Landmark[] => {
+  const hand: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+  hand[0] = { x: 0.5, y: 0.8 };
+  hand[4] = { x: x - 0.03, y };
+  hand[8] = kind === "left" ? { x, y } : { x: x + 0.2, y };
+  hand[12] = kind === "right" ? { x, y } : { x: x + 0.25, y: y + 0.02 };
+  hand[16] = kind === "double" ? { x, y } : { x: x + 0.3, y: y + 0.05 };
+  hand[20] = { x: 0.5, y: 0.75 };
+  return hand;
+};
+
+const scrollingHandAt = (verticalOffset = 0): Landmark[] => {
+  const hand: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
+  hand[0] = { x: 0.5, y: 0.8 + verticalOffset };
+  hand[4] = { x: 0.3, y: 0.6 + verticalOffset };
+  hand[6] = { x: 0.45, y: 0.58 + verticalOffset };
+  hand[8] = { x: 0.45, y: 0.32 + verticalOffset };
+  hand[10] = { x: 0.55, y: 0.58 + verticalOffset };
+  hand[12] = { x: 0.55, y: 0.32 + verticalOffset };
+  hand[14] = { x: 0.6, y: 0.58 + verticalOffset };
+  hand[16] = { x: 0.6, y: 0.68 + verticalOffset };
+  hand[18] = { x: 0.68, y: 0.6 + verticalOffset };
+  hand[20] = { x: 0.68, y: 0.7 + verticalOffset };
+  return hand;
+};
 
 const trackingHandAt = (x: number, y: number): Landmark[] => {
   const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
@@ -437,7 +470,7 @@ it("dispatches hover movement, short clicks, and drag-aware movement while enabl
 
   runFrame(50, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.move).toHaveBeenCalled());
-  expect(bridge.move).toHaveBeenLastCalledWith(0.59, 0.41000000000000003);
+  expect(bridge.move).toHaveBeenLastCalledWith(0.59, 0.41000000000000003, "tracking");
 
   runFrame(100, pinchedHandAt(0.45, 0.45));
   runFrame(200, trackingHandAt(0.45, 0.45));
@@ -461,6 +494,57 @@ it("dispatches hover movement, short clicks, and drag-aware movement while enabl
   expect(vi.mocked(bridge.drag).mock.invocationCallOrder.at(-1)).toBeLessThan(
     vi.mocked(bridge.mouseUp).mock.invocationCallOrder[0],
   );
+});
+
+it("shows left-pinch feedback on the first frame without waiting for drag hold", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+
+  runFrame(100, extendedPinchHandAt("left", 0.45, 0.45));
+
+  await waitFor(() => expect(bridge.move).toHaveBeenCalledWith(
+    expect.any(Number),
+    expect.any(Number),
+    "left-pinching",
+  ));
+  expect(document.querySelector(".virtual-cursor")).toHaveClass("is-left-pinching");
+  expect(bridge.mouseDown).not.toHaveBeenCalled();
+});
+
+it("dispatches right click and double click without disabling explicit control", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+
+  runFrame(100, extendedPinchHandAt("right", 0.45, 0.45));
+  runFrame(150, trackingHandAt(0.45, 0.45));
+  runFrame(200, extendedPinchHandAt("double", 0.45, 0.45));
+  runFrame(250, trackingHandAt(0.45, 0.45));
+
+  await waitFor(() => expect(bridge.rightClick).toHaveBeenCalledOnce());
+  await waitFor(() => expect(bridge.doubleClick).toHaveBeenCalledOnce());
+  expect(bridge.click).not.toHaveBeenCalled();
+  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
+  expect(screen.getByText("Enabled")).toBeInTheDocument();
+});
+
+it("keeps the system pointer fixed while two-finger movement scrolls", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+
+  runFrame(100, trackingHandAt(0.45, 0.45));
+  await waitFor(() => expect(bridge.move).toHaveBeenCalled());
+  const firstPointer = vi.mocked(bridge.move).mock.calls.at(-1)?.slice(0, 2);
+
+  runFrame(116, scrollingHandAt());
+  await waitFor(() => expect(bridge.move).toHaveBeenLastCalledWith(
+    firstPointer?.[0],
+    firstPointer?.[1],
+    "scrolling",
+  ));
+  runFrame(132, scrollingHandAt(-0.04));
+
+  await waitFor(() => expect(bridge.scroll).toHaveBeenCalledWith(4));
+  const scrollingMoves = vi.mocked(bridge.move).mock.calls.filter(
+    ([, , state]) => state === "scrolling",
+  );
+  expect(scrollingMoves.every(([x, y]) => x === firstPointer?.[0] && y === firstPointer?.[1])).toBe(true);
 });
 
 it.each(["lost", "stale-frame"] as const)(

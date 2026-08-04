@@ -7,6 +7,9 @@ const idle: GestureOutput = {
   state: "tracking",
   cursor: null,
   click: false,
+  rightClick: false,
+  doubleClick: false,
+  scrollY: 0,
   dragStart: false,
   dragEnd: false,
 };
@@ -82,7 +85,7 @@ describe("Playground", () => {
     const { rerender } = render(
       <Playground
         cursor={{ x: 180, y: 240 }}
-        output={{ ...idle, state: "pinching", dragStart: true }}
+        output={{ ...idle, state: "left-pinching", dragStart: true }}
       />,
     );
 
@@ -120,7 +123,7 @@ describe("Playground", () => {
     const { rerender, unmount } = render(
       <Playground
         cursor={{ x: 180, y: 240 }}
-        output={{ ...idle, state: "pinching", dragStart: true }}
+        output={{ ...idle, state: "left-pinching", dragStart: true }}
       />,
     );
 
@@ -151,5 +154,19 @@ describe("Playground", () => {
 
     unmount();
     expect(removeEventListener).toHaveBeenCalledWith("resize", resizeListener);
+  });
+
+  it("reports right-click, double-click, and accumulated scroll diagnostics", () => {
+    const { rerender } = render(<Playground cursor={null} output={idle} />);
+
+    rerender(<Playground cursor={null} output={{ ...idle, rightClick: true }} />);
+    rerender(<Playground cursor={null} output={{ ...idle, rightClick: false }} />);
+    rerender(<Playground cursor={null} output={{ ...idle, doubleClick: true }} />);
+    rerender(<Playground cursor={null} output={{ ...idle, doubleClick: false, scrollY: 4 }} />);
+
+    expect(screen.getByText("Right clicks: 1")).toBeInTheDocument();
+    expect(screen.getByText("Double clicks: 1")).toBeInTheDocument();
+    expect(screen.getByText("Scroll: 4")).toBeInTheDocument();
+    expect(screen.getByText(/thumb \+ middle/i)).toBeInTheDocument();
   });
 });

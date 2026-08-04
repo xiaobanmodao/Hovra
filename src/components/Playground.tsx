@@ -40,6 +40,9 @@ const containsPoint = (bounds: DOMRect, point: Point): boolean => (
 
 export function Playground({ cursor, output }: PlaygroundProps) {
   const [clickCount, setClickCount] = useState(0);
+  const [rightClickCount, setRightClickCount] = useState(0);
+  const [doubleClickCount, setDoubleClickCount] = useState(0);
+  const [scrollTotal, setScrollTotal] = useState(0);
   const [clickTargetPosition, setClickTargetPosition] = useState<Position>(getInitialTargetPosition);
   const [cardPosition, setCardPosition] = useState<Position>(getInitialCardPosition);
   const clickTargetRef = useRef<HTMLDivElement>(null);
@@ -55,6 +58,24 @@ export function Playground({ cursor, output }: PlaygroundProps) {
       setClickCount((count) => count + 1);
     }
   }, [output.click]);
+
+  useEffect(() => {
+    if (output.rightClick) {
+      setRightClickCount((count) => count + 1);
+    }
+  }, [output.rightClick]);
+
+  useEffect(() => {
+    if (output.doubleClick) {
+      setDoubleClickCount((count) => count + 1);
+    }
+  }, [output.doubleClick]);
+
+  useEffect(() => {
+    if (output.scrollY !== 0) {
+      setScrollTotal((total) => total + output.scrollY);
+    }
+  }, [output.scrollY]);
 
   useEffect(() => {
     if (!output.dragStart || !cursor || !cardRef.current) {
@@ -145,9 +166,11 @@ export function Playground({ cursor, output }: PlaygroundProps) {
       <div className="section-heading">
         <div>
           <p className="eyebrow">Interaction playground</p>
-          <h2 id="playground-title">Try click and drag</h2>
+          <h2 id="playground-title">Try every gesture</h2>
         </div>
-        <p className="gesture-hint">Short pinch to click. Hold the pinch to drag.</p>
+        <p className="gesture-hint">
+          Thumb + index: click/drag · Thumb + middle: right-click · Thumb + ring: double-click · Two fingers: scroll
+        </p>
       </div>
 
       <div className="interaction-layer">
@@ -169,6 +192,12 @@ export function Playground({ cursor, output }: PlaygroundProps) {
           <span aria-hidden="true">&#x2726;</span>
           <strong>Drag me</strong>
           <small>Pinch and hold</small>
+        </div>
+
+        <div className="gesture-diagnostics" aria-live="polite">
+          <strong>Right clicks: {rightClickCount}</strong>
+          <strong>Double clicks: {doubleClickCount}</strong>
+          <strong>Scroll: {scrollTotal}</strong>
         </div>
       </div>
     </section>

@@ -569,6 +569,21 @@ h2 {
   color: rgba(255, 255, 255, 0.72);
 }
 
+.gesture-diagnostics {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(99, 215, 238, 0.26);
+  border-radius: 0.8rem;
+  color: #dcecff;
+  background: rgba(7, 16, 31, 0.84);
+  box-shadow: 0 0.6rem 1.8rem rgba(3, 8, 20, 0.3);
+  font-size: 0.75rem;
+}
+
 .virtual-cursor {
   position: fixed;
   z-index: 100;
@@ -580,14 +595,37 @@ h2 {
   box-shadow: 0 0 0 3px #63d7ee, 0 0 1.4rem rgba(99, 215, 238, 0.75);
   pointer-events: none;
   transform: translate(-50%, -50%);
-  transition: width 100ms ease, height 100ms ease, background 100ms ease;
+  transition: transform 45ms linear, border-color 45ms linear, background 45ms linear, box-shadow 45ms linear;
 }
 
-.virtual-cursor.is-pinching,
+.virtual-cursor.is-left-pinching {
+  border-color: #20df71;
+  background: #66ff9a;
+  transform: translate(-50%, -50%) scale(0.72);
+}
+
+.virtual-cursor.is-right-pinching {
+  border-color: #8e57ff;
+  background: #b88cff;
+  transform: translate(-50%, -50%) scale(0.78);
+}
+
+.virtual-cursor.is-double-pinching {
+  border-color: #ff39c5;
+  background: #ff70dc;
+  box-shadow: 0 0 0 5px rgba(255, 112, 220, 0.32), 0 0 1.4rem #ff39c5;
+  transform: translate(-50%, -50%) scale(0.68);
+}
+
 .virtual-cursor.is-dragging {
-  width: 1.45rem;
-  height: 1.45rem;
-  background: #7c5cff;
+  border-color: #ff9900;
+  background: #ffcc66;
+}
+
+.virtual-cursor.is-scrolling {
+  border-color: #2687ff;
+  background: #5aa7ff;
+  box-shadow: 0 0 0 5px rgba(90, 167, 255, 0.28), 0 0 1.4rem #2687ff;
 }
 
 .virtual-cursor.is-paused,

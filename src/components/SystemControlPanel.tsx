@@ -85,7 +85,7 @@ export function SystemControlPanel({
           <p>System control is paused until you explicitly enable it.</p>
         )}
         {permission === "granted" && enabled && (
-          <p>Gestures can move, click and drag the system pointer.</p>
+          <p>Gestures can move, click, drag, right-click, double-click and scroll.</p>
         )}
       </div>
 

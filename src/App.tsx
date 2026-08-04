@@ -20,6 +20,9 @@ const INITIAL_OUTPUT: GestureOutput = {
   state: "lost",
   cursor: null,
   click: false,
+  rightClick: false,
+  doubleClick: false,
+  scrollY: 0,
   dragStart: false,
   dragEnd: false,
 };
@@ -188,6 +191,12 @@ function App() {
       if (output.click) {
         void desktopBridge.click().catch(() => pauseSystemControl());
       }
+      if (output.rightClick) {
+        void desktopBridge.rightClick().catch(() => pauseSystemControl());
+      }
+      if (output.doubleClick) {
+        void desktopBridge.doubleClick().catch(() => pauseSystemControl());
+      }
       if (output.dragEnd) {
         void desktopBridge.mouseUp().catch(() => pauseSystemControl());
       }
@@ -200,11 +209,20 @@ function App() {
     if (systemCursor) {
       const movement = output.state === "dragging" || output.dragEnd
         ? desktopBridge.drag(systemCursor.x, systemCursor.y)
-        : desktopBridge.move(systemCursor.x, systemCursor.y);
+        : desktopBridge.move(systemCursor.x, systemCursor.y, output.state);
       void movement.catch(() => pauseSystemControl());
     }
     if (output.click) {
       void desktopBridge.click().catch(() => pauseSystemControl());
+    }
+    if (output.rightClick) {
+      void desktopBridge.rightClick().catch(() => pauseSystemControl());
+    }
+    if (output.doubleClick) {
+      void desktopBridge.doubleClick().catch(() => pauseSystemControl());
+    }
+    if (output.scrollY !== 0) {
+      void desktopBridge.scroll(output.scrollY).catch(() => pauseSystemControl());
     }
     if (output.dragEnd) {
       void desktopBridge.mouseUp().catch(() => pauseSystemControl());
@@ -283,7 +301,12 @@ function App() {
             setTrackerStatus(nextLandmarks ? "Hand detected" : "No hand detected");
           }
 
-          if (nextOutput.cursor && nextOutput.state !== "paused" && nextOutput.state !== "lost") {
+          if (
+            nextOutput.cursor
+            && nextOutput.state !== "paused"
+            && nextOutput.state !== "lost"
+            && nextOutput.state !== "scrolling"
+          ) {
             const mapped = mapMirroredPoint(nextOutput.cursor, {
               width: 1,
               height: 1,
@@ -335,7 +358,7 @@ function App() {
           <p className="eyebrow">Browser-only interaction</p>
           <h1>Hand Gesture Control</h1>
         </div>
-        <p>Move, click and drag with one hand. Recognition stays in this browser.</p>
+        <p>Move, click, drag, right-click, double-click and scroll with one hand.</p>
       </header>
 
       <StatusPanel
