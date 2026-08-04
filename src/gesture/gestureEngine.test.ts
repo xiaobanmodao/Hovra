@@ -182,6 +182,54 @@ describe("GestureEngine V2", () => {
     }
   });
 
+  it("keeps physical-onset confirmation p95 at or below 120 ms after neutral movement", () => {
+    const latencies: number[] = [];
+    for (const scale of [0.18, 0.3, 0.45]) {
+      for (const kind of ["left", "right", "double", "scroll"] as const) {
+        for (let repetition = 0; repetition < 10; repetition += 1) {
+          const engine = new GestureEngine();
+          for (const at of [0, 20, 40]) {
+            engine.update(makeGestureHand("tracking", { scale }), at);
+          }
+          const onsetMs = 60;
+          const activated = runUntil(
+            engine,
+            kind,
+            onsetMs,
+            (output) => output.lockedGesture === kind,
+            scale,
+          );
+          latencies.push(activated.at - onsetMs);
+        }
+      }
+    }
+
+    const sorted = [...latencies].sort((first, second) => first - second);
+    const p95 = sorted[Math.ceil(sorted.length * 0.95) - 1]!;
+    expect(p95).toBeLessThanOrEqual(120);
+  });
+
+  it("produces zero actions during two minutes of jittering neutral pointer movement", () => {
+    const engine = new GestureEngine();
+    let actionCount = 0;
+
+    for (let at = 0; at <= 120_000; at += 33) {
+      const output = engine.update(makeGestureHand("tracking", {
+        scale: 0.3 + Math.sin(at / 1_100) * 0.025,
+        translateX: 0.5 + Math.sin(at / 700) * 0.08,
+        translateY: 0.5 + Math.cos(at / 900) * 0.06,
+      }), at);
+      actionCount += Number(output.click)
+        + Number(output.rightClick)
+        + Number(output.doubleClick)
+        + Number(output.dragStart)
+        + Number(output.dragEnd)
+        + Number(output.scrollY !== 0);
+    }
+
+    expect(actionCount).toBe(0);
+  });
+
   it("records privacy-safe diagnostics for deterministic replay", () => {
     const engine = new GestureEngine();
     runUntil(engine, "left", 1_000, (output) => output.lockedGesture === "left");

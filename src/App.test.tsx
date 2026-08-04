@@ -495,11 +495,13 @@ it("dispatches hover movement, short clicks, and drag-aware movement while enabl
   runFrame(1_340, trackingHandAt(0.45, 0.45));
   runFrame(1_380, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
-  expect(bridge.move).toHaveBeenCalledTimes(moveCountDuringDrag);
   expect(vi.mocked(bridge.drag).mock.calls.length).toBeGreaterThan(dragCountBeforeRelease);
-  expect(vi.mocked(bridge.drag).mock.invocationCallOrder.at(-1)).toBeLessThan(
-    vi.mocked(bridge.mouseUp).mock.invocationCallOrder[0],
-  );
+  const mouseDownOrder = vi.mocked(bridge.mouseDown).mock.invocationCallOrder[0]!;
+  const mouseUpOrder = vi.mocked(bridge.mouseUp).mock.invocationCallOrder[0]!;
+  expect(vi.mocked(bridge.move).mock.invocationCallOrder.filter(
+    (order) => order > mouseDownOrder && order < mouseUpOrder,
+  )).toHaveLength(0);
+  expect(vi.mocked(bridge.drag).mock.invocationCallOrder.at(-1)).toBeLessThan(mouseUpOrder);
 });
 
 it("shows left-pinch feedback on the first frame without waiting for drag hold", async () => {

@@ -21,7 +21,7 @@ type LandmarkFilterState = {
 };
 
 const DEFAULT_MIN_CUTOFF = 1;
-const DEFAULT_BETA = 3;
+const DEFAULT_BETA = 16;
 const DEFAULT_DERIVATIVE_CUTOFF = 1;
 const DEFAULT_RESET_GAP_MS = 250;
 
