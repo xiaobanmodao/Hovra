@@ -1,213 +1,164 @@
+import { AdaptiveLandmarkFilter } from "./adaptiveLandmarkFilter";
 import { DEFAULT_GESTURE_SETTINGS } from "./config";
-import { landmarkDistance } from "./landmarkMetrics";
+import { GestureClassifier } from "./gestureClassifier";
+import { extractGestureFeatures, type GestureFeatures } from "./gestureFeatures";
+import { GestureStabilizer, type GestureStabilizerOutput } from "./gestureStabilizer";
+import { GestureTraceBuffer, type GestureTrace, type TraceGestureEvent } from "./gestureTrace";
+import { buildHandGeometry, type HandGeometry, type Vector3 } from "./handGeometry";
 import {
-  INDEX_FINGER_PIP,
   INDEX_FINGER_TIP,
-  MIDDLE_FINGER_PIP,
-  MIDDLE_FINGER_TIP,
-  PINKY_PIP,
-  PINKY_TIP,
-  RING_FINGER_PIP,
-  RING_FINGER_TIP,
-  THUMB_TIP,
-  WRIST,
+  type GestureDiagnosticsSnapshot,
+  type GestureKind,
   type GestureOutput,
   type GestureSettings,
   type GestureState,
   type Landmark,
 } from "./types";
 
-type PinchKind = "left" | "right" | "double";
-
-const PINCH_STATES: Record<PinchKind, GestureState> = {
+const PINCH_STATES: Record<"left" | "right" | "double", GestureState> = {
   left: "left-pinching",
   right: "right-pinching",
   double: "double-pinching",
 };
 
-const SCROLL_SCALE = 100;
+const SCROLL_SCALE = 24;
 const MAX_SCROLL_STEP = 12;
-const SCROLL_DEAD_ZONE = 0.01;
-const FINGER_EXTENSION_DISTANCE = 0.06;
+const SCROLL_DEAD_ZONE = 0.015;
 
 export class GestureEngine {
-  private state: GestureState = "lost";
-  private pinchStartedAt: number | null = null;
-  private activePinch: PinchKind | null = null;
-  private scrollReferenceY: number | null = null;
   private readonly settings: GestureSettings;
+  private readonly filter = new AdaptiveLandmarkFilter();
+  private readonly classifier: GestureClassifier;
+  private readonly stabilizer = new GestureStabilizer();
+  private readonly trace = new GestureTraceBuffer();
+  private activeStartedAt: number | null = null;
+  private dragging = false;
+  private scrollReference: Vector3 | null = null;
+  private lastCursor: Landmark | null = null;
+  private traceEpochMs: number | null = null;
+  private lastTraceTimestamp = 0;
 
   constructor(settings: GestureSettings = DEFAULT_GESTURE_SETTINGS) {
     this.settings = { ...settings };
+    this.classifier = new GestureClassifier(settings.gestureSensitivity);
   }
 
   update(landmarks: Landmark[] | null, nowMs: number): GestureOutput {
-    if (!landmarks) {
-      const dragEnd = this.state === "dragging";
-      this.state = "lost";
-      this.resetGestureTracking();
-      return this.output(null, { dragEnd });
+    const filtered = this.filter.update(landmarks, nowMs);
+    const geometry = buildHandGeometry(filtered);
+    const features = geometry ? extractGestureFeatures(geometry) : null;
+    const candidate = features
+      ? this.classifier.classify(features, this.stabilizer.lockedGesture)
+      : null;
+    const stabilized = this.stabilizer.update(candidate, nowMs, features !== null);
+    const events: Partial<GestureOutput> = {};
+
+    if (geometry) {
+      this.lastCursor = geometry.landmarks[INDEX_FINGER_TIP] ?? this.lastCursor;
     }
 
-    const cursor = landmarks[INDEX_FINGER_TIP] ?? null;
-    const pinch = this.detectPinch(landmarks);
-
-    if (this.state === "dragging") {
-      if (pinch === "left") {
-        this.scrollReferenceY = null;
-        return this.output(cursor);
+    if (stabilized.activated !== null) {
+      this.activeStartedAt = nowMs;
+      if (stabilized.activated === "scroll") {
+        this.scrollReference = geometry?.origin ?? null;
       }
-
-      this.state = this.classifyReleasedState(landmarks);
-      this.resetGestureTracking();
-      return this.output(cursor, { dragEnd: true });
     }
 
-    if (pinch) {
-      this.scrollReferenceY = null;
-      if (this.activePinch !== pinch) {
-        this.activePinch = pinch;
-        this.pinchStartedAt = nowMs;
-      }
-
-      if (
-        pinch === "left"
-        && this.pinchStartedAt !== null
-        && nowMs - this.pinchStartedAt >= this.settings.dragHoldMs
-      ) {
-        this.state = "dragging";
-        return this.output(cursor, { dragStart: true });
-      }
-
-      this.state = PINCH_STATES[pinch];
-      return this.output(cursor);
+    if (
+      stabilized.lockedGesture === "left"
+      && !this.dragging
+      && this.activeStartedAt !== null
+      && nowMs - this.activeStartedAt >= this.settings.dragHoldMs
+    ) {
+      this.dragging = true;
+      events.dragStart = true;
     }
 
-    const releasedAction = this.releaseAction();
-    this.activePinch = null;
-    this.pinchStartedAt = null;
-
-    if (this.isScrollPose(landmarks)) {
-      const referenceY = landmarks[WRIST]?.y;
-      this.state = "scrolling";
-      if (referenceY === undefined) {
-        this.scrollReferenceY = null;
-        return this.output(cursor, releasedAction);
-      }
-
-      const scrollY = this.scrollReferenceY === null
-        ? 0
-        : this.scrollStep(this.scrollReferenceY - referenceY);
-      this.scrollReferenceY = referenceY;
-      return this.output(cursor, { ...releasedAction, scrollY });
+    if (stabilized.lockedGesture === "scroll" && geometry) {
+      events.scrollY = this.nextScrollStep(geometry);
     }
 
-    this.scrollReferenceY = null;
-    this.state = this.isOpenPalm(landmarks) ? "paused" : "tracking";
-    return this.output(cursor, releasedAction);
-  }
+    if (stabilized.timedOut) {
+      if (this.dragging) events.dragEnd = true;
+      this.clearActiveAction();
+    } else if (stabilized.released !== null) {
+      if (this.dragging) {
+        events.dragEnd = true;
+      } else if (stabilized.released === "left") {
+        events.click = true;
+      } else if (stabilized.released === "right") {
+        events.rightClick = true;
+      } else if (stabilized.released === "double") {
+        events.doubleClick = true;
+      }
+      this.clearActiveAction();
+    }
 
-  private isOpenPalm(landmarks: Landmark[]): boolean {
-    const wrist = landmarks[WRIST];
-    const fingertips = [
-      landmarks[INDEX_FINGER_TIP],
-      landmarks[MIDDLE_FINGER_TIP],
-      landmarks[RING_FINGER_TIP],
-      landmarks[PINKY_TIP],
-    ];
-
-    return Boolean(wrist) && fingertips.every(
-      (tip) => tip !== undefined && landmarkDistance(wrist, tip) > this.settings.openPalmMinTipDistance,
+    const state = this.deriveState(stabilized, features !== null);
+    const output = this.output(
+      state,
+      features === null && stabilized.lockedGesture === null ? null : this.lastCursor,
+      stabilized,
+      features,
+      nowMs,
+      events,
     );
+    this.recordTrace(landmarks, output, features, nowMs);
+    return output;
   }
 
-  private detectPinch(landmarks: Landmark[]): PinchKind | null {
-    const thumb = landmarks[THUMB_TIP];
-    if (!thumb) {
-      return null;
-    }
-
-    const candidates: Array<{ kind: PinchKind; tip: Landmark | undefined }> = [
-      { kind: "left", tip: landmarks[INDEX_FINGER_TIP] },
-      { kind: "right", tip: landmarks[MIDDLE_FINGER_TIP] },
-      { kind: "double", tip: landmarks[RING_FINGER_TIP] },
-    ];
-
-    let nearest: { kind: PinchKind; distance: number } | null = null;
-    for (const candidate of candidates) {
-      if (!candidate.tip) {
-        continue;
-      }
-      const distance = landmarkDistance(thumb, candidate.tip);
-      if (
-        distance <= this.settings.pinchDistance
-        && (nearest === null || distance < nearest.distance)
-      ) {
-        nearest = { kind: candidate.kind, distance };
-      }
-    }
-    return nearest?.kind ?? null;
+  getTrace(): GestureTrace {
+    return this.trace.snapshot();
   }
 
-  private isScrollPose(landmarks: Landmark[]): boolean {
-    const indexPip = landmarks[INDEX_FINGER_PIP];
-    const indexTip = landmarks[INDEX_FINGER_TIP];
-    const middlePip = landmarks[MIDDLE_FINGER_PIP];
-    const middleTip = landmarks[MIDDLE_FINGER_TIP];
-    const ringPip = landmarks[RING_FINGER_PIP];
-    const ringTip = landmarks[RING_FINGER_TIP];
-    const pinkyPip = landmarks[PINKY_PIP];
-    const pinkyTip = landmarks[PINKY_TIP];
+  serializeTrace(): string {
+    return this.trace.serialize();
+  }
 
-    return Boolean(
-      indexPip && indexTip
-      && middlePip && middleTip
-      && ringPip && ringTip
-      && pinkyPip && pinkyTip
-      && indexPip.y - indexTip.y >= FINGER_EXTENSION_DISTANCE
-      && middlePip.y - middleTip.y >= FINGER_EXTENSION_DISTANCE
-      && ringTip.y - ringPip.y >= FINGER_EXTENSION_DISTANCE
-      && pinkyTip.y - pinkyPip.y >= FINGER_EXTENSION_DISTANCE,
+  private deriveState(stabilized: GestureStabilizerOutput, inputValid: boolean): GestureState {
+    if (this.dragging) return "dragging";
+    const visibleGesture = stabilized.lockedGesture ?? (
+      stabilized.phase === "candidate" ? stabilized.candidate : null
     );
-  }
-
-  private classifyReleasedState(landmarks: Landmark[]): GestureState {
-    if (this.isScrollPose(landmarks)) {
-      return "scrolling";
+    if (visibleGesture === "left" || visibleGesture === "right" || visibleGesture === "double") {
+      return PINCH_STATES[visibleGesture];
     }
-    return this.isOpenPalm(landmarks) ? "paused" : "tracking";
+    if (visibleGesture === "scroll") return stabilized.lockedGesture ? "scrolling" : "tracking";
+    if (visibleGesture === "open-palm") return stabilized.lockedGesture ? "paused" : "tracking";
+    return inputValid ? "tracking" : "lost";
   }
 
-  private releaseAction(): Partial<GestureOutput> {
-    return {
-      click: this.state === "left-pinching",
-      rightClick: this.state === "right-pinching",
-      doubleClick: this.state === "double-pinching",
-    };
-  }
-
-  private scrollStep(deltaY: number): number {
-    if (Math.abs(deltaY) < SCROLL_DEAD_ZONE) {
+  private nextScrollStep(geometry: HandGeometry): number {
+    if (this.scrollReference === null) {
+      this.scrollReference = geometry.origin;
       return 0;
     }
-    return Math.max(
-      -MAX_SCROLL_STEP,
-      Math.min(MAX_SCROLL_STEP, Math.round(deltaY * SCROLL_SCALE)),
-    );
+    const delta = geometry.projectDelta({
+      x: geometry.origin.x - this.scrollReference.x,
+      y: geometry.origin.y - this.scrollReference.y,
+      z: geometry.origin.z - this.scrollReference.z,
+    });
+    this.scrollReference = geometry.origin;
+    if (Math.abs(delta.y) < SCROLL_DEAD_ZONE) return 0;
+    return Math.max(-MAX_SCROLL_STEP, Math.min(MAX_SCROLL_STEP, Math.round(delta.y * SCROLL_SCALE)));
   }
 
-  private resetGestureTracking(): void {
-    this.pinchStartedAt = null;
-    this.activePinch = null;
-    this.scrollReferenceY = null;
+  private clearActiveAction(): void {
+    this.activeStartedAt = null;
+    this.dragging = false;
+    this.scrollReference = null;
   }
 
   private output(
+    state: GestureState,
     cursor: Landmark | null,
-    events: Partial<Omit<GestureOutput, "state" | "cursor">> = {},
+    stabilized: GestureStabilizerOutput,
+    features: GestureFeatures | null,
+    nowMs: number,
+    events: Partial<GestureOutput>,
   ): GestureOutput {
     return {
-      state: this.state,
+      state,
       cursor,
       click: false,
       rightClick: false,
@@ -215,7 +166,62 @@ export class GestureEngine {
       scrollY: 0,
       dragStart: false,
       dragEnd: false,
+      phase: this.dragging ? "dragging" : stabilized.phase,
+      candidate: stabilized.candidate,
+      lockedGesture: stabilized.lockedGesture,
+      confirmationProgress: stabilized.confirmationProgress,
+      diagnostics: diagnosticsFor(features, nowMs),
       ...events,
     };
   }
+
+  private recordTrace(
+    landmarks: Landmark[] | null,
+    output: GestureOutput,
+    features: GestureFeatures | null,
+    nowMs: number,
+  ): void {
+    if (this.traceEpochMs === null || nowMs < this.traceEpochMs) this.traceEpochMs = nowMs;
+    const relativeTimestamp = Math.max(this.lastTraceTimestamp, nowMs - this.traceEpochMs);
+    this.lastTraceTimestamp = relativeTimestamp;
+    const events: TraceGestureEvent[] = [];
+    if (output.click) events.push("click");
+    if (output.rightClick) events.push("rightClick");
+    if (output.doubleClick) events.push("doubleClick");
+    if (output.scrollY !== 0) events.push("scroll");
+    if (output.dragStart) events.push("dragStart");
+    if (output.dragEnd) events.push("dragEnd");
+
+    this.trace.push({
+      t: relativeTimestamp,
+      landmarks,
+      quality: features ? 1 : 0,
+      features: features ? {
+        leftPinchRatio: features.leftPinchRatio,
+        rightPinchRatio: features.rightPinchRatio,
+        doublePinchRatio: features.doublePinchRatio,
+        openPalmScore: features.openPalmScore,
+        scrollPoseScore: features.scrollPoseScore,
+        palmScale: features.palmScale,
+      } : null,
+      phase: output.phase,
+      candidate: output.candidate,
+      confirmationProgress: output.confirmationProgress,
+      lockedGesture: output.lockedGesture,
+      events,
+    });
+  }
+}
+
+function diagnosticsFor(features: GestureFeatures | null, timestampMs: number): GestureDiagnosticsSnapshot {
+  return {
+    timestampMs,
+    quality: features ? 1 : 0,
+    palmScale: features?.palmScale ?? null,
+    leftPinchRatio: features?.leftPinchRatio ?? null,
+    rightPinchRatio: features?.rightPinchRatio ?? null,
+    doublePinchRatio: features?.doublePinchRatio ?? null,
+    openPalmScore: features?.openPalmScore ?? null,
+    scrollPoseScore: features?.scrollPoseScore ?? null,
+  };
 }

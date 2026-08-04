@@ -1,257 +1,196 @@
-import { GestureEngine } from "./gestureEngine";
+import { describe, expect, it } from "vitest";
+
 import { DEFAULT_GESTURE_SETTINGS } from "./config";
-import {
-  INDEX_FINGER_TIP,
-  MIDDLE_FINGER_TIP,
-  PINKY_TIP,
-  RING_FINGER_TIP,
-  THUMB_TIP,
-  WRIST,
-  type Landmark,
-} from "./types";
+import { GestureEngine } from "./gestureEngine";
+import { makeGestureHand, type SyntheticGesture } from "./fixtures/stable-gesture-sequences";
+import type { GestureOutput } from "./types";
 
-const landmarks = (): Landmark[] => Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
-
-const handWithTips = (thumb: Landmark, index: Landmark, middle: Landmark): Landmark[] => {
-  const hand = landmarks();
-  hand[WRIST] = { x: 0, y: 0 };
-  hand[THUMB_TIP] = thumb;
-  hand[INDEX_FINGER_TIP] = index;
-  hand[MIDDLE_FINGER_TIP] = middle;
-  hand[RING_FINGER_TIP] = { x: 0.4, y: 0.4 };
-  hand[PINKY_TIP] = { x: 0.5, y: 0.5 };
-  return hand;
-};
-
-const openHand = (): Landmark[] => {
-  const hand = handWithTips({ x: 0.3, y: 0 }, { x: 0.3, y: 0.1 }, { x: 0.2, y: 0.2 });
-  hand[RING_FINGER_TIP] = { x: 0.25, y: 0.15 };
-  hand[PINKY_TIP] = { x: 0.15, y: 0.25 };
-  return hand;
-};
-
-const trackingHand = (): Landmark[] => handWithTips(
-  { x: 0, y: 0 },
-  { x: 0.2, y: 0 },
-  { x: 0.12, y: 0 },
-);
-
-const pinchedHand = (): Landmark[] => handWithTips(
-  { x: 0, y: 0 },
-  { x: 0.03, y: 0 },
-  { x: 0.12, y: 0 },
-);
-
-const handWithPinchDistance = (distance: number): Landmark[] => handWithTips(
-  { x: 0, y: 0 },
-  { x: distance, y: 0 },
-  { x: 0.2, y: 0 },
-);
-
-const multiGestureHand = (
-  target: "tracking" | "left" | "right" | "double",
-): Landmark[] => {
-  const hand = landmarks();
-  hand[WRIST] = { x: 0.5, y: 0.8 };
-  hand[THUMB_TIP] = { x: 0.4, y: 0.5 };
-  hand[INDEX_FINGER_TIP] = target === "left"
-    ? { x: 0.425, y: 0.5 }
-    : { x: 0.6, y: 0.5 };
-  hand[MIDDLE_FINGER_TIP] = target === "right"
-    ? { x: 0.425, y: 0.5 }
-    : { x: 0.65, y: 0.52 };
-  hand[RING_FINGER_TIP] = target === "double"
-    ? { x: 0.425, y: 0.5 }
-    : { x: 0.7, y: 0.55 };
-  hand[PINKY_TIP] = { x: 0.5, y: 0.75 };
-  return hand;
-};
-
-const scrollHand = (verticalOffset = 0): Landmark[] => {
-  const hand = landmarks();
-  hand[WRIST] = { x: 0.5, y: 0.8 + verticalOffset };
-  hand[THUMB_TIP] = { x: 0.3, y: 0.6 + verticalOffset };
-  hand[6] = { x: 0.45, y: 0.58 + verticalOffset };
-  hand[INDEX_FINGER_TIP] = { x: 0.45, y: 0.32 + verticalOffset };
-  hand[10] = { x: 0.55, y: 0.58 + verticalOffset };
-  hand[MIDDLE_FINGER_TIP] = { x: 0.55, y: 0.32 + verticalOffset };
-  hand[14] = { x: 0.6, y: 0.58 + verticalOffset };
-  hand[RING_FINGER_TIP] = { x: 0.6, y: 0.68 + verticalOffset };
-  hand[18] = { x: 0.68, y: 0.6 + verticalOffset };
-  hand[PINKY_TIP] = { x: 0.68, y: 0.7 + verticalOffset };
-  return hand;
-};
-
-it("uses injected pinch and drag thresholds without mutating them", () => {
-  const settings = {
-    ...DEFAULT_GESTURE_SETTINGS,
-    pinchDistance: 0.1,
-    dragHoldMs: 600,
-  };
-  const engine = new GestureEngine(settings);
-
-  expect(engine.update(handWithPinchDistance(0.08), 0).state).toBe("left-pinching");
-  expect(engine.update(handWithPinchDistance(0.08), 500).dragStart).toBe(false);
-  expect(engine.update(handWithPinchDistance(0.08), 600).dragStart).toBe(true);
-  expect(settings).toEqual({
-    ...DEFAULT_GESTURE_SETTINGS,
-    pinchDistance: 0.1,
-    dragHoldMs: 600,
-  });
+const actionFor = (kind: "left" | "right" | "double") => ({
+  click: kind === "left",
+  rightClick: kind === "right",
+  doubleClick: kind === "double",
 });
 
-it("clicks when a short pinch using non-default settings is released", () => {
-  const engine = new GestureEngine({
-    ...DEFAULT_GESTURE_SETTINGS,
-    pinchDistance: 0.1,
-    dragHoldMs: 600,
+const runUntil = (
+  engine: GestureEngine,
+  hand: SyntheticGesture,
+  startMs: number,
+  predicate: (output: GestureOutput) => boolean,
+  scale = 0.3,
+  limitMs = 400,
+): { output: GestureOutput; at: number } => {
+  for (let elapsed = 0; elapsed <= limitMs; elapsed += 20) {
+    const at = startMs + elapsed;
+    const output = engine.update(makeGestureHand(hand, { scale }), at);
+    if (predicate(output)) return { output, at };
+  }
+  throw new Error(`Gesture ${hand} did not reach the expected state`);
+};
+
+const releaseUntil = (
+  engine: GestureEngine,
+  startMs: number,
+  predicate: (output: GestureOutput) => boolean,
+  scale = 0.3,
+): { output: GestureOutput; at: number } => runUntil(
+  engine,
+  "tracking",
+  startMs,
+  predicate,
+  scale,
+  500,
+);
+
+describe("GestureEngine V2", () => {
+  it("shows a candidate immediately but waits 80 ms before confirming it", () => {
+    const engine = new GestureEngine();
+    const first = engine.update(makeGestureHand("left"), 0);
+
+    expect(first).toMatchObject({
+      state: "left-pinching",
+      phase: "candidate",
+      candidate: "left",
+      lockedGesture: null,
+      confirmationProgress: 0,
+    });
+    expect(engine.update(makeGestureHand("left"), 79).lockedGesture).toBeNull();
+    expect(engine.update(makeGestureHand("left"), 80)).toMatchObject({
+      phase: "active",
+      lockedGesture: "left",
+      confirmationProgress: 1,
+    });
   });
 
-  engine.update(handWithPinchDistance(0.08), 0);
-  const release = engine.update(trackingHand(), 500);
+  it.each(["left", "right", "double"] as const)(
+    "emits one %s action only after a confirmed release",
+    (kind) => {
+      const engine = new GestureEngine();
+      const activated = runUntil(engine, kind, 0, (output) => output.lockedGesture === kind);
+      const released = releaseUntil(
+        engine,
+        activated.at + 20,
+        (output) => output.click || output.rightClick || output.doubleClick,
+      );
 
-  expect(release.state).toBe("tracking");
-  expect(release.click).toBe(true);
-  expect(release.dragEnd).toBe(false);
-});
-
-it("uses the shared three-dimensional pinch metric for thresholding", () => {
-  const hand = handWithTips(
-    { x: 0, y: 0, z: 0 },
-    { x: 0.04, y: 0, z: 0.04 },
-    { x: 0.15, y: 0 },
+      expect(released.output).toMatchObject(actionFor(kind));
+      expect(engine.update(makeGestureHand("tracking"), released.at + 20)).toMatchObject({
+        click: false,
+        rightClick: false,
+        doubleClick: false,
+      });
+    },
   );
 
-  const strictEngine = new GestureEngine({
-    ...DEFAULT_GESTURE_SETTINGS,
-    pinchDistance: 0.055,
-  });
-  const permissiveEngine = new GestureEngine({
-    ...DEFAULT_GESTURE_SETTINGS,
-    pinchDistance: 0.06,
-  });
-
-  expect(strictEngine.update(hand, 0).state).toBe("tracking");
-  expect(permissiveEngine.update(hand, 0).state).toBe("left-pinching");
-});
-
-it("transitions between paused, tracking, pinching, clicking, dragging, and lost", () => {
-  const engine = new GestureEngine();
-
-  expect(engine.update(openHand(), 0).state).toBe("paused");
-  expect(engine.update(trackingHand(), 16).state).toBe("tracking");
-  expect(engine.update(pinchedHand(), 32).state).toBe("left-pinching");
-  expect(engine.update(trackingHand(), 64).click).toBe(true);
-  expect(engine.update(pinchedHand(), 100).dragStart).toBe(false);
-  expect(engine.update(pinchedHand(), 550).dragStart).toBe(true);
-  expect(engine.update(null, 570).dragEnd).toBe(true);
-});
-
-it("clicks when a pinch is released into an open palm", () => {
-  const engine = new GestureEngine();
-
-  engine.update(pinchedHand(), 0);
-  const release = engine.update(openHand(), 16);
-
-  expect(release.state).toBe("paused");
-  expect(release.click).toBe(true);
-  expect(release.dragEnd).toBe(false);
-});
-
-it("ends a drag without clicking when released into tracking or an open palm", () => {
-  const engine = new GestureEngine();
-
-  engine.update(pinchedHand(), 0);
-  engine.update(pinchedHand(), 350);
-  const trackingRelease = engine.update(trackingHand(), 366);
-
-  expect(trackingRelease.state).toBe("tracking");
-  expect(trackingRelease.click).toBe(false);
-  expect(trackingRelease.dragEnd).toBe(true);
-
-  engine.update(pinchedHand(), 400);
-  engine.update(pinchedHand(), 750);
-  const openPalmRelease = engine.update(openHand(), 766);
-
-  expect(openPalmRelease.state).toBe("paused");
-  expect(openPalmRelease.click).toBe(false);
-  expect(openPalmRelease.dragEnd).toBe(true);
-});
-
-it("reports the matching pinch state on its first recognized frame", () => {
-  const cases = [
-    ["left", "left-pinching"],
-    ["right", "right-pinching"],
-    ["double", "double-pinching"],
-  ] as const;
-
-  for (const [gesture, expectedState] of cases) {
+  it("does not switch actions when another fingertip becomes closer during a lock", () => {
     const engine = new GestureEngine();
-    const output = engine.update(multiGestureHand(gesture), 0);
+    const activated = runUntil(engine, "left", 0, (output) => output.lockedGesture === "left");
+    const overlap = makeGestureHand("right");
 
-    expect(output.state).toBe(expectedState);
-    expect(output.click).toBe(false);
-    expect(output.rightClick).toBe(false);
-    expect(output.doubleClick).toBe(false);
-  }
-});
+    for (let at = activated.at + 20; at <= activated.at + 100; at += 20) {
+      const output = engine.update(overlap, at);
+      expect(output.lockedGesture).not.toBe("right");
+      expect(output.rightClick).toBe(false);
+    }
+  });
 
-it("emits exactly one action when each short pinch is released", () => {
-  const cases = [
-    ["left", { click: true, rightClick: false, doubleClick: false }],
-    ["right", { click: false, rightClick: true, doubleClick: false }],
-    ["double", { click: false, rightClick: false, doubleClick: true }],
-  ] as const;
+  it("tolerates up to three dropped frames without clicking or releasing a drag", () => {
+    const clickEngine = new GestureEngine();
+    const activated = runUntil(clickEngine, "left", 0, (output) => output.lockedGesture === "left");
+    for (const offset of [20, 40, 60]) {
+      const dropped = clickEngine.update(null, activated.at + offset);
+      expect(dropped.click).toBe(false);
+      expect(dropped.lockedGesture).toBe("left");
+    }
+    expect(clickEngine.update(makeGestureHand("left"), activated.at + 80).lockedGesture).toBe("left");
 
-  for (const [gesture, expected] of cases) {
-    const engine = new GestureEngine();
-    engine.update(multiGestureHand(gesture), 0);
-    const release = engine.update(multiGestureHand("tracking"), 100);
-
-    expect(release).toMatchObject(expected);
-    expect(engine.update(multiGestureHand("tracking"), 116)).toMatchObject({
+    const dragEngine = new GestureEngine();
+    const dragActivation = runUntil(dragEngine, "left", 0, (output) => output.lockedGesture === "left");
+    const drag = runUntil(
+      dragEngine,
+      "left",
+      dragActivation.at + 20,
+      (output) => output.dragStart,
+      0.3,
+      500,
+    );
+    expect(drag.output.state).toBe("dragging");
+    expect(dragEngine.update(null, drag.at + 100)).toMatchObject({
+      state: "dragging",
+      dragEnd: false,
+    });
+    expect(dragEngine.update(null, drag.at + 220)).toMatchObject({
+      state: "lost",
+      dragEnd: true,
       click: false,
-      rightClick: false,
-      doubleClick: false,
     });
-  }
-});
-
-it("allows only the left pinch to become a drag", () => {
-  const left = new GestureEngine();
-  left.update(multiGestureHand("left"), 0);
-  expect(left.update(multiGestureHand("left"), 350)).toMatchObject({
-    state: "dragging",
-    dragStart: true,
   });
 
-  for (const gesture of ["right", "double"] as const) {
-    const engine = new GestureEngine();
-    engine.update(multiGestureHand(gesture), 0);
-    expect(engine.update(multiGestureHand(gesture), 500)).toMatchObject({
-      state: gesture === "right" ? "right-pinching" : "double-pinching",
-      dragStart: false,
+  it("starts drag 350 ms after confirmation and ends it without a click", () => {
+    const engine = new GestureEngine({ ...DEFAULT_GESTURE_SETTINGS, dragHoldMs: 350 });
+    const activated = runUntil(engine, "left", 0, (output) => output.lockedGesture === "left");
+
+    expect(engine.update(makeGestureHand("left"), activated.at + 349).dragStart).toBe(false);
+    expect(engine.update(makeGestureHand("left"), activated.at + 350)).toMatchObject({
+      state: "dragging",
+      dragStart: true,
     });
-  }
-});
+    const released = releaseUntil(engine, activated.at + 370, (output) => output.dragEnd);
+    expect(released.output).toMatchObject({ dragEnd: true, click: false });
+  });
 
-it("chooses the nearest valid fingertip when pinch candidates overlap", () => {
-  const hand = multiGestureHand("right");
-  hand[INDEX_FINGER_TIP] = { x: 0.445, y: 0.5 };
+  it("confirms scroll, uses palm-local signed movement, and resets its reference", () => {
+    const engine = new GestureEngine();
+    const activated = runUntil(engine, "scroll", 0, (output) => output.lockedGesture === "scroll");
+    expect(activated.output).toMatchObject({ state: "scrolling", scrollY: 0 });
 
-  expect(new GestureEngine().update(hand, 0).state).toBe("right-pinching");
-});
+    const upward = engine.update(makeGestureHand("scroll", { translateY: -0.03 }), activated.at + 20);
+    expect(upward.scrollY).toBeGreaterThan(0);
+    expect(Math.abs(upward.scrollY)).toBeLessThanOrEqual(12);
 
-it("accumulates bounded signed scroll steps and resets after leaving the pose", () => {
-  const engine = new GestureEngine();
+    releaseUntil(engine, activated.at + 40, (output) => output.lockedGesture === null);
+    const next = runUntil(engine, "scroll", activated.at + 400, (output) => output.lockedGesture === "scroll");
+    expect(next.output.scrollY).toBe(0);
+  });
 
-  expect(engine.update(scrollHand(), 0)).toMatchObject({ state: "scrolling", scrollY: 0 });
-  expect(engine.update(scrollHand(-0.04), 16).scrollY).toBe(4);
-  expect(engine.update(scrollHand(0.2), 32).scrollY).toBe(-12);
+  it("meets 20-of-20 synthetic action repetitions at near, mid, and far scales", () => {
+    for (const scale of [0.18, 0.3, 0.45]) {
+      for (const kind of ["left", "right", "double"] as const) {
+        for (let repetition = 0; repetition < 20; repetition += 1) {
+          const engine = new GestureEngine();
+          const activated = runUntil(engine, kind, 0, (output) => output.lockedGesture === kind, scale);
+          const released = releaseUntil(
+            engine,
+            activated.at + 20,
+            (output) => output.click || output.rightClick || output.doubleClick,
+            scale,
+          );
+          expect(released.output).toMatchObject(actionFor(kind));
+        }
+      }
+    }
+  });
 
-  engine.update(multiGestureHand("tracking"), 48);
-  expect(engine.update(scrollHand(0.15), 64)).toMatchObject({
-    state: "scrolling",
-    scrollY: 0,
+  it("keeps candidate-to-confirmation latency at or below 120 ms", () => {
+    for (const kind of ["left", "right", "double", "scroll"] as const) {
+      const engine = new GestureEngine();
+      let candidateAt: number | null = null;
+      const activated = runUntil(engine, kind, 0, (output) => {
+        if (output.phase === "candidate" && candidateAt === null) candidateAt = output.diagnostics?.timestampMs ?? 0;
+        return output.lockedGesture === kind;
+      });
+      expect(activated.at - (candidateAt ?? 0)).toBeLessThanOrEqual(120);
+    }
+  });
+
+  it("records privacy-safe diagnostics for deterministic replay", () => {
+    const engine = new GestureEngine();
+    runUntil(engine, "left", 1_000, (output) => output.lockedGesture === "left");
+    releaseUntil(engine, 1_100, (output) => output.click);
+
+    const trace = engine.getTrace();
+    expect(trace.version).toBe(1);
+    expect(trace.frames.length).toBeGreaterThan(0);
+    expect(JSON.stringify(trace)).not.toContain("image");
+    expect(trace.frames.at(-1)?.features?.palmScale).toBeGreaterThan(0);
   });
 });

@@ -186,7 +186,7 @@ function validateLandmarks(value: unknown): Landmark[] | null {
     if (!isRecord(point)) {
       throw new TypeError("Gesture trace landmark must be an object");
     }
-    assertOnlyKeys(point, ["x", "y", "z"]);
+    assertOnlyAllowedKeys(point, ["x", "y", "z"]);
     assertFinite(point.x);
     assertFinite(point.y);
     if (point.z !== undefined) {
@@ -242,6 +242,14 @@ function assertOnlyKeys(value: Record<string, unknown>, allowed: readonly string
   const missing = allowed.find((key) => !(key in value));
   if (missing) {
     throw new TypeError(`Gesture trace is missing field: ${missing}`);
+  }
+}
+
+function assertOnlyAllowedKeys(value: Record<string, unknown>, allowed: readonly string[]): void {
+  const allowedSet = new Set(allowed);
+  const unknown = Object.keys(value).find((key) => !allowedSet.has(key));
+  if (unknown) {
+    throw new TypeError(`Gesture trace contains unknown field: ${unknown}`);
   }
 }
 

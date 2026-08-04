@@ -52,6 +52,15 @@ describe("GestureTraceBuffer", () => {
     expect(buffer.snapshot().frames[0].landmarks?.[0].x).toBe(0);
   });
 
+  it("accepts MediaPipe landmarks when the optional z coordinate is omitted", () => {
+    const buffer = new GestureTraceBuffer();
+    const input = frameAt(10);
+    input.landmarks = input.landmarks!.map(({ x, y }) => ({ x, y }));
+
+    expect(() => buffer.push(input)).not.toThrow();
+    expect(buffer.snapshot().frames[0]!.landmarks![0]).toEqual({ x: 0, y: 0 });
+  });
+
   it("rejects non-finite data and timestamps that move backwards", () => {
     const buffer = new GestureTraceBuffer();
     buffer.push(frameAt(10));

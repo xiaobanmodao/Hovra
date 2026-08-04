@@ -12,6 +12,20 @@ const idle: GestureOutput = {
   scrollY: 0,
   dragStart: false,
   dragEnd: false,
+  phase: "neutral",
+  candidate: null,
+  lockedGesture: null,
+  confirmationProgress: 0,
+  diagnostics: {
+    timestampMs: 0,
+    quality: 1,
+    palmScale: null,
+    leftPinchRatio: null,
+    rightPinchRatio: null,
+    doublePinchRatio: null,
+    openPalmScore: null,
+    scrollPoseScore: null,
+  },
 };
 
 const rect = (left: number, top: number, width: number, height: number): DOMRect => ({

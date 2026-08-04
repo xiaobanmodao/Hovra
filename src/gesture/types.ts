@@ -39,6 +39,22 @@ export type GestureOutput = {
   scrollY: number;
   dragStart: boolean;
   dragEnd: boolean;
+  phase: GesturePhase;
+  candidate: GestureKind | null;
+  lockedGesture: GestureKind | null;
+  confirmationProgress: number;
+  diagnostics: GestureDiagnosticsSnapshot;
+};
+
+export type GestureDiagnosticsSnapshot = {
+  timestampMs: number;
+  quality: number;
+  palmScale: number | null;
+  leftPinchRatio: number | null;
+  rightPinchRatio: number | null;
+  doublePinchRatio: number | null;
+  openPalmScore: number | null;
+  scrollPoseScore: number | null;
 };
 
 export type GestureSettings = {

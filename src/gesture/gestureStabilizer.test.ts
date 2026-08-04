@@ -64,6 +64,14 @@ describe("GestureStabilizer", () => {
     expect(timeout.lockedGesture).toBeNull();
   });
 
+  it("times out immediately when the first missing update follows a gap of 120 ms", () => {
+    const stabilizer = new GestureStabilizer();
+    stabilizer.update(candidate("left"), 0);
+    stabilizer.update(candidate("left"), 80);
+
+    expect(stabilizer.update(null, 200, false).timedOut).toBe(true);
+  });
+
   it("resets safely when timestamps move backwards", () => {
     const stabilizer = new GestureStabilizer();
     stabilizer.update(candidate("left"), 100);

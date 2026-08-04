@@ -52,10 +52,11 @@ export class GestureStabilizer {
     if (this.lastTimestampMs !== null && nowMs < this.lastTimestampMs) {
       this.reset();
     }
+    const elapsedSinceLastUpdate = this.lastTimestampMs === null ? 0 : nowMs - this.lastTimestampMs;
     this.lastTimestampMs = nowMs;
 
     if (!inputValid) {
-      return this.handleInvalid(nowMs);
+      return this.handleInvalid(nowMs, elapsedSinceLastUpdate);
     }
     this.invalidStartedAt = null;
 
@@ -131,7 +132,7 @@ export class GestureStabilizer {
     return this.output("cooldown", null, null, 0, false, null, locked);
   }
 
-  private handleInvalid(nowMs: number): GestureStabilizerOutput {
+  private handleInvalid(nowMs: number, elapsedSinceLastUpdate: number): GestureStabilizerOutput {
     this.candidateKind = null;
     this.candidateStartedAt = null;
     if (this.lockedKind === null) {
@@ -139,7 +140,7 @@ export class GestureStabilizer {
       return this.output("lost", null, null, 0, false);
     }
 
-    this.invalidStartedAt ??= nowMs;
+    this.invalidStartedAt ??= nowMs - Math.max(0, elapsedSinceLastUpdate);
     if (nowMs - this.invalidStartedAt < this.dropoutGraceMs) {
       return this.output("lost", this.lockedKind, this.lockedKind, 1, false);
     }

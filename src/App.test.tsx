@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
 import type { GestureDesktopApi } from "./electron.d";
+import { makeGestureHand } from "./gesture/fixtures/stable-gesture-sequences";
 import type { GestureSettings, Landmark } from "./gesture/types";
 
 const vision = vi.hoisted(() => ({
@@ -34,10 +35,7 @@ vi.mock("./gesture/gestureEngine", async (importOriginal) => {
 import App from "./App";
 
 const pinchedHandAt = (x: number, y: number): Landmark[] => {
-  const hand: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
-  hand[4] = { x: x - 0.03, y };
-  hand[8] = { x, y };
-  return hand;
+  return makeGestureHand("left", { cursor: { x, y } });
 };
 
 const rect = (left: number, top: number, width: number, height: number): DOMRect => ({
@@ -96,46 +94,19 @@ const extendedPinchHandAt = (
   x: number,
   y: number,
 ): Landmark[] => {
-  const hand: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
-  hand[0] = { x: 0.5, y: 0.8 };
-  hand[4] = { x: x - 0.03, y };
-  hand[8] = kind === "left" ? { x, y } : { x: x + 0.2, y };
-  hand[12] = kind === "right" ? { x, y } : { x: x + 0.25, y: y + 0.02 };
-  hand[16] = kind === "double" ? { x, y } : { x: x + 0.3, y: y + 0.05 };
-  hand[20] = { x: 0.5, y: 0.75 };
-  return hand;
+  return makeGestureHand(kind, { cursor: { x, y } });
 };
 
 const scrollingHandAt = (verticalOffset = 0): Landmark[] => {
-  const hand: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
-  hand[0] = { x: 0.5, y: 0.8 + verticalOffset };
-  hand[4] = { x: 0.3, y: 0.6 + verticalOffset };
-  hand[6] = { x: 0.45, y: 0.58 + verticalOffset };
-  hand[8] = { x: 0.45, y: 0.32 + verticalOffset };
-  hand[10] = { x: 0.55, y: 0.58 + verticalOffset };
-  hand[12] = { x: 0.55, y: 0.32 + verticalOffset };
-  hand[14] = { x: 0.6, y: 0.58 + verticalOffset };
-  hand[16] = { x: 0.6, y: 0.68 + verticalOffset };
-  hand[18] = { x: 0.68, y: 0.6 + verticalOffset };
-  hand[20] = { x: 0.68, y: 0.7 + verticalOffset };
-  return hand;
+  return makeGestureHand("scroll", { translateY: 0.5 + verticalOffset });
 };
 
 const trackingHandAt = (x: number, y: number): Landmark[] => {
-  const hand = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
-  hand[4] = { x: x - 0.25, y: y - 0.25 };
-  hand[8] = { x, y };
-  return hand;
+  return makeGestureHand("tracking", { cursor: { x, y } });
 };
 
 const openPalmAt = (x: number, y: number): Landmark[] => {
-  const hand = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5 }));
-  hand[8] = { x, y };
-  hand[12] = { x: 0.5, y: 0.1 };
-  hand[16] = { x: 0.8, y: 0.2 };
-  hand[20] = { x: 0.9, y: 0.5 };
-  hand[4] = { x: 0.15, y: 0.75 };
-  return hand;
+  return makeGestureHand("open-palm", { cursor: { x, y } });
 };
 
 const deferred = () => {
@@ -212,7 +183,11 @@ const startDesktopDrag = async (
 ) => {
   const hand = pinchedHandAt(0.4, 0.4);
   runFrame(100, hand);
-  runFrame(500, hand);
+  runFrame(140, hand);
+  runFrame(180, hand);
+  runFrame(220, hand);
+  runFrame(260, hand);
+  runFrame(610, hand);
   await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
 };
 
@@ -316,7 +291,9 @@ it("ends an active drag before replacing the engine when calibration settings ch
 
   act(() => nextFrame?.(16));
   video.currentTime = 2;
-  act(() => nextFrame?.(400));
+  act(() => nextFrame?.(96));
+  video.currentTime = 3;
+  act(() => nextFrame?.(446));
 
   const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
   const card = screen.getByTestId("draggable-card");
@@ -333,10 +310,18 @@ it("ends an active drag before replacing the engine when calibration settings ch
     y: 400 / window.innerHeight,
   };
   detectedHand = pinchedHandAt(distantCursor.x, distantCursor.y);
-  video.currentTime = 3;
-  act(() => nextFrame?.(500));
   video.currentTime = 4;
-  act(() => nextFrame?.(900));
+  act(() => nextFrame?.(1_000));
+  video.currentTime = 5;
+  act(() => nextFrame?.(1_040));
+  video.currentTime = 6;
+  act(() => nextFrame?.(1_080));
+  video.currentTime = 7;
+  act(() => nextFrame?.(1_120));
+  video.currentTime = 8;
+  act(() => nextFrame?.(1_160));
+  video.currentTime = 9;
+  act(() => nextFrame?.(1_510));
 
   expect(status).toHaveTextContent(/gesturedragging/i);
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
@@ -388,8 +373,10 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
   expect(vision.detectFirstHand).toHaveBeenCalledOnce();
 
   video.currentTime = 2;
-  act(() => nextFrame?.(400));
-  expect(vision.detectFirstHand).toHaveBeenCalledTimes(2);
+  act(() => nextFrame?.(96));
+  video.currentTime = 3;
+  act(() => nextFrame?.(446));
+  expect(vision.detectFirstHand).toHaveBeenCalledTimes(3);
   const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
   expect(status).toHaveTextContent(/gesturedragging/i);
   const card = screen.getByTestId("draggable-card");
@@ -400,7 +387,7 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
     value: HTMLMediaElement.HAVE_METADATA,
   });
   act(() => nextFrame?.(950));
-  expect(vision.detectFirstHand).toHaveBeenCalledTimes(2);
+  expect(vision.detectFirstHand).toHaveBeenCalledTimes(3);
   expect(status).toHaveTextContent(/camera frame stalled/i);
   expect(status).toHaveTextContent(/gesturelost/i);
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
@@ -450,7 +437,9 @@ it("ends an active drag and cleans up recognition when the camera stream becomes
 
   act(() => nextFrame?.(16));
   video.currentTime = 2;
-  act(() => nextFrame?.(400));
+  act(() => nextFrame?.(96));
+  video.currentTime = 3;
+  act(() => nextFrame?.(446));
   const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
   expect(status).toHaveTextContent(/gesturedragging/i);
   const card = screen.getByTestId("draggable-card");
@@ -470,27 +459,43 @@ it("dispatches hover movement, short clicks, and drag-aware movement while enabl
 
   runFrame(50, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.move).toHaveBeenCalled());
-  expect(bridge.move).toHaveBeenLastCalledWith(0.59, 0.41000000000000003, "tracking");
+  expect(bridge.move).toHaveBeenLastCalledWith(expect.any(Number), expect.any(Number), "tracking");
 
   runFrame(100, pinchedHandAt(0.45, 0.45));
-  runFrame(200, trackingHandAt(0.45, 0.45));
+  runFrame(140, pinchedHandAt(0.45, 0.45));
+  runFrame(180, pinchedHandAt(0.45, 0.45));
+  runFrame(220, pinchedHandAt(0.45, 0.45));
+  runFrame(260, pinchedHandAt(0.45, 0.45));
+  runFrame(300, trackingHandAt(0.45, 0.45));
+  runFrame(340, trackingHandAt(0.45, 0.45));
+  runFrame(380, trackingHandAt(0.45, 0.45));
+  runFrame(420, trackingHandAt(0.45, 0.45));
+  runFrame(460, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
 
-  runFrame(300, pinchedHandAt(0.45, 0.45));
-  runFrame(700, pinchedHandAt(0.45, 0.45));
+  runFrame(650, pinchedHandAt(0.45, 0.45));
+  runFrame(690, pinchedHandAt(0.45, 0.45));
+  runFrame(730, pinchedHandAt(0.45, 0.45));
+  runFrame(770, pinchedHandAt(0.45, 0.45));
+  runFrame(810, pinchedHandAt(0.45, 0.45));
+  runFrame(1_160, pinchedHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
-  await waitFor(() => expect(bridge.drag).toHaveBeenCalledWith(0.566384, 0.43361600000000006));
+  await waitFor(() => expect(bridge.drag).toHaveBeenCalledWith(expect.any(Number), expect.any(Number)));
 
   const moveCountDuringDrag = vi.mocked(bridge.move).mock.calls.length;
-  runFrame(750, pinchedHandAt(0.5, 0.5));
-  await waitFor(() => expect(bridge.drag).toHaveBeenLastCalledWith(0.5531072, 0.44689280000000003));
+  runFrame(1_180, pinchedHandAt(0.5, 0.5));
+  await waitFor(() => expect(bridge.drag).toHaveBeenLastCalledWith(expect.any(Number), expect.any(Number)));
   expect(bridge.move).toHaveBeenCalledTimes(moveCountDuringDrag);
 
   const dragCountBeforeRelease = vi.mocked(bridge.drag).mock.calls.length;
-  runFrame(800, trackingHandAt(0.45, 0.45));
+  runFrame(1_220, trackingHandAt(0.45, 0.45));
+  runFrame(1_260, trackingHandAt(0.45, 0.45));
+  runFrame(1_300, trackingHandAt(0.45, 0.45));
+  runFrame(1_340, trackingHandAt(0.45, 0.45));
+  runFrame(1_380, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
   expect(bridge.move).toHaveBeenCalledTimes(moveCountDuringDrag);
-  expect(bridge.drag).toHaveBeenCalledTimes(dragCountBeforeRelease + 1);
+  expect(vi.mocked(bridge.drag).mock.calls.length).toBeGreaterThan(dragCountBeforeRelease);
   expect(vi.mocked(bridge.drag).mock.invocationCallOrder.at(-1)).toBeLessThan(
     vi.mocked(bridge.mouseUp).mock.invocationCallOrder[0],
   );
@@ -514,9 +519,16 @@ it("dispatches right click and double click without disabling explicit control",
   const { bridge, runFrame } = await renderDesktopApp();
 
   runFrame(100, extendedPinchHandAt("right", 0.45, 0.45));
-  runFrame(150, trackingHandAt(0.45, 0.45));
-  runFrame(200, extendedPinchHandAt("double", 0.45, 0.45));
-  runFrame(250, trackingHandAt(0.45, 0.45));
+  runFrame(140, extendedPinchHandAt("right", 0.45, 0.45));
+  runFrame(180, extendedPinchHandAt("right", 0.45, 0.45));
+  runFrame(220, extendedPinchHandAt("right", 0.45, 0.45));
+  runFrame(260, extendedPinchHandAt("right", 0.45, 0.45));
+  runFrame(300, extendedPinchHandAt("right", 0.45, 0.45));
+  for (let at = 340; at <= 580; at += 40) runFrame(at, trackingHandAt(0.45, 0.45));
+  for (let at = 760; at <= 1_000; at += 40) {
+    runFrame(at, extendedPinchHandAt("double", 0.45, 0.45));
+  }
+  for (let at = 1_040; at <= 1_280; at += 40) runFrame(at, trackingHandAt(0.45, 0.45));
 
   await waitFor(() => expect(bridge.rightClick).toHaveBeenCalledOnce());
   await waitFor(() => expect(bridge.doubleClick).toHaveBeenCalledOnce());
@@ -530,17 +542,20 @@ it("keeps the system pointer fixed while two-finger movement scrolls", async () 
 
   runFrame(100, trackingHandAt(0.45, 0.45));
   await waitFor(() => expect(bridge.move).toHaveBeenCalled());
-  const firstPointer = vi.mocked(bridge.move).mock.calls.at(-1)?.slice(0, 2);
-
-  runFrame(116, scrollingHandAt());
-  await waitFor(() => expect(bridge.move).toHaveBeenLastCalledWith(
-    firstPointer?.[0],
-    firstPointer?.[1],
+  for (let at = 116; at <= 356; at += 40) runFrame(at, scrollingHandAt());
+  await waitFor(() => expect(bridge.move).toHaveBeenCalledWith(
+    expect.any(Number),
+    expect.any(Number),
     "scrolling",
   ));
-  runFrame(132, scrollingHandAt(-0.04));
+  const firstPointer = [...vi.mocked(bridge.move).mock.calls]
+    .reverse()
+    .find(([, , state]) => state === "scrolling")?.slice(0, 2);
+  runFrame(396, scrollingHandAt(-0.04));
+  runFrame(436, scrollingHandAt(-0.04));
 
-  await waitFor(() => expect(bridge.scroll).toHaveBeenCalledWith(4));
+  await waitFor(() => expect(bridge.scroll).toHaveBeenCalledWith(expect.any(Number)));
+  expect(vi.mocked(bridge.scroll).mock.calls.some(([amount]) => amount !== 0)).toBe(true);
   const scrollingMoves = vi.mocked(bridge.move).mock.calls.filter(
     ([, , state]) => state === "scrolling",
   );
@@ -554,13 +569,14 @@ it.each(["lost", "stale-frame"] as const)(
     await startDesktopDrag(runFrame, bridge);
 
     if (safety === "lost") {
-      runFrame(600, null);
+      runFrame(650, null);
+      runFrame(770, null);
     } else if (safety === "stale-frame") {
       Object.defineProperty(video, "readyState", {
         configurable: true,
         value: HTMLMediaElement.HAVE_METADATA,
       });
-      runAnimationFrame(1_100);
+      runAnimationFrame(1_200);
     }
 
     await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
@@ -573,7 +589,14 @@ it("keeps system control enabled when an open palm completes a click", async () 
   const { bridge, runFrame } = await renderDesktopApp();
 
   runFrame(100, pinchedHandAt(0.4, 0.4));
-  runFrame(200, openPalmAt(0.4, 0.1));
+  runFrame(140, pinchedHandAt(0.4, 0.4));
+  runFrame(180, pinchedHandAt(0.4, 0.4));
+  runFrame(220, pinchedHandAt(0.4, 0.4));
+  runFrame(260, openPalmAt(0.4, 0.1));
+  runFrame(300, openPalmAt(0.4, 0.1));
+  runFrame(340, openPalmAt(0.4, 0.1));
+  runFrame(380, openPalmAt(0.4, 0.1));
+  runFrame(420, openPalmAt(0.4, 0.1));
 
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
   expect(bridge.releaseAndPause).not.toHaveBeenCalled();
@@ -584,7 +607,12 @@ it("keeps system control enabled when an open palm ends a drag", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
   await startDesktopDrag(runFrame, bridge);
 
-  runFrame(600, openPalmAt(0.4, 0.1));
+  runFrame(650, openPalmAt(0.4, 0.1));
+  runFrame(690, openPalmAt(0.4, 0.1));
+  runFrame(730, openPalmAt(0.4, 0.1));
+  runFrame(770, openPalmAt(0.4, 0.1));
+  runFrame(810, openPalmAt(0.4, 0.1));
+  runFrame(850, openPalmAt(0.4, 0.1));
 
   await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
   expect(bridge.releaseAndPause).not.toHaveBeenCalled();

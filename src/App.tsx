@@ -25,6 +25,20 @@ const INITIAL_OUTPUT: GestureOutput = {
   scrollY: 0,
   dragStart: false,
   dragEnd: false,
+  phase: "lost",
+  candidate: null,
+  lockedGesture: null,
+  confirmationProgress: 0,
+  diagnostics: {
+    timestampMs: 0,
+    quality: 0,
+    palmScale: null,
+    leftPinchRatio: null,
+    rightPinchRatio: null,
+    doublePinchRatio: null,
+    openPalmScore: null,
+    scrollPoseScore: null,
+  },
 };
 
 const clampToViewport = (point: Point): Point => ({
