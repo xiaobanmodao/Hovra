@@ -1,9 +1,16 @@
 export interface GestureDesktopApi {
   getPermissionStatus(): Promise<"granted" | "denied">;
   activate(): Promise<boolean>;
-  move(x: number, y: number): Promise<void>;
+  move(
+    x: number,
+    y: number,
+    state?: "tracking" | "left-pinching" | "right-pinching" | "double-pinching" | "dragging" | "scrolling",
+  ): Promise<void>;
   drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
+  rightClick(): Promise<void>;
+  doubleClick(): Promise<void>;
+  scroll(deltaY: number): Promise<void>;
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
   releaseAndPause(): Promise<void>;

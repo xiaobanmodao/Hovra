@@ -5,6 +5,7 @@ const robotMocks = vi.hoisted(() => ({
   dragMouse: vi.fn(),
   mouseClick: vi.fn(),
   mouseToggle: vi.fn(),
+  scrollMouse: vi.fn(),
 }));
 
 vi.mock("@jitsi/robotjs", () => ({
@@ -12,6 +13,7 @@ vi.mock("@jitsi/robotjs", () => ({
   dragMouse: robotMocks.dragMouse,
   mouseClick: robotMocks.mouseClick,
   mouseToggle: robotMocks.mouseToggle,
+  scrollMouse: robotMocks.scrollMouse,
 }));
 
 import { systemMouse } from "./systemMouseAdapter";
@@ -55,4 +57,16 @@ it("uses the left button for click, press, and release", async () => {
     ["down", "left"],
     ["up", "left"],
   ]);
+});
+
+it("maps right click, double click, and vertical scrolling to RobotJS", async () => {
+  await systemMouse.rightClick();
+  await systemMouse.doubleClick();
+  await systemMouse.scroll(-3);
+
+  expect(robotMocks.mouseClick.mock.calls).toEqual([
+    ["right"],
+    ["left", true],
+  ]);
+  expect(robotMocks.scrollMouse).toHaveBeenCalledWith(0, -3);
 });

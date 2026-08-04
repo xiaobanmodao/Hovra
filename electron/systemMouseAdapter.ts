@@ -12,6 +12,15 @@ export const systemMouse: SystemMouseAdapter = {
   async click() {
     robot.mouseClick("left");
   },
+  async rightClick() {
+    robot.mouseClick("right");
+  },
+  async doubleClick() {
+    robot.mouseClick("left", true);
+  },
+  async scroll(deltaY) {
+    robot.scrollMouse(0, deltaY);
+  },
   async press() {
     robot.mouseToggle("down", "left");
   },

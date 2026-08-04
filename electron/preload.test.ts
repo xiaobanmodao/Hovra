@@ -23,9 +23,12 @@ import "./preload";
 type ExposedApi = Record<string, unknown> & {
   getPermissionStatus(): Promise<"granted" | "denied">;
   activate(): Promise<boolean>;
-  move(x: number, y: number): Promise<void>;
+  move(x: number, y: number, state?: string): Promise<void>;
   drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
+  rightClick(): Promise<void>;
+  doubleClick(): Promise<void>;
+  scroll(deltaY: number): Promise<void>;
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
   releaseAndPause(): Promise<void>;
@@ -56,6 +59,7 @@ describe("gestureDesktop preload bridge", () => {
     expect(Object.keys(api).sort()).toEqual([
       "activate",
       "click",
+      "doubleClick",
       "drag",
       "getPermissionStatus",
       "mouseDown",
@@ -64,6 +68,8 @@ describe("gestureDesktop preload bridge", () => {
       "onSafetyPause",
       "openAccessibilitySettings",
       "releaseAndPause",
+      "rightClick",
+      "scroll",
     ]);
     expect(api).not.toHaveProperty("ipcRenderer");
     expect(api).not.toHaveProperty("invoke");
@@ -79,9 +85,12 @@ describe("gestureDesktop preload bridge", () => {
 
     await api.getPermissionStatus();
     await api.activate();
-    await api.move(0.25, 0.75);
+    await api.move(0.25, 0.75, "right-pinching");
     await api.drag(0.75, 0.25);
     await api.click();
+    await api.rightClick();
+    await api.doubleClick();
+    await api.scroll(-4);
     await api.mouseDown();
     await api.mouseUp();
     await api.releaseAndPause();
@@ -90,9 +99,12 @@ describe("gestureDesktop preload bridge", () => {
     expect(electronMocks.invoke.mock.calls).toEqual([
       ["gesture:get-permission-status"],
       ["gesture:activate"],
-      ["gesture:move", { x: 0.25, y: 0.75 }],
+      ["gesture:move", { x: 0.25, y: 0.75, state: "right-pinching" }],
       ["gesture:drag", { x: 0.75, y: 0.25 }],
       ["gesture:click"],
+      ["gesture:right-click"],
+      ["gesture:double-click"],
+      ["gesture:scroll", { deltaY: -4 }],
       ["gesture:mouse-down"],
       ["gesture:mouse-up"],
       ["gesture:release-and-pause"],
@@ -117,6 +129,16 @@ describe("gestureDesktop preload bridge", () => {
     const api = getExposedApi();
 
     await expect(api.drag(-0.01, 0.5)).rejects.toThrow("normalized coordinates");
+    expect(electronMocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown visual states and invalid scroll deltas before IPC", async () => {
+    const api = getExposedApi();
+
+    await expect(api.move(0.5, 0.5, "unknown")).rejects.toThrow("cursor state");
+    for (const delta of [Number.NaN, Number.POSITIVE_INFINITY, 1.5, 13, -13]) {
+      await expect(api.scroll(delta)).rejects.toThrow("scroll delta");
+    }
     expect(electronMocks.invoke).not.toHaveBeenCalled();
   });
 

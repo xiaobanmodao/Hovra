@@ -1,9 +1,32 @@
 export type PermissionStatus = "granted" | "denied";
+export type CursorOverlayState =
+  | "tracking"
+  | "left-pinching"
+  | "right-pinching"
+  | "double-pinching"
+  | "dragging"
+  | "scrolling";
+
+export type CursorPulse = "left" | "right" | "double";
+
+const CURSOR_OVERLAY_STATES = new Set<CursorOverlayState>([
+  "tracking",
+  "left-pinching",
+  "right-pinching",
+  "double-pinching",
+  "dragging",
+  "scrolling",
+]);
+
+const MAX_SCROLL_DELTA = 12;
 
 export interface SystemMouseAdapter {
   move(x: number, y: number): Promise<void>;
   drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
+  rightClick(): Promise<void>;
+  doubleClick(): Promise<void>;
+  scroll(deltaY: number): Promise<void>;
   press(): Promise<void>;
   release(): Promise<void>;
 }
@@ -13,9 +36,10 @@ export interface MouseControllerDependencies {
   isActive(): boolean;
   mouse: SystemMouseAdapter;
   overlay?: {
-    show(x: number, y: number, state: "tracking" | "dragging"): void;
+    show(x: number, y: number, state: CursorOverlayState): void;
     hide(): void;
     refresh?(): void;
+    pulse?(action: CursorPulse): void;
   };
   cursor?: {
     hide(): void;
@@ -27,9 +51,12 @@ export interface MouseControllerDependencies {
 export interface MouseController {
   permissionStatus(): Promise<PermissionStatus>;
   activate(): Promise<boolean>;
-  move(x: number, y: number): Promise<void>;
+  move(x: number, y: number, state?: CursorOverlayState): Promise<void>;
   drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
+  rightClick(): Promise<void>;
+  doubleClick(): Promise<void>;
+  scroll(deltaY: number): Promise<void>;
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
   releaseAndPause(): Promise<void>;
@@ -97,6 +124,22 @@ export function createMouseController(
     return result;
   }
 
+  function performClick(
+    action: CursorPulse,
+    operation: () => Promise<void>,
+  ): Promise<void> {
+    return queueAction(async () => {
+      if (isButtonDown || !(await canAct())) {
+        return;
+      }
+
+      await operation();
+      deps.cursor?.refresh?.();
+      deps.overlay?.pulse?.(action);
+      deps.overlay?.refresh?.();
+    });
+  }
+
   return {
     permissionStatus,
 
@@ -116,12 +159,13 @@ export function createMouseController(
       return true;
     },
 
-    move(x: number, y: number): Promise<void> {
+    move(x: number, y: number, state: CursorOverlayState = "tracking"): Promise<void> {
       return queueAction(async () => {
         if (
           isButtonDown
           || !Number.isFinite(x)
           || !Number.isFinite(y)
+          || !isCursorOverlayState(state)
           || !(await canAct())
         ) {
           return;
@@ -129,7 +173,7 @@ export function createMouseController(
 
         await deps.mouse.move(x, y);
         deps.cursor?.refresh?.();
-        deps.overlay?.show(x, y, "tracking");
+        deps.overlay?.show(x, y, state);
       });
     },
 
@@ -151,12 +195,29 @@ export function createMouseController(
     },
 
     click(): Promise<void> {
+      return performClick("left", () => deps.mouse.click());
+    },
+
+    rightClick(): Promise<void> {
+      return performClick("right", () => deps.mouse.rightClick());
+    },
+
+    doubleClick(): Promise<void> {
+      return performClick("double", () => deps.mouse.doubleClick());
+    },
+
+    scroll(deltaY: number): Promise<void> {
       return queueAction(async () => {
-        if (isButtonDown || !(await canAct())) {
+        if (
+          isButtonDown
+          || !isScrollDelta(deltaY)
+          || deltaY === 0
+          || !(await canAct())
+        ) {
           return;
         }
 
-        await deps.mouse.click();
+        await deps.mouse.scroll(deltaY);
         deps.cursor?.refresh?.();
         deps.overlay?.refresh?.();
       });
@@ -219,6 +280,7 @@ export function registerMouseControllerIpc(
     await controller.move(
       bounds.x + payload.x * Math.max(0, bounds.width - 1),
       bounds.y + payload.y * Math.max(0, bounds.height - 1),
+      payload.state ?? "tracking",
     );
   });
   ipcMain.handle("gesture:drag", async (event, payload) => {
@@ -238,6 +300,27 @@ export function registerMouseControllerIpc(
     }
 
     return controller.click();
+  });
+  ipcMain.handle("gesture:right-click", (event) => {
+    if (!security.isTrustedEvent(event)) {
+      return Promise.resolve();
+    }
+
+    return controller.rightClick();
+  });
+  ipcMain.handle("gesture:double-click", (event) => {
+    if (!security.isTrustedEvent(event)) {
+      return Promise.resolve();
+    }
+
+    return controller.doubleClick();
+  });
+  ipcMain.handle("gesture:scroll", (event, payload) => {
+    if (!security.isTrustedEvent(event) || !isScrollPayload(payload)) {
+      return Promise.resolve();
+    }
+
+    return controller.scroll(payload.deltaY);
   });
   ipcMain.handle("gesture:mouse-down", (event) => {
     if (!security.isTrustedEvent(event)) {
@@ -276,12 +359,12 @@ export async function pauseForLifecycle(
 
 function isNormalizedMovePayload(
   payload: unknown,
-): payload is { x: number; y: number } {
+): payload is { x: number; y: number; state?: CursorOverlayState } {
   if (typeof payload !== "object" || payload === null) {
     return false;
   }
 
-  const candidate = payload as { x?: unknown; y?: unknown };
+  const candidate = payload as { x?: unknown; y?: unknown; state?: unknown };
   return (
     typeof candidate.x === "number" &&
     Number.isFinite(candidate.x) &&
@@ -290,6 +373,25 @@ function isNormalizedMovePayload(
     typeof candidate.y === "number" &&
     Number.isFinite(candidate.y) &&
     candidate.y >= 0 &&
-    candidate.y <= 1
+    candidate.y <= 1 &&
+    (candidate.state === undefined || isCursorOverlayState(candidate.state))
   );
+}
+
+function isCursorOverlayState(value: unknown): value is CursorOverlayState {
+  return typeof value === "string" && CURSOR_OVERLAY_STATES.has(value as CursorOverlayState);
+}
+
+function isScrollDelta(value: unknown): value is number {
+  return typeof value === "number"
+    && Number.isFinite(value)
+    && Number.isInteger(value)
+    && Math.abs(value) <= MAX_SCROLL_DELTA;
+}
+
+function isScrollPayload(payload: unknown): payload is { deltaY: number } {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+  return isScrollDelta((payload as { deltaY?: unknown }).deltaY);
 }
