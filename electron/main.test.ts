@@ -6,9 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 interface CapturedControllerDependencies {
   isActive(): boolean;
   overlay?: {
-    show(x: number, y: number, state: "tracking" | "dragging"): void;
+    show(
+      x: number,
+      y: number,
+      state: "tracking" | "left-pinching" | "right-pinching" | "double-pinching" | "dragging" | "scrolling",
+    ): void;
     hide(): void;
     refresh?(): void;
+    pulse?(action: "left" | "right" | "double"): void;
   };
 }
 
@@ -223,6 +228,11 @@ describe("main BrowserWindow security", () => {
     );
     expect(overlayDocument).toContain("cursor:none");
     expect(overlayDocument).toContain("background:transparent");
+    expect(overlayDocument).toContain(".cursor.left-pinching");
+    expect(overlayDocument).toContain(".cursor.right-pinching");
+    expect(overlayDocument).toContain(".cursor.double-pinching");
+    expect(overlayDocument).toContain(".cursor.scrolling");
+    expect(overlayDocument).toContain("@keyframes click-pulse");
   });
 
   it("destroys the cursor overlay with the main renderer", async () => {
@@ -255,6 +265,39 @@ describe("main BrowserWindow security", () => {
       "Input.dispatchMouseEvent",
       { type: "mouseMoved", x: 20, y: 20 },
     );
+  });
+
+  it("forwards every live visual state and restarts action pulses", async () => {
+    await bootMain("http://localhost:5173");
+    const overlay = mainMocks.windows[1];
+
+    for (const state of [
+      "left-pinching",
+      "right-pinching",
+      "double-pinching",
+      "dragging",
+      "scrolling",
+    ] as const) {
+      mainMocks.controllerDependencies?.overlay?.show(600, 400, state);
+    }
+    mainMocks.controllerDependencies?.overlay?.pulse?.("left");
+    mainMocks.controllerDependencies?.overlay?.pulse?.("left");
+
+    const scripts = overlay.webContents.executeJavaScript.mock.calls.map(
+      ([script]) => String(script),
+    );
+    for (const state of [
+      "left-pinching",
+      "right-pinching",
+      "double-pinching",
+      "dragging",
+      "scrolling",
+    ]) {
+      expect(scripts.some((script) => script.includes(`\"state\":\"${state}\"`))).toBe(true);
+    }
+    const pulses = scripts.filter((script) => script.includes(`\"pulse\":\"left\"`));
+    expect(pulses).toHaveLength(2);
+    expect(pulses[0]).not.toBe(pulses[1]);
   });
 
   it("hides the cursor overlay without changing its last calibrated position", async () => {
