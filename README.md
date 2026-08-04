@@ -1,6 +1,6 @@
-# Hand Gesture Control
+# 手势控制
 
-A browser-only hand gesture control demo. Recognition runs locally in the browser; no video frames are uploaded.
+基于普通摄像头的本机手势控制应用。当前只启用光标移动、拇指与食指捏合左键点击、张开手掌停止。识别和个人校准全部在本机完成，不上传摄像头画面。
 
 ## Commands
 
@@ -27,7 +27,7 @@ uploaded.
 
 Use this checklist on an Apple silicon Mac with a camera before accepting the
 Electron package. Acceptance must use the exact packaged application at
-`out/hand-gesture-control-darwin-arm64/hand-gesture-control.app`, not the Vite
+`out/手势控制-darwin-arm64/手势控制.app`, not the Vite
 browser page or `electron:dev`. Do not enable system control until you are ready
 to test the physical pointer.
 
@@ -58,14 +58,11 @@ Gatekeeper system-wide; if macOS blocks the first launch, use Finder's normal
    or enable that exact packaged `.app`. Return to the app and confirm its status
    changes from **Permission required** to **Paused**.
 5. Click **Enable system control**, then verify a tracked index finger moves the
-   system pointer, a short pinch clicks, and a held pinch starts and releases a
-   drag.
-6. Verify every safety pause: click **Pause system control**; open the palm;
-   remove the hand or stop the camera stream; move focus away from the app; and
-   deactivate the app. Each action must pause control and release any held mouse
-   button.
-7. Start a drag, quit the app while the mouse button is held, and confirm the
-   system pointer is released.
+   system pointer, a complete pinch-and-release produces exactly one left click,
+   and an open palm stops movement.
+6. Verify every safety pause: click **Pause system control**; open the palm; and
+   remove the hand or stop the camera stream. No disabled right-click, double-click,
+   drag, or scroll action may be emitted.
 
 ## Manual verification checklist
 
@@ -75,8 +72,7 @@ After starting the demo locally, perform these acceptance checks:
 - [ ] Confirm the camera preview and keypoints are mirrored.
 - [ ] Move the index finger and observe the cursor move.
 - [ ] Perform a short pinch on the target and observe exactly one click.
-- [ ] Hold a pinch for at least 350 ms, move, then release; confirm the card moves.
-- [ ] Confirm both objects can be operated anywhere in the current viewport and remain visible after resizing.
+- [ ] Confirm the click target can be operated throughout the current viewport and remains visible after resizing.
 - [ ] Open the palm and confirm the cursor no longer moves.
 - [ ] Remove the hand and confirm the status changes to `lost`.
 - [ ] Reload the page, deny camera access, and confirm guidance appears.
@@ -88,6 +84,21 @@ are required for the interactive checks. If a physical camera or permission prom
 is unavailable in the test environment, perform these steps on a local desktop
 browser before accepting the demo.
 
+## 自适应捏合正式验收
+
+先在校准面板运行一次“个人点击校准”：自然移动 3 秒，记录 5 次正面真实接触、5 次侧向或斜向真实接触、3 次画面重合但空间不接触。校准仅保存距离、质量和边界数值；诊断轨迹包含手部关键点和派生数值，但不包含图片或视频。
+
+固定验收指标：
+
+- [ ] 至少 200 次真实捏合，覆盖正面、侧面、斜面，近/中/远距离和两种光照；召回率不低于 98%。
+- [ ] 连续 30 分钟负样本，覆盖二维重合但空间分离、握拳、张手、快速经过和手部进出画面；误触不超过 1 次，目标为 0。
+- [ ] 每次完整捏合只产生一次点击，重复点击为 0。
+- [ ] 接触到锁定的 P95 延迟不超过 100 毫秒。
+- [ ] 诊断面板有效帧率不低于 30 帧/秒，`detectForVideo` 推理耗时 P95 不超过 12 毫秒。
+- [ ] 世界坐标短暂抖动或缺失时，真实捏合仍可通过短窗口多证据投票；可靠世界深度分离时不得点击。
+
+如果有效帧率低于 30 或推理 P95 超过 12 毫秒，先停止调整识别阈值，建立独立 Worker 性能计划；不得通过放宽防误触条件掩盖性能问题。
+
 ## Microsoft Edge calibration record
 
 Run this checklist in a current desktop version of Microsoft Edge with the
@@ -96,17 +107,14 @@ values and observations from the same camera session.
 
 - [ ] Movement: move the index finger throughout the viewport; note cursor responsiveness, stability and any jitter.
 - [ ] Click: perform at least five short pinches on the target; note missed clicks or duplicate clicks.
-- [ ] Drag: hold a pinch past the configured delay, move the card, then release; note drag-start timing and release reliability.
 - [ ] Pause: open the palm while moving; note whether cursor movement pauses promptly and resumes cleanly.
 
 Record the Edge test result before accepting tuned defaults:
 
 - Date / Edge version / operating system: `________________`
 - Camera and lighting: `________________`
-- Final pinch threshold: `________` (default `0.055`)
+- Personal pinch calibration: `enabled / default`
 - Final cursor smoothing factor: `________` (default `0.20`)
-- Final drag hold: `________ ms` (default `350 ms`)
 - Movement observations: `________________`
 - Click observations: `________________`
-- Drag observations: `________________`
 - Pause observations: `________________`

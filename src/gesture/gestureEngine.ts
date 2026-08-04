@@ -7,7 +7,7 @@ import {
 import { GestureClassifier } from "./gestureClassifier";
 import { extractGestureFeatures, type GestureFeatures } from "./gestureFeatures";
 import { GestureStabilizer, type GestureStabilizerOutput } from "./gestureStabilizer";
-import { GestureTraceBuffer, type GestureTrace, type TraceGestureEvent } from "./gestureTrace";
+import { GestureTraceBuffer, type GestureTraceV3, type TraceGestureEvent } from "./gestureTrace";
 import { buildHandGeometry, type HandGeometry } from "./handGeometry";
 import { PinchFeatureExtractor, type PinchFrameFeatures } from "./pinchFeatures";
 import {
@@ -103,7 +103,7 @@ export class GestureEngine {
     return output;
   }
 
-  getTrace(): GestureTrace {
+  getTrace(): GestureTraceV3 {
     return this.trace.snapshot();
   }
 
