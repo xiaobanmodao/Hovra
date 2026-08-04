@@ -31,6 +31,9 @@ const mainMocks = vi.hoisted(() => ({
   ipcSecurity: undefined as CapturedIpcSecurity | undefined,
   ipcHandlers: new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>(),
   openExternal: vi.fn().mockResolvedValue(undefined),
+  buildFromTemplate: vi.fn((template: unknown[]) => template),
+  setApplicationMenu: vi.fn(),
+  setName: vi.fn(),
   saveGestureTrace: vi.fn().mockResolvedValue("saved"),
   isTrustedAccessibilityClient: vi.fn().mockReturnValue(true),
   mouse: {
@@ -114,6 +117,7 @@ vi.mock("electron", () => {
   return {
     app: {
       enableSandbox: vi.fn(),
+      setName: mainMocks.setName,
       whenReady: vi.fn().mockResolvedValue(undefined),
       on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
         mainMocks.appHandlers.set(event, listener);
@@ -121,6 +125,10 @@ vi.mock("electron", () => {
       quit: vi.fn(),
     },
     BrowserWindow,
+    Menu: {
+      buildFromTemplate: mainMocks.buildFromTemplate,
+      setApplicationMenu: mainMocks.setApplicationMenu,
+    },
     ipcMain: {
       handle: vi.fn((channel: string, handler: (event: unknown) => Promise<unknown>) => {
         mainMocks.ipcHandlers.set(channel, handler);
@@ -191,6 +199,19 @@ beforeEach(() => {
 });
 
 describe("main BrowserWindow security", () => {
+  it("sets a Chinese native window title and application menu", async () => {
+    const window = await bootMain("http://localhost:5173");
+
+    expect(window.options).toMatchObject({ title: "手势控制" });
+    expect(mainMocks.setName).toHaveBeenCalledWith("手势控制");
+    expect(mainMocks.setApplicationMenu).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ label: "手势控制" }),
+      expect.objectContaining({ label: "编辑" }),
+      expect.objectContaining({ label: "视图" }),
+      expect.objectContaining({ label: "窗口" }),
+    ]));
+  });
+
   it("uses sandboxed renderer flags and loads only the configured dev URL", async () => {
     const window = await bootMain("http://localhost:5173");
 

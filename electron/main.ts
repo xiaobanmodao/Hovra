@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  Menu,
   screen,
   shell,
   systemPreferences,
@@ -34,6 +35,7 @@ declare const MAIN_WINDOW_VITE_NAME: string;
 const ACCESSIBILITY_SETTINGS_URL =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 const CURSOR_OVERLAY_SIZE = 40;
+const APP_NAME = "手势控制";
 
 app.enableSandbox();
 
@@ -51,6 +53,7 @@ let quitCleanupComplete = false;
 function createMainWindow(): BrowserWindow {
   let rendererGeneration = 0;
   const createdWindow = new BrowserWindow({
+    title: APP_NAME,
     width: 1200,
     height: 800,
     webPreferences: {
@@ -148,6 +151,59 @@ function createMainWindow(): BrowserWindow {
   }
 
   return createdWindow;
+}
+
+function configureChineseNativeInterface(): void {
+  app.setName(APP_NAME);
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: APP_NAME,
+      submenu: [
+        { label: `关于${APP_NAME}`, role: "about" },
+        { type: "separator" },
+        { label: `隐藏${APP_NAME}`, role: "hide" },
+        { label: "隐藏其他", role: "hideOthers" },
+        { label: "显示全部", role: "unhide" },
+        { type: "separator" },
+        { label: `退出${APP_NAME}`, role: "quit" },
+      ],
+    },
+    {
+      label: "编辑",
+      submenu: [
+        { label: "撤销", role: "undo" },
+        { label: "重做", role: "redo" },
+        { type: "separator" },
+        { label: "剪切", role: "cut" },
+        { label: "复制", role: "copy" },
+        { label: "粘贴", role: "paste" },
+        { label: "全选", role: "selectAll" },
+      ],
+    },
+    {
+      label: "视图",
+      submenu: [
+        { label: "重新加载", role: "reload" },
+        { label: "强制重新加载", role: "forceReload" },
+        { label: "切换开发者工具", role: "toggleDevTools" },
+        { type: "separator" },
+        { label: "实际大小", role: "resetZoom" },
+        { label: "放大", role: "zoomIn" },
+        { label: "缩小", role: "zoomOut" },
+        { type: "separator" },
+        { label: "切换全屏", role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "窗口",
+      submenu: [
+        { label: "最小化", role: "minimize" },
+        { label: "缩放", role: "zoom" },
+        { type: "separator" },
+        { label: "关闭窗口", role: "close" },
+      ],
+    },
+  ]));
 }
 
 function createCursorOverlay(): BrowserWindow {
@@ -334,6 +390,7 @@ function canActivateRendererEvent(event: unknown): boolean {
 }
 
 void app.whenReady().then(() => {
+  configureChineseNativeInterface();
   cursorVisibility = createNativeCursorVisibility();
   mouseController = createMouseController({
     permission: () =>
