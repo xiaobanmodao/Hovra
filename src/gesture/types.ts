@@ -51,6 +51,8 @@ export type GestureDiagnosticsSnapshot = {
   quality: number;
   palmScale: number | null;
   leftPinchRatio: number | null;
+  worldLeftPinchRatio: number | null;
+  pinchDepthReliable: boolean;
   rightPinchRatio: number | null;
   doublePinchRatio: number | null;
   openPalmScore: number | null;

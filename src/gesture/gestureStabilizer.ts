@@ -2,6 +2,7 @@ import type { GestureCandidate, GestureKind, GesturePhase } from "./types";
 
 export type GestureStabilizerOptions = {
   entryMs?: number;
+  pinchEntryMs?: number;
   scrollEntryMs?: number;
   releaseMs?: number;
   cooldownMs?: number;
@@ -20,6 +21,7 @@ export type GestureStabilizerOutput = {
 
 export class GestureStabilizer {
   private readonly entryMs: number;
+  private readonly pinchEntryMs: number;
   private readonly scrollEntryMs: number;
   private readonly releaseMs: number;
   private readonly cooldownMs: number;
@@ -34,6 +36,7 @@ export class GestureStabilizer {
 
   constructor(options: GestureStabilizerOptions = {}) {
     this.entryMs = validDuration(options.entryMs, 16);
+    this.pinchEntryMs = validDuration(options.pinchEntryMs, 48);
     this.scrollEntryMs = validDuration(options.scrollEntryMs, 16);
     this.releaseMs = validDuration(options.releaseMs, 16);
     this.cooldownMs = validDuration(options.cooldownMs, 50);
@@ -98,7 +101,11 @@ export class GestureStabilizer {
       this.candidateKind = candidate.kind;
       this.candidateStartedAt = nowMs;
     }
-    const requiredMs = candidate.kind === "scroll" ? this.scrollEntryMs : this.entryMs;
+    const requiredMs = candidate.kind === "left"
+      ? this.pinchEntryMs
+      : candidate.kind === "scroll"
+        ? this.scrollEntryMs
+        : this.entryMs;
     const elapsed = nowMs - (this.candidateStartedAt ?? nowMs);
     const progress = Math.max(0, Math.min(1, elapsed / requiredMs));
     if (elapsed < requiredMs) {

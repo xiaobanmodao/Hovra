@@ -24,7 +24,7 @@ describe("saveGestureTrace", () => {
     }));
     expect(deps.writeFile).toHaveBeenCalledWith(
       "/tmp/gesture-trace.json",
-      JSON.stringify({ version: 1, frames: [] }, null, 2),
+      JSON.stringify({ version: 2, frames: [] }, null, 2),
       "utf8",
     );
   });
@@ -37,7 +37,7 @@ describe("saveGestureTrace", () => {
 
   it("rejects malformed traces and reports write failures", async () => {
     const deps = dependencies();
-    await expect(saveGestureTrace('{"version":2,"frames":[]}', deps)).rejects.toThrow();
+    await expect(saveGestureTrace('{"version":3,"frames":[]}', deps)).rejects.toThrow();
     expect(deps.showSaveDialog).not.toHaveBeenCalled();
 
     const failing = dependencies();

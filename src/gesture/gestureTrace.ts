@@ -19,6 +19,8 @@ export type TraceGestureEvent =
 
 export type GestureTraceFeatures = {
   leftPinchRatio: number;
+  worldLeftPinchRatio: number | null;
+  pinchDepthReliable: boolean;
   rightPinchRatio: number;
   doublePinchRatio: number;
   openPalmScore: number;
@@ -29,6 +31,7 @@ export type GestureTraceFeatures = {
 export type GestureTraceFrame = {
   t: number;
   landmarks: Landmark[] | null;
+  worldLandmarks: Landmark[] | null;
   quality: number;
   features: GestureTraceFeatures | null;
   phase: TraceGesturePhase;
@@ -38,14 +41,25 @@ export type GestureTraceFrame = {
   events: TraceGestureEvent[];
 };
 
-export type GestureTrace = {
-  version: 1;
+export type GestureTraceV2 = {
+  version: 2;
   frames: GestureTraceFrame[];
 };
 
+export type LegacyGestureTraceFrame = Omit<GestureTraceFrame, "worldLandmarks" | "features"> & {
+  features: Omit<GestureTraceFeatures, "worldLeftPinchRatio" | "pinchDepthReliable"> | null;
+};
+
+export type LegacyGestureTrace = {
+  version: 1;
+  frames: LegacyGestureTraceFrame[];
+};
+
+export type GestureTrace = GestureTraceV2 | LegacyGestureTrace;
+
 const MAX_TRACE_BYTES = 2 * 1024 * 1024;
 const MAX_TRACE_FRAMES = 600;
-const FRAME_KEYS = [
+const LEGACY_FRAME_KEYS = [
   "t",
   "landmarks",
   "quality",
@@ -56,8 +70,30 @@ const FRAME_KEYS = [
   "lockedGesture",
   "events",
 ] as const;
+const FRAME_KEYS = [
+  "t",
+  "landmarks",
+  "worldLandmarks",
+  "quality",
+  "features",
+  "phase",
+  "candidate",
+  "confirmationProgress",
+  "lockedGesture",
+  "events",
+] as const;
+const LEGACY_FEATURE_KEYS = [
+  "leftPinchRatio",
+  "rightPinchRatio",
+  "doublePinchRatio",
+  "openPalmScore",
+  "scrollPoseScore",
+  "palmScale",
+] as const;
 const FEATURE_KEYS = [
   "leftPinchRatio",
+  "worldLeftPinchRatio",
+  "pinchDepthReliable",
   "rightPinchRatio",
   "doublePinchRatio",
   "openPalmScore",
@@ -85,7 +121,7 @@ export class GestureTraceBuffer {
   }
 
   push(frame: GestureTraceFrame): void {
-    const copy = validateAndCopyFrame(frame);
+    const copy = validateAndCopyFrame(frame, 2);
     const newest = this.frames.at(-1);
     if (newest && copy.t < newest.t) {
       throw new TypeError("Gesture trace timestamps must be monotonic");
@@ -100,10 +136,10 @@ export class GestureTraceBuffer {
     }
   }
 
-  snapshot(): GestureTrace {
+  snapshot(): GestureTraceV2 {
     return {
-      version: 1,
-      frames: this.frames.map(validateAndCopyFrame),
+      version: 2,
+      frames: this.frames.map((frame) => validateAndCopyFrame(frame, 2)),
     };
   }
 
@@ -112,7 +148,7 @@ export class GestureTraceBuffer {
   }
 }
 
-export function parseGestureTrace(json: string): GestureTrace {
+export function parseGestureTrace(json: string): GestureTraceV2 {
   if (typeof json !== "string" || new TextEncoder().encode(json).byteLength > MAX_TRACE_BYTES) {
     throw new TypeError("Gesture trace must not exceed 2 MiB");
   }
@@ -127,27 +163,28 @@ export function parseGestureTrace(json: string): GestureTrace {
     throw new TypeError("Gesture trace must be an object");
   }
   assertOnlyKeys(value, ["version", "frames"]);
-  if (value.version !== 1 || !Array.isArray(value.frames)) {
-    throw new TypeError("Gesture trace requires version 1 and frames");
+  if ((value.version !== 1 && value.version !== 2) || !Array.isArray(value.frames)) {
+    throw new TypeError("Gesture trace requires version 1 or 2 and frames");
   }
   if (value.frames.length > MAX_TRACE_FRAMES) {
     throw new TypeError("Gesture trace must contain at most 600 frames");
   }
 
-  const frames = value.frames.map(validateAndCopyFrame);
+  const version = value.version;
+  const frames = value.frames.map((frame) => validateAndCopyFrame(frame, version));
   for (let index = 1; index < frames.length; index += 1) {
     if (frames[index].t < frames[index - 1].t) {
       throw new TypeError("Gesture trace timestamps must be monotonic");
     }
   }
-  return { version: 1, frames };
+  return { version: 2, frames };
 }
 
-function validateAndCopyFrame(value: unknown): GestureTraceFrame {
+function validateAndCopyFrame(value: unknown, version: 1 | 2): GestureTraceFrame {
   if (!isRecord(value)) {
     throw new TypeError("Gesture trace frame must be an object");
   }
-  assertOnlyKeys(value, FRAME_KEYS);
+  assertOnlyKeys(value, version === 1 ? LEGACY_FRAME_KEYS : FRAME_KEYS);
   assertFinite(value.t);
   assertUnitInterval(value.quality);
   assertUnitInterval(value.confirmationProgress);
@@ -165,8 +202,9 @@ function validateAndCopyFrame(value: unknown): GestureTraceFrame {
   return {
     t: value.t as number,
     landmarks: validateLandmarks(value.landmarks),
+    worldLandmarks: version === 1 ? null : validateLandmarks(value.worldLandmarks),
     quality: value.quality as number,
-    features: validateFeatures(value.features),
+    features: validateFeatures(value.features, version),
     phase: value.phase as TraceGesturePhase,
     candidate,
     confirmationProgress: value.confirmationProgress as number,
@@ -196,18 +234,36 @@ function validateLandmarks(value: unknown): Landmark[] | null {
   });
 }
 
-function validateFeatures(value: unknown): GestureTraceFeatures | null {
+function validateFeatures(value: unknown, version: 1 | 2): GestureTraceFeatures | null {
   if (value === null) {
     return null;
   }
   if (!isRecord(value)) {
     throw new TypeError("Gesture trace features must be an object");
   }
-  assertOnlyKeys(value, FEATURE_KEYS);
-  for (const key of FEATURE_KEYS) {
+  const numericKeys = version === 1
+    ? LEGACY_FEATURE_KEYS
+    : FEATURE_KEYS.filter((key) => key !== "worldLeftPinchRatio" && key !== "pinchDepthReliable");
+  assertOnlyKeys(value, version === 1 ? LEGACY_FEATURE_KEYS : FEATURE_KEYS);
+  for (const key of numericKeys) {
     assertFinite(value[key]);
   }
-  return Object.fromEntries(FEATURE_KEYS.map((key) => [key, value[key]])) as GestureTraceFeatures;
+  if (version === 2) {
+    if (value.worldLeftPinchRatio !== null) assertFinite(value.worldLeftPinchRatio);
+    if (typeof value.pinchDepthReliable !== "boolean") {
+      throw new TypeError("Gesture trace pinch depth reliability must be boolean");
+    }
+  }
+  return {
+    leftPinchRatio: value.leftPinchRatio as number,
+    worldLeftPinchRatio: version === 1 ? null : value.worldLeftPinchRatio as number | null,
+    pinchDepthReliable: version === 1 ? false : value.pinchDepthReliable as boolean,
+    rightPinchRatio: value.rightPinchRatio as number,
+    doublePinchRatio: value.doublePinchRatio as number,
+    openPalmScore: value.openPalmScore as number,
+    scrollPoseScore: value.scrollPoseScore as number,
+    palmScale: value.palmScale as number,
+  };
 }
 
 function validateKind(value: unknown): TraceGestureKind | null {

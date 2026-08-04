@@ -32,6 +32,8 @@ export type FingerExtension = {
 
 export type GestureFeatures = {
   leftPinchRatio: number;
+  worldLeftPinchRatio: number | null;
+  pinchDepthReliable: boolean;
   rightPinchRatio: number;
   doublePinchRatio: number;
   fingerExtension: FingerExtension;
@@ -40,7 +42,10 @@ export type GestureFeatures = {
   palmScale: number;
 };
 
-export function extractGestureFeatures(geometry: HandGeometry): GestureFeatures {
+export function extractGestureFeatures(
+  geometry: HandGeometry,
+  worldGeometry: HandGeometry | null = null,
+): GestureFeatures {
   const points = geometry.landmarks;
   const fingerExtension: FingerExtension = {
     index: extension(points, INDEX_FINGER_MCP, INDEX_FINGER_PIP, INDEX_FINGER_DIP, INDEX_FINGER_TIP),
@@ -69,6 +74,8 @@ export function extractGestureFeatures(geometry: HandGeometry): GestureFeatures 
 
   return {
     leftPinchRatio: geometry.pinchRatios.left,
+    worldLeftPinchRatio: worldGeometry?.pinchRatios.left ?? null,
+    pinchDepthReliable: worldGeometry !== null,
     rightPinchRatio: geometry.pinchRatios.right,
     doublePinchRatio: geometry.pinchRatios.double,
     fingerExtension,

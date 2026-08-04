@@ -50,6 +50,8 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
           <dd>{[diagnostics.leftPinchRatio, diagnostics.rightPinchRatio, diagnostics.doublePinchRatio]
             .map((value) => numberOrDash(value)).join(" / ")}</dd>
         </div>
+        <div><dt>世界捏合比例</dt><dd>{numberOrDash(diagnostics.worldLeftPinchRatio)}</dd></div>
+        <div><dt>深度验证</dt><dd>{diagnostics.pinchDepthReliable ? "可靠" : "不可用"}</dd></div>
         <div><dt>滚动评分</dt><dd>{numberOrDash(diagnostics.scrollPoseScore)}</dd></div>
         <div><dt>质量</dt><dd>{Math.round(diagnostics.quality * 100)}%</dd></div>
       </dl>

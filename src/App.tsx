@@ -36,6 +36,8 @@ const INITIAL_OUTPUT: GestureOutput = {
     quality: 0,
     palmScale: null,
     leftPinchRatio: null,
+    worldLeftPinchRatio: null,
+    pinchDepthReliable: false,
     rightPinchRatio: null,
     doublePinchRatio: null,
     openPalmScore: null,
@@ -294,16 +296,18 @@ function App() {
           staleFrameHandled = false;
 
           let failed = false;
-          const nextLandmarks = detectFirstHand(landmarker, video, nowMs, () => {
+          const detectedHand = detectFirstHand(landmarker, video, nowMs, () => {
             failed = true;
             setTrackerStatus("识别出错，请重新加载后重试");
           });
-          const nextOutput = engine.update(nextLandmarks, nowMs);
+          const nextLandmarks = detectedHand?.landmarks ?? null;
+          const nextWorldLandmarks = detectedHand?.worldLandmarks ?? null;
+          const nextOutput = engine.update(nextLandmarks, nowMs, nextWorldLandmarks);
 
           setLandmarks(nextLandmarks);
           setOutput(nextOutput);
           if (!failed) {
-            setTrackerStatus(nextLandmarks ? "已检测到手部" : "未检测到手部");
+            setTrackerStatus(detectedHand ? "已检测到手部" : "未检测到手部");
           }
 
           if (

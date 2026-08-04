@@ -22,6 +22,8 @@ const idle: GestureOutput = {
     quality: 1,
     palmScale: null,
     leftPinchRatio: null,
+    worldLeftPinchRatio: null,
+    pinchDepthReliable: false,
     rightPinchRatio: null,
     doublePinchRatio: null,
     openPalmScore: null,

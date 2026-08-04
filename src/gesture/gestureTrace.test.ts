@@ -15,9 +15,12 @@ const hand = (): Landmark[] => Array.from(
 const frameAt = (t: number): GestureTraceFrame => ({
   t,
   landmarks: hand(),
+  worldLandmarks: hand(),
   quality: 1,
   features: {
     leftPinchRatio: 0.2,
+    worldLeftPinchRatio: 0.22,
+    pinchDepthReliable: true,
     rightPinchRatio: 0.6,
     doublePinchRatio: 0.7,
     openPalmScore: 0.1,
@@ -32,6 +35,25 @@ const frameAt = (t: number): GestureTraceFrame => ({
 });
 
 describe("GestureTraceBuffer", () => {
+  it("stores world landmarks in version 2 and copies them defensively", () => {
+    const buffer = new GestureTraceBuffer();
+    const input = {
+      ...frameAt(10),
+      worldLandmarks: hand(),
+      features: {
+        ...frameAt(10).features!,
+        worldLeftPinchRatio: 0.24,
+        pinchDepthReliable: true,
+      },
+    };
+
+    buffer.push(input);
+    input.worldLandmarks[0]!.x = 99;
+
+    expect(buffer.snapshot()).toMatchObject({ version: 2 });
+    expect(buffer.snapshot().frames[0]!.worldLandmarks?.[0]!.x).toBe(0);
+  });
+
   it("keeps only frames within the configured trailing time window", () => {
     const buffer = new GestureTraceBuffer(10_000);
 
@@ -84,6 +106,27 @@ describe("GestureTraceBuffer", () => {
       frames: [{ ...buffer.snapshot().frames[0], image: "private" }],
     });
     expect(() => parseGestureTrace(withImage)).toThrow("unknown field");
+  });
+
+  it("migrates a valid version 1 trace without inventing world depth", () => {
+    const currentFrame = frameAt(16);
+    const { worldLandmarks: _worldLandmarks, features, ...legacyFields } = currentFrame;
+    const {
+      worldLeftPinchRatio: _worldLeftPinchRatio,
+      pinchDepthReliable: _pinchDepthReliable,
+      ...legacyFeatures
+    } = features!;
+    const legacyFrame = { ...legacyFields, features: legacyFeatures };
+    const parsed = parseGestureTrace(JSON.stringify({ version: 1, frames: [legacyFrame] }));
+
+    expect(parsed.version).toBe(2);
+    expect(parsed.frames[0]).toMatchObject({
+      worldLandmarks: null,
+      features: {
+        worldLeftPinchRatio: null,
+        pinchDepthReliable: false,
+      },
+    });
   });
 
   it("rejects traces above the frame and byte limits", () => {

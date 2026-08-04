@@ -14,10 +14,13 @@ export class GestureClassifier {
       return this.classifyLocked(features, lockedGesture);
     }
 
-    if (features.leftPinchRatio <= this.thresholds.pinchEnterRatio) {
+    if (hasPinchEvidence(features, this.thresholds.pinchEnterRatio)) {
       return {
         kind: "left",
-        score: pinchScore(features.leftPinchRatio, this.thresholds),
+        score: Math.min(
+          pinchScore(features.leftPinchRatio, this.thresholds),
+          pinchScore(features.worldLeftPinchRatio!, this.thresholds),
+        ),
       };
     }
 
@@ -34,10 +37,23 @@ export class GestureClassifier {
         : null;
     }
 
-    return features.leftPinchRatio <= this.thresholds.pinchExitRatio
-      ? { kind: "left", score: pinchScore(features.leftPinchRatio, this.thresholds) }
+    return hasPinchEvidence(features, this.thresholds.pinchExitRatio)
+      ? {
+          kind: "left",
+          score: Math.min(
+            pinchScore(features.leftPinchRatio, this.thresholds),
+            pinchScore(features.worldLeftPinchRatio!, this.thresholds),
+          ),
+        }
       : null;
   }
+}
+
+function hasPinchEvidence(features: GestureFeatures, threshold: number): boolean {
+  return features.pinchDepthReliable
+    && features.worldLeftPinchRatio !== null
+    && features.leftPinchRatio <= threshold
+    && features.worldLeftPinchRatio <= threshold;
 }
 
 function pinchScore(ratio: number, thresholds: GestureThresholds): number {

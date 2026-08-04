@@ -30,11 +30,18 @@ export class GestureEngine {
     this.classifier = new GestureClassifier(settings.gestureSensitivity);
   }
 
-  update(landmarks: Landmark[] | null, nowMs: number): GestureOutput {
+  update(
+    landmarks: Landmark[] | null,
+    nowMs: number,
+    worldLandmarks: Landmark[] | null = null,
+  ): GestureOutput {
     const filtered = this.filter.update(landmarks, nowMs);
     const cursorGeometry = buildHandGeometry(filtered);
     const actionGeometry = buildHandGeometry(landmarks);
-    const features = actionGeometry ? extractGestureFeatures(actionGeometry) : null;
+    const worldGeometry = buildHandGeometry(worldLandmarks);
+    const features = actionGeometry
+      ? extractGestureFeatures(actionGeometry, worldGeometry)
+      : null;
     const candidate = features
       ? this.classifier.classify(features, this.stabilizer.lockedGesture)
       : null;
@@ -46,7 +53,7 @@ export class GestureEngine {
     }
 
     if (stabilized.released !== null) {
-      if (stabilized.released === "left") {
+      if (stabilized.released === "left" && features?.pinchDepthReliable) {
         events.click = true;
       }
     }
@@ -60,7 +67,7 @@ export class GestureEngine {
       nowMs,
       events,
     );
-    this.recordTrace(landmarks, output, features, nowMs);
+    this.recordTrace(landmarks, worldLandmarks, output, features, nowMs);
     return output;
   }
 
@@ -109,6 +116,7 @@ export class GestureEngine {
 
   private recordTrace(
     landmarks: Landmark[] | null,
+    worldLandmarks: Landmark[] | null,
     output: GestureOutput,
     features: GestureFeatures | null,
     nowMs: number,
@@ -122,9 +130,12 @@ export class GestureEngine {
     this.trace.push({
       t: relativeTimestamp,
       landmarks,
+      worldLandmarks,
       quality: features ? 1 : 0,
       features: features ? {
         leftPinchRatio: features.leftPinchRatio,
+        worldLeftPinchRatio: features.worldLeftPinchRatio,
+        pinchDepthReliable: features.pinchDepthReliable,
         rightPinchRatio: features.rightPinchRatio,
         doublePinchRatio: features.doublePinchRatio,
         openPalmScore: features.openPalmScore,
@@ -146,6 +157,8 @@ function diagnosticsFor(features: GestureFeatures | null, timestampMs: number): 
     quality: features ? 1 : 0,
     palmScale: features?.palmScale ?? null,
     leftPinchRatio: features?.leftPinchRatio ?? null,
+    worldLeftPinchRatio: features?.worldLeftPinchRatio ?? null,
+    pinchDepthReliable: features?.pinchDepthReliable ?? false,
     rightPinchRatio: features?.rightPinchRatio ?? null,
     doublePinchRatio: features?.doublePinchRatio ?? null,
     openPalmScore: features?.openPalmScore ?? null,

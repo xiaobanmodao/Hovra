@@ -7,6 +7,11 @@ const HAND_LANDMARKER_MODEL_URL = "https://storage.googleapis.com/mediapipe-mode
 type HandDetector = Pick<HandLandmarker, "detectForVideo">;
 type ErrorReporter = (error: unknown) => void;
 
+export type DetectedHand = {
+  landmarks: Landmark[];
+  worldLandmarks: Landmark[] | null;
+};
+
 export const createHandLandmarker = async (): Promise<HandLandmarker> => {
   const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE_URL);
 
@@ -25,14 +30,30 @@ export const detectFirstHand = (
   video: HTMLVideoElement,
   nowMs: number,
   onError: ErrorReporter = console.error,
-): Landmark[] | null => {
+): DetectedHand | null => {
   try {
-    const landmarks = landmarker.detectForVideo(video, nowMs).landmarks[0];
-    return landmarks?.map(({ x, y, z }) => (
-      z === undefined ? { x, y } : { x, y, z }
-    )) ?? null;
+    const result = landmarker.detectForVideo(video, nowMs);
+    const landmarks = normalizeLandmarks(result.landmarks[0]);
+    const worldLandmarks = normalizeLandmarks(result.worldLandmarks[0]);
+    return landmarks ? { landmarks, worldLandmarks } : null;
   } catch (error) {
     onError(error);
     return null;
   }
 };
+
+function normalizeLandmarks(
+  landmarks: Array<{ x: number; y: number; z?: number }> | undefined,
+): Landmark[] | null {
+  if (
+    landmarks?.length !== 21
+    || landmarks.some(({ x, y, z }) => (
+      !Number.isFinite(x) || !Number.isFinite(y) || (z !== undefined && !Number.isFinite(z))
+    ))
+  ) {
+    return null;
+  }
+  return landmarks.map(({ x, y, z }) => (
+    z === undefined ? { x, y } : { x, y, z }
+  ));
+}

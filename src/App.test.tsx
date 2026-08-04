@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { GestureDesktopApi } from "./electron.d";
 import { makeGestureHand } from "./gesture/fixtures/stable-gesture-sequences";
 import type { Landmark } from "./gesture/types";
+import type { DetectedHand } from "./vision/handLandmarker";
 
 const vision = vi.hoisted(() => ({
   close: vi.fn(),
@@ -66,7 +67,10 @@ const renderDesktopApp = async (bridge = desktopApi()) => {
   }));
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
-  let detectedHand: Landmark[] | null = handAt("tracking");
+  let detectedHand: DetectedHand | null = {
+    landmarks: handAt("tracking"),
+    worldLandmarks: handAt("tracking"),
+  };
   vision.detectFirstHand.mockImplementation(() => detectedHand);
   window.gestureDesktop = bridge;
 
@@ -78,8 +82,12 @@ const renderDesktopApp = async (bridge = desktopApi()) => {
   await waitFor(() => expect(nextFrame).not.toBeNull());
 
   let videoTime = 0;
-  const runFrame = (nowMs: number, hand: Landmark[] | null = detectedHand) => {
-    detectedHand = hand;
+  const runFrame = (
+    nowMs: number,
+    hand: Landmark[] | null = detectedHand?.landmarks ?? null,
+    worldHand: Landmark[] | null = hand,
+  ) => {
+    detectedHand = hand ? { landmarks: hand, worldLandmarks: worldHand } : null;
     videoTime += 1;
     video.currentTime = videoTime;
     act(() => nextFrame?.(nowMs));
@@ -108,18 +116,48 @@ it("moves the desktop pointer from a tracking hand", async () => {
   ));
 });
 
-it("dispatches a left click within four 60 fps frames", async () => {
+it("dispatches one left click after a stable world-space pinch", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
   runFrame(16, handAt("left"));
   runFrame(32, handAt("left"));
-  runFrame(48, handAt("tracking"));
-  runFrame(64, handAt("tracking"));
+  runFrame(48, handAt("left"));
+  runFrame(64, handAt("left"));
+  runFrame(80, handAt("tracking"));
+  runFrame(96, handAt("tracking"));
 
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
   expect(bridge.rightClick).not.toHaveBeenCalled();
   expect(bridge.doubleClick).not.toHaveBeenCalled();
   expect(bridge.scroll).not.toHaveBeenCalled();
   expect(bridge.mouseDown).not.toHaveBeenCalled();
+});
+
+it("does not click when fingertips overlap only in the camera image", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  const imageOverlap = handAt("left");
+  const worldSeparated = handAt("left");
+  worldSeparated[8] = { ...worldSeparated[4]!, z: 0.3 };
+
+  runFrame(16, imageOverlap, worldSeparated);
+  runFrame(32, imageOverlap, worldSeparated);
+  runFrame(48, handAt("tracking"), handAt("tracking"));
+  runFrame(64, handAt("tracking"), handAt("tracking"));
+
+  expect(bridge.click).not.toHaveBeenCalled();
+});
+
+it("keeps moving but does not click when world depth is unavailable", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  runFrame(16, handAt("tracking", 0.55, 0.4), null);
+  runFrame(32, handAt("left"), null);
+  runFrame(48, handAt("left"), null);
+  runFrame(64, handAt("left"), null);
+  runFrame(80, handAt("left"), null);
+  runFrame(96, handAt("tracking"), null);
+  runFrame(112, handAt("tracking"), null);
+
+  await waitFor(() => expect(bridge.move).toHaveBeenCalled());
+  expect(bridge.click).not.toHaveBeenCalled();
 });
 
 it.each(["right", "double", "scroll"] as const)("does not dispatch the disabled %s action", async (gesture) => {

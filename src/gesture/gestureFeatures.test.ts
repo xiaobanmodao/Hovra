@@ -63,4 +63,24 @@ describe("extractGestureFeatures", () => {
     expect(features.doublePinchRatio).toBe(geometry.pinchRatios.double);
     expect(features.palmScale).toBe(geometry.scale);
   });
+
+  it("keeps image overlap separate from world-space fingertip distance", () => {
+    const imageGeometry = buildHandGeometry(makeGestureHand("left"))!;
+    const separatedWorldHand = makeGestureHand("left");
+    separatedWorldHand[8] = { ...separatedWorldHand[4]!, z: 0.3 };
+    const worldGeometry = buildHandGeometry(separatedWorldHand)!;
+
+    const features = extractGestureFeatures(imageGeometry, worldGeometry);
+
+    expect(features.leftPinchRatio).toBeLessThan(0.29);
+    expect(features.worldLeftPinchRatio).toBeGreaterThan(0.29);
+    expect(features.pinchDepthReliable).toBe(true);
+  });
+
+  it("marks pinch depth unreliable when world geometry is unavailable", () => {
+    const features = extractGestureFeatures(buildHandGeometry(makeGestureHand("left"))!, null);
+
+    expect(features.pinchDepthReliable).toBe(false);
+    expect(features.worldLeftPinchRatio).toBeNull();
+  });
 });

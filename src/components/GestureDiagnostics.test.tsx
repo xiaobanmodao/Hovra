@@ -22,6 +22,8 @@ const output: GestureOutput = {
     quality: 1,
     palmScale: 0.234,
     leftPinchRatio: 0.21,
+    worldLeftPinchRatio: 0.22,
+    pinchDepthReliable: true,
     rightPinchRatio: 0.61,
     doublePinchRatio: 0.72,
     openPalmScore: 0.18,
@@ -38,6 +40,10 @@ describe("GestureDiagnostics", () => {
     expect(screen.getByText("3/4")).toBeInTheDocument();
     expect(screen.getByText("0.234")).toBeInTheDocument();
     expect(screen.getByText("0.210 / 0.610 / 0.720")).toBeInTheDocument();
+    expect(screen.getByText("世界捏合比例")).toBeInTheDocument();
+    expect(screen.getByText("0.220")).toBeInTheDocument();
+    expect(screen.getByText("深度验证")).toBeInTheDocument();
+    expect(screen.getByText("可靠")).toBeInTheDocument();
     expect(screen.getByText("0.430")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
