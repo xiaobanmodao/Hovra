@@ -10,6 +10,36 @@ const falseOverlap: PinchCalibrationSample = { imageRatio: 0.25, worldRatio: 0.6
 afterEach(() => vi.useRealTimers());
 
 describe("PinchCalibrationWizard", () => {
+  it("shows the correct realistic hand guide for each calibration stage", () => {
+    vi.useFakeTimers();
+    render(
+      <PinchCalibrationWizard currentSample={contact} onComplete={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "开始三秒基线采集" }));
+    expect(screen.getByRole("img", { name: "张开手掌并缓慢左右移动" })).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(3_000));
+    expect(screen.getByRole("img", { name: "正面使用拇指和食指真实接触" })).toBeInTheDocument();
+    expect(screen.getByText("只使用拇指和食指；其余三指不要弯曲参与。"))
+      .toBeInTheDocument();
+
+    for (let count = 0; count < 5; count += 1) {
+      fireEvent.click(screen.getByRole("button", { name: "记录当前接触" }));
+    }
+    expect(screen.getByRole("img", { name: "侧面使用拇指和食指真实接触" }))
+      .toBeInTheDocument();
+
+    for (let count = 0; count < 5; count += 1) {
+      fireEvent.click(screen.getByRole("button", { name: "记录当前接触" }));
+    }
+    expect(screen.getByRole("img", { name: "拇指和食指画面重合但实际前后分开" }))
+      .toBeInTheDocument();
+    expect(screen.getByText("让两指在画面中重合，但实际前后分开 2–3 厘米，不要接触。"))
+      .toBeInTheDocument();
+    expect(screen.getByText("保持前后分开")).toBeInTheDocument();
+  });
+
   it("collects baseline, five front, five side, and three false-overlap samples", () => {
     vi.useFakeTimers();
     const onComplete = vi.fn();

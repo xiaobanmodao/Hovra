@@ -5,6 +5,10 @@ import {
   type PinchCalibrationProfile,
   type PinchCalibrationSample,
 } from "../gesture/pinchCalibration";
+import {
+  CalibrationGestureGuide,
+  type CalibrationGuideStage,
+} from "./CalibrationGestureGuide";
 
 type CalibrationStage = "intro" | "baseline" | "front" | "side" | "negative" | "complete" | "error";
 
@@ -71,10 +75,15 @@ export function PinchCalibrationWizard({
           <button type="button" onClick={() => setStage("baseline")}>开始三秒基线采集</button>
         </>
       )}
-      {stage === "baseline" && <p aria-live="polite">请自然移动手掌，正在采集三秒跟踪基线……</p>}
+      {stage === "baseline" && (
+        <div aria-live="polite">
+          <CalibrationGestureGuide stage="baseline" />
+          <p>请自然移动手掌，正在采集三秒跟踪基线……</p>
+        </div>
+      )}
       {stage === "front" && (
         <SampleStep
-          title="正面捏合：让拇指与食指真实接触"
+          stage="front"
           count={front.length}
           total={5}
           unavailable={unavailable}
@@ -84,7 +93,7 @@ export function PinchCalibrationWizard({
       )}
       {stage === "side" && (
         <SampleStep
-          title="侧向或斜向捏合：让两指真实接触"
+          stage="side"
           count={side.length}
           total={5}
           unavailable={unavailable}
@@ -94,7 +103,7 @@ export function PinchCalibrationWizard({
       )}
       {stage === "negative" && (
         <SampleStep
-          title="画面重合但不要接触：保持两指前后分离"
+          stage="negative"
           count={negative.length}
           total={3}
           unavailable={unavailable}
@@ -112,14 +121,14 @@ export function PinchCalibrationWizard({
 }
 
 function SampleStep({
-  title,
+  stage,
   count,
   total,
   unavailable,
   buttonLabel,
   onRecord,
 }: {
-  title: string;
+  stage: Exclude<CalibrationGuideStage, "baseline">;
   count: number;
   total: number;
   unavailable: boolean;
@@ -128,7 +137,7 @@ function SampleStep({
 }) {
   return (
     <div aria-live="polite">
-      <p>{title}</p>
+      <CalibrationGestureGuide stage={stage} />
       <p>已记录 {count}/{total}</p>
       <button type="button" disabled={unavailable} onClick={onRecord}>{buttonLabel}</button>
       {unavailable && <p>请先把手完整放入画面</p>}
