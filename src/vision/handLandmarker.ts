@@ -14,6 +14,9 @@ export const createHandLandmarker = async (): Promise<HandLandmarker> => {
     baseOptions: { modelAssetPath: HAND_LANDMARKER_MODEL_URL },
     runningMode: "VIDEO",
     numHands: 1,
+    minHandDetectionConfidence: 0.35,
+    minHandPresenceConfidence: 0.35,
+    minTrackingConfidence: 0.35,
   });
 };
 

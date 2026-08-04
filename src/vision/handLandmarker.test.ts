@@ -24,6 +24,9 @@ it("creates a video-mode landmarker that detects one hand", async () => {
   expect(mediaPipe.createFromOptions).toHaveBeenCalledWith(wasmFileset, expect.objectContaining({
     runningMode: "VIDEO",
     numHands: 1,
+    minHandDetectionConfidence: 0.35,
+    minHandPresenceConfidence: 0.35,
+    minTrackingConfidence: 0.35,
     baseOptions: expect.objectContaining({ modelAssetPath: expect.any(String) }),
   }));
 });
