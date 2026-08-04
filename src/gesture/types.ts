@@ -14,6 +14,22 @@ export type GestureState =
   | "paused"
   | "lost";
 
+export type GestureKind = "left" | "right" | "double" | "scroll" | "open-palm";
+
+export type GesturePhase =
+  | "neutral"
+  | "candidate"
+  | "active"
+  | "dragging"
+  | "releasing"
+  | "cooldown"
+  | "lost";
+
+export type GestureCandidate = {
+  kind: GestureKind;
+  score: number;
+};
+
 export type GestureOutput = {
   state: GestureState;
   cursor: Landmark | null;
@@ -26,6 +42,7 @@ export type GestureOutput = {
 };
 
 export type GestureSettings = {
+  gestureSensitivity: number;
   pinchDistance: number;
   dragHoldMs: number;
   openPalmMinTipDistance: number;

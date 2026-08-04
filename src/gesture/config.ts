@@ -14,6 +14,7 @@ export type CalibrationControlMetadata = {
 };
 
 export const DEFAULT_GESTURE_SETTINGS: Readonly<GestureSettings> = {
+  gestureSensitivity: 0.5,
   pinchDistance: 0.055,
   dragHoldMs: 350,
   openPalmMinTipDistance: 0.18,
@@ -74,3 +75,25 @@ export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[]
 
 export const CURSOR_SMOOTHING_FACTOR = DEFAULT_GESTURE_SETTINGS.cursorSmoothingFactor;
 export const CAMERA_STALE_FRAME_MS = DEFAULT_GESTURE_SETTINGS.cameraStaleFrameMs;
+
+export type GestureThresholds = {
+  pinchEnterRatio: number;
+  pinchExitRatio: number;
+  scrollEnterScore: number;
+  scrollExitScore: number;
+  openPalmEnterScore: number;
+  openPalmExitScore: number;
+};
+
+export function gestureThresholdsForSensitivity(sensitivity: number): GestureThresholds {
+  const normalized = Math.max(0, Math.min(1, Number.isFinite(sensitivity) ? sensitivity : 0.5));
+  const pinchEnterRatio = 0.24 + normalized * 0.1;
+  return {
+    pinchEnterRatio,
+    pinchExitRatio: pinchEnterRatio + 0.12,
+    scrollEnterScore: 0.75,
+    scrollExitScore: 0.6,
+    openPalmEnterScore: 0.82,
+    openPalmExitScore: 0.7,
+  };
+}
