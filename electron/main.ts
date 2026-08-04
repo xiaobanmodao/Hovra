@@ -37,6 +37,7 @@ const ACCESSIBILITY_SETTINGS_URL =
 const CURSOR_OVERLAY_SIZE = 40;
 const APP_NAME = "手势控制";
 
+app.setName(APP_NAME);
 app.enableSandbox();
 
 let isAppActive = false;
@@ -154,7 +155,6 @@ function createMainWindow(): BrowserWindow {
 }
 
 function configureChineseNativeInterface(): void {
-  app.setName(APP_NAME);
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     {
       label: APP_NAME,

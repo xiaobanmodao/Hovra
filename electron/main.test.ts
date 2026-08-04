@@ -34,6 +34,7 @@ const mainMocks = vi.hoisted(() => ({
   buildFromTemplate: vi.fn((template: unknown[]) => template),
   setApplicationMenu: vi.fn(),
   setName: vi.fn(),
+  whenReady: vi.fn().mockResolvedValue(undefined),
   saveGestureTrace: vi.fn().mockResolvedValue("saved"),
   isTrustedAccessibilityClient: vi.fn().mockReturnValue(true),
   mouse: {
@@ -118,7 +119,7 @@ vi.mock("electron", () => {
     app: {
       enableSandbox: vi.fn(),
       setName: mainMocks.setName,
-      whenReady: vi.fn().mockResolvedValue(undefined),
+      whenReady: mainMocks.whenReady,
       on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
         mainMocks.appHandlers.set(event, listener);
       }),
@@ -204,6 +205,9 @@ describe("main BrowserWindow security", () => {
 
     expect(window.options).toMatchObject({ title: "手势控制" });
     expect(mainMocks.setName).toHaveBeenCalledWith("手势控制");
+    expect(mainMocks.setName.mock.invocationCallOrder[0]).toBeLessThan(
+      mainMocks.whenReady.mock.invocationCallOrder[0]!,
+    );
     expect(mainMocks.setApplicationMenu).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({ label: "手势控制" }),
       expect.objectContaining({ label: "编辑" }),
