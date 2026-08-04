@@ -28,6 +28,14 @@ const idle: GestureOutput = {
     doublePinchRatio: null,
     openPalmScore: null,
     scrollPoseScore: null,
+    pinchProbability: null,
+    pinchWorldQuality: 0,
+    pinchQualityReasons: [],
+    pinchBlockingReason: null,
+    pinchEnterVotes: 0,
+    pinchRequiredVotes: 2,
+    effectiveFps: null,
+    inferenceMs: null,
   },
 };
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { gestureKindLabel, gesturePhaseLabel, gestureStateLabel } from "./zh-CN";
+import {
+  gestureKindLabel,
+  gesturePhaseLabel,
+  gestureStateLabel,
+  pinchBlockingReasonLabel,
+  pinchQualityReasonLabel,
+} from "./zh-CN";
 
 describe("Chinese gesture labels", () => {
   it("shows every gesture state in Chinese instead of its internal enum", () => {
@@ -27,5 +33,15 @@ describe("Chinese gesture labels", () => {
     expect(gestureKindLabel("scroll")).toBe("滚动");
     expect(gestureKindLabel("open-palm")).toBe("张开手掌");
     expect(gestureKindLabel(null)).toBe("—");
+  });
+
+  it("translates every adaptive pinch diagnostic reason", () => {
+    expect(pinchQualityReasonLabel("world-missing")).toBe("世界坐标缺失");
+    expect(pinchQualityReasonLabel("stale-frame")).toBe("视频帧已过期");
+    expect(pinchQualityReasonLabel("scale-jump")).toBe("手掌尺度突变");
+    expect(pinchQualityReasonLabel("bone-jitter")).toBe("掌骨坐标抖动");
+    expect(pinchQualityReasonLabel("ratio-jitter")).toBe("比例抖动");
+    expect(pinchBlockingReasonLabel("none")).toBe("无");
+    expect(pinchBlockingReasonLabel("approach")).toBe("尚未观察到靠近过程");
   });
 });

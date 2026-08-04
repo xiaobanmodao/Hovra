@@ -57,6 +57,14 @@ export type GestureDiagnosticsSnapshot = {
   doublePinchRatio: number | null;
   openPalmScore: number | null;
   scrollPoseScore: number | null;
+  pinchProbability: number | null;
+  pinchWorldQuality: number;
+  pinchQualityReasons: import("./pinchQuality").PinchQualityReason[];
+  pinchBlockingReason: import("./pinchProbability").PinchBlockingReason | null;
+  pinchEnterVotes: number;
+  pinchRequiredVotes: number;
+  effectiveFps: number | null;
+  inferenceMs: number | null;
 };
 
 export type GestureSettings = {

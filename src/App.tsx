@@ -42,6 +42,14 @@ const INITIAL_OUTPUT: GestureOutput = {
     doublePinchRatio: null,
     openPalmScore: null,
     scrollPoseScore: null,
+    pinchProbability: null,
+    pinchWorldQuality: 0,
+    pinchQualityReasons: [],
+    pinchBlockingReason: null,
+    pinchEnterVotes: 0,
+    pinchRequiredVotes: 2,
+    effectiveFps: null,
+    inferenceMs: null,
   },
 };
 
@@ -296,13 +304,15 @@ function App() {
           staleFrameHandled = false;
 
           let failed = false;
+          const inferenceStartedAt = performance.now();
           const detectedHand = detectFirstHand(landmarker, video, nowMs, () => {
             failed = true;
             setTrackerStatus("识别出错，请重新加载后重试");
           });
+          const inferenceMs = Math.max(0, performance.now() - inferenceStartedAt);
           const nextLandmarks = detectedHand?.landmarks ?? null;
           const nextWorldLandmarks = detectedHand?.worldLandmarks ?? null;
-          const nextOutput = engine.update(nextLandmarks, nowMs, nextWorldLandmarks);
+          const nextOutput = engine.update(nextLandmarks, nowMs, nextWorldLandmarks, inferenceMs);
 
           setLandmarks(nextLandmarks);
           setOutput(nextOutput);

@@ -12,6 +12,13 @@ const hand = (): Landmark[] => Array.from(
   (_, index) => ({ x: index / 100, y: index / 200, z: index === 0 ? 0 : -index / 300 }),
 );
 
+const ADAPTIVE_KEYS = [
+  "imageDepthGap", "worldDepthGap", "approachVelocity", "contactPoseScore",
+  "worldQuality", "qualityReasons", "pinchProbability", "safetyGatePassed",
+  "blockingReason", "enterVotes", "requiredVotes", "frameIntervalMs", "inferenceMs",
+  "effectiveFps",
+] as const;
+
 const frameAt = (t: number): GestureTraceFrame => ({
   t,
   landmarks: hand(),
@@ -26,6 +33,20 @@ const frameAt = (t: number): GestureTraceFrame => ({
     openPalmScore: 0.1,
     scrollPoseScore: 0,
     palmScale: 0.3,
+    imageDepthGap: 0.04,
+    worldDepthGap: 0.05,
+    approachVelocity: 1.2,
+    contactPoseScore: 0.88,
+    worldQuality: 0.9,
+    qualityReasons: [],
+    pinchProbability: 0.84,
+    safetyGatePassed: true,
+    blockingReason: "none",
+    enterVotes: 2,
+    requiredVotes: 2,
+    frameIntervalMs: 16,
+    inferenceMs: 8,
+    effectiveFps: 62.5,
   },
   phase: "neutral",
   candidate: null,
@@ -35,7 +56,7 @@ const frameAt = (t: number): GestureTraceFrame => ({
 });
 
 describe("GestureTraceBuffer", () => {
-  it("stores world landmarks in version 2 and copies them defensively", () => {
+  it("stores adaptive diagnostics in version 3 and copies them defensively", () => {
     const buffer = new GestureTraceBuffer();
     const input = {
       ...frameAt(10),
@@ -50,7 +71,7 @@ describe("GestureTraceBuffer", () => {
     buffer.push(input);
     input.worldLandmarks[0]!.x = 99;
 
-    expect(buffer.snapshot()).toMatchObject({ version: 2 });
+    expect(buffer.snapshot()).toMatchObject({ version: 3 });
     expect(buffer.snapshot().frames[0]!.worldLandmarks?.[0]!.x).toBe(0);
   });
 
@@ -98,7 +119,8 @@ describe("GestureTraceBuffer", () => {
     buffer.push(frameAt(16));
 
     const serialized = buffer.serialize();
-    expect(serialized).not.toContain("image");
+    expect(serialized).not.toContain("data:image");
+    expect(serialized).not.toContain("imageData");
     expect(parseGestureTrace(serialized)).toEqual(buffer.snapshot());
 
     const withImage = JSON.stringify({
@@ -116,16 +138,35 @@ describe("GestureTraceBuffer", () => {
       pinchDepthReliable: _pinchDepthReliable,
       ...legacyFeatures
     } = features!;
+    ADAPTIVE_KEYS.forEach((key) => delete (legacyFeatures as Record<string, unknown>)[key]);
     const legacyFrame = { ...legacyFields, features: legacyFeatures };
     const parsed = parseGestureTrace(JSON.stringify({ version: 1, frames: [legacyFrame] }));
 
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(parsed.frames[0]).toMatchObject({
       worldLandmarks: null,
       features: {
         worldLeftPinchRatio: null,
         pinchDepthReliable: false,
       },
+    });
+  });
+
+  it("migrates version 2 without inventing adaptive evidence", () => {
+    const currentFrame = frameAt(16);
+    const legacyFeatures = { ...currentFrame.features } as Record<string, unknown>;
+    ADAPTIVE_KEYS.forEach((key) => delete legacyFeatures[key]);
+    const parsed = parseGestureTrace(JSON.stringify({
+      version: 2,
+      frames: [{ ...currentFrame, features: legacyFeatures }],
+    }));
+
+    expect(parsed.version).toBe(3);
+    expect(parsed.frames[0]!.features).toMatchObject({
+      pinchProbability: null,
+      worldQuality: 0,
+      qualityReasons: [],
+      blockingReason: null,
     });
   });
 

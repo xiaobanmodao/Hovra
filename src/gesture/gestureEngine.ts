@@ -9,9 +9,12 @@ import { extractGestureFeatures, type GestureFeatures } from "./gestureFeatures"
 import { GestureStabilizer, type GestureStabilizerOutput } from "./gestureStabilizer";
 import { GestureTraceBuffer, type GestureTrace, type TraceGestureEvent } from "./gestureTrace";
 import { buildHandGeometry, type HandGeometry } from "./handGeometry";
-import { PinchFeatureExtractor } from "./pinchFeatures";
-import { PinchProbabilityEstimator } from "./pinchProbability";
-import { PinchQualityEstimator } from "./pinchQuality";
+import { PinchFeatureExtractor, type PinchFrameFeatures } from "./pinchFeatures";
+import {
+  PinchProbabilityEstimator,
+  type PinchProbabilityResult,
+} from "./pinchProbability";
+import { PinchQualityEstimator, type PinchQuality } from "./pinchQuality";
 import {
   PinchTemporalRecognizer,
   type PinchTemporalOutput,
@@ -25,6 +28,13 @@ import {
   type GestureState,
   type Landmark,
 } from "./types";
+
+type PinchFrameDecision = {
+  temporal: PinchTemporalOutput;
+  features: PinchFrameFeatures | null;
+  quality: PinchQuality | null;
+  probability: PinchProbabilityResult | null;
+};
 
 export class GestureEngine {
   private readonly settings: GestureSettings;
@@ -56,6 +66,7 @@ export class GestureEngine {
     landmarks: Landmark[] | null,
     nowMs: number,
     worldLandmarks: Landmark[] | null = null,
+    inferenceMs: number | null = null,
   ): GestureOutput {
     const filtered = this.filter.update(landmarks, nowMs);
     const cursorGeometry = buildHandGeometry(filtered);
@@ -77,17 +88,18 @@ export class GestureEngine {
     }
 
     const openPalmLocked = stabilized.lockedGesture === "open-palm";
-    const state = this.deriveState(stabilized, pinch, features !== null);
+    const state = this.deriveState(stabilized, pinch.temporal, features !== null);
     const output = this.output(
       state,
       features === null ? null : this.lastCursor,
       stabilized,
-      pinch,
       features,
       nowMs,
-      { click: pinch.clicked && !openPalmLocked },
+      inferenceMs,
+      pinch,
+      { click: pinch.temporal.clicked && !openPalmLocked },
     );
-    this.recordTrace(landmarks, worldLandmarks, output, features, nowMs);
+    this.recordTrace(landmarks, worldLandmarks, output, features, pinch, nowMs, inferenceMs);
     return output;
   }
 
@@ -103,27 +115,41 @@ export class GestureEngine {
     imageGeometry: HandGeometry,
     worldGeometry: HandGeometry | null,
     nowMs: number,
-  ): PinchTemporalOutput {
+  ): PinchFrameDecision {
     const pinchFeatures = this.pinchFeatureExtractor.update(imageGeometry, worldGeometry, nowMs);
     const quality = this.pinchQualityEstimator.update(pinchFeatures, worldGeometry);
     const probability = this.pinchProbabilityEstimator.update(pinchFeatures, quality);
-    return this.pinchTemporalRecognizer.update(probability, nowMs, quality.usableForVoting);
+    return {
+      temporal: this.pinchTemporalRecognizer.update(probability, nowMs, quality.usableForVoting),
+      features: pinchFeatures,
+      quality,
+      probability,
+    };
   }
 
-  private updateMissingPinch(nowMs: number): PinchTemporalOutput {
+  private updateMissingPinch(nowMs: number): PinchFrameDecision {
     this.pinchFeatureExtractor.reset();
     this.pinchQualityEstimator.reset();
     this.pinchProbabilityEstimator.reset();
-    return this.pinchTemporalRecognizer.update(null, nowMs, false);
+    return {
+      temporal: this.pinchTemporalRecognizer.update(null, nowMs, false),
+      features: null,
+      quality: null,
+      probability: null,
+    };
   }
 
   private deriveState(
     stabilized: GestureStabilizerOutput,
-    pinch: PinchTemporalOutput,
+    pinchTemporal: PinchTemporalOutput,
     inputValid: boolean,
   ): GestureState {
     if (stabilized.lockedGesture === "open-palm") return "paused";
-    if (pinch.phase === "candidate" || pinch.phase === "active" || pinch.phase === "releasing") {
+    if (
+      pinchTemporal.phase === "candidate"
+      || pinchTemporal.phase === "active"
+      || pinchTemporal.phase === "releasing"
+    ) {
       return "left-pinching";
     }
     return inputValid ? "tracking" : "lost";
@@ -133,9 +159,10 @@ export class GestureEngine {
     state: GestureState,
     cursor: Landmark | null,
     stabilized: GestureStabilizerOutput,
-    pinch: PinchTemporalOutput,
     features: GestureFeatures | null,
     nowMs: number,
+    inferenceMs: number | null,
+    pinch: PinchFrameDecision,
     events: Partial<GestureOutput>,
   ): GestureOutput {
     return {
@@ -147,17 +174,17 @@ export class GestureEngine {
       scrollY: 0,
       dragStart: false,
       dragEnd: false,
-      phase: stabilized.lockedGesture === "open-palm" ? stabilized.phase : pinch.phase,
+      phase: stabilized.lockedGesture === "open-palm" ? stabilized.phase : pinch.temporal.phase,
       candidate: stabilized.lockedGesture === "open-palm"
         ? stabilized.candidate
-        : pinch.phase === "candidate" ? "left" : null,
+        : pinch.temporal.phase === "candidate" ? "left" : null,
       lockedGesture: stabilized.lockedGesture === "open-palm"
         ? "open-palm"
-        : pinch.phase === "active" || pinch.phase === "releasing" ? "left" : null,
+        : pinch.temporal.phase === "active" || pinch.temporal.phase === "releasing" ? "left" : null,
       confirmationProgress: stabilized.lockedGesture === "open-palm"
         ? stabilized.confirmationProgress
-        : pinch.confirmationProgress,
-      diagnostics: diagnosticsFor(features, nowMs),
+        : pinch.temporal.confirmationProgress,
+      diagnostics: diagnosticsFor(features, pinch, nowMs, inferenceMs),
       ...events,
     };
   }
@@ -167,7 +194,9 @@ export class GestureEngine {
     worldLandmarks: Landmark[] | null,
     output: GestureOutput,
     features: GestureFeatures | null,
+    pinch: PinchFrameDecision,
     nowMs: number,
+    inferenceMs: number | null,
   ): void {
     if (this.traceEpochMs === null || nowMs < this.traceEpochMs) this.traceEpochMs = nowMs;
     const relativeTimestamp = Math.max(this.lastTraceTimestamp, nowMs - this.traceEpochMs);
@@ -189,6 +218,20 @@ export class GestureEngine {
         openPalmScore: features.openPalmScore,
         scrollPoseScore: features.scrollPoseScore,
         palmScale: features.palmScale,
+        imageDepthGap: pinch.features?.imageDepthGap ?? null,
+        worldDepthGap: pinch.features?.worldDepthGap ?? null,
+        approachVelocity: pinch.features?.approachVelocity ?? null,
+        contactPoseScore: pinch.features?.contactPoseScore ?? null,
+        worldQuality: pinch.quality?.score ?? 0,
+        qualityReasons: pinch.quality?.reasons ?? [],
+        pinchProbability: pinch.probability?.probability ?? null,
+        safetyGatePassed: pinch.probability?.safetyGatePassed ?? false,
+        blockingReason: pinch.probability?.blockingReason ?? null,
+        enterVotes: pinch.temporal.enterVotes,
+        requiredVotes: pinch.temporal.requiredVotes,
+        frameIntervalMs: pinch.features?.frameIntervalMs ?? null,
+        inferenceMs,
+        effectiveFps: effectiveFpsFor(pinch.features?.frameIntervalMs ?? null),
       } : null,
       phase: output.phase,
       candidate: output.candidate,
@@ -199,7 +242,12 @@ export class GestureEngine {
   }
 }
 
-function diagnosticsFor(features: GestureFeatures | null, timestampMs: number): GestureDiagnosticsSnapshot {
+function diagnosticsFor(
+  features: GestureFeatures | null,
+  pinch: PinchFrameDecision,
+  timestampMs: number,
+  inferenceMs: number | null,
+): GestureDiagnosticsSnapshot {
   return {
     timestampMs,
     quality: features ? 1 : 0,
@@ -211,5 +259,19 @@ function diagnosticsFor(features: GestureFeatures | null, timestampMs: number): 
     doublePinchRatio: features?.doublePinchRatio ?? null,
     openPalmScore: features?.openPalmScore ?? null,
     scrollPoseScore: features?.scrollPoseScore ?? null,
+    pinchProbability: pinch.probability?.probability ?? null,
+    pinchWorldQuality: pinch.quality?.score ?? 0,
+    pinchQualityReasons: pinch.quality?.reasons ?? [],
+    pinchBlockingReason: pinch.probability?.blockingReason ?? null,
+    pinchEnterVotes: pinch.temporal.enterVotes,
+    pinchRequiredVotes: pinch.temporal.requiredVotes,
+    effectiveFps: effectiveFpsFor(pinch.features?.frameIntervalMs ?? null),
+    inferenceMs: inferenceMs !== null && Number.isFinite(inferenceMs) ? Math.max(0, inferenceMs) : null,
   };
+}
+
+function effectiveFpsFor(frameIntervalMs: number | null): number | null {
+  return frameIntervalMs !== null && frameIntervalMs > 0 && frameIntervalMs <= 1_000
+    ? 1_000 / frameIntervalMs
+    : null;
 }

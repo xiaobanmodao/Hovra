@@ -1,4 +1,6 @@
 import type { GestureKind, GesturePhase, GestureState } from "../gesture/types";
+import type { PinchBlockingReason } from "../gesture/pinchProbability";
+import type { PinchQualityReason } from "../gesture/pinchQuality";
 
 const gestureStates: Record<GestureState, string> = {
   tracking: "跟踪中",
@@ -39,4 +41,28 @@ export function gesturePhaseLabel(phase: GesturePhase): string {
 
 export function gestureKindLabel(kind: GestureKind | null): string {
   return kind === null ? "—" : gestureKinds[kind];
+}
+
+const pinchQualityReasons: Record<PinchQualityReason, string> = {
+  "world-missing": "世界坐标缺失",
+  "stale-frame": "视频帧已过期",
+  "scale-jump": "手掌尺度突变",
+  "bone-jitter": "掌骨坐标抖动",
+  "ratio-jitter": "比例抖动",
+};
+
+const pinchBlockingReasons: Record<PinchBlockingReason, string> = {
+  none: "无",
+  image: "画面指尖距离过大",
+  depth: "空间深度证据不一致",
+  pose: "手指姿态不像真实接触",
+  approach: "尚未观察到靠近过程",
+};
+
+export function pinchQualityReasonLabel(reason: PinchQualityReason): string {
+  return pinchQualityReasons[reason];
+}
+
+export function pinchBlockingReasonLabel(reason: PinchBlockingReason): string {
+  return pinchBlockingReasons[reason];
 }

@@ -28,6 +28,14 @@ const output: GestureOutput = {
     doublePinchRatio: 0.72,
     openPalmScore: 0.18,
     scrollPoseScore: 0.43,
+    pinchProbability: 0.81,
+    pinchWorldQuality: 0.76,
+    pinchQualityReasons: ["ratio-jitter"],
+    pinchBlockingReason: "approach",
+    pinchEnterVotes: 2,
+    pinchRequiredVotes: 3,
+    effectiveFps: 58.4,
+    inferenceMs: 9.2,
   },
 };
 
@@ -47,6 +55,16 @@ describe("GestureDiagnostics", () => {
     expect(screen.getByText("0.430")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("接触概率")).toBeInTheDocument();
+    expect(screen.getByText("81%")) .toBeInTheDocument();
+    expect(screen.getByText("世界坐标质量")).toBeInTheDocument();
+    expect(screen.getByText("76%")) .toBeInTheDocument();
+    expect(screen.getByText("投票")).toBeInTheDocument();
+    expect(screen.getByText("2/3")).toBeInTheDocument();
+    expect(screen.getByText("比例抖动")).toBeInTheDocument();
+    expect(screen.getByText("尚未观察到靠近过程")).toBeInTheDocument();
+    expect(screen.getByText("58.4 帧/秒")).toBeInTheDocument();
+    expect(screen.getByText("9.2 毫秒")).toBeInTheDocument();
   });
 
   it("offers explicit local export only when a desktop callback is provided", async () => {

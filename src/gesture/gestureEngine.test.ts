@@ -165,6 +165,7 @@ describe("GestureEngine 简化模式", () => {
 
     const trace = engine.getTrace();
     expect(trace.frames.at(-1)?.events).toEqual(["click"]);
-    expect(JSON.stringify(trace)).not.toContain("image");
+    expect(JSON.stringify(trace)).not.toContain("data:image");
+    expect(JSON.stringify(trace)).not.toContain("imageData");
   });
 });

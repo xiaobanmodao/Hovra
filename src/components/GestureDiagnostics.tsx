@@ -1,7 +1,12 @@
 import { useState } from "react";
 
 import type { GestureOutput } from "../gesture/types";
-import { gestureKindLabel, gesturePhaseLabel } from "../i18n/zh-CN";
+import {
+  gestureKindLabel,
+  gesturePhaseLabel,
+  pinchBlockingReasonLabel,
+  pinchQualityReasonLabel,
+} from "../i18n/zh-CN";
 
 type GestureDiagnosticsProps = {
   output: GestureOutput;
@@ -30,7 +35,7 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
     <section className="recognition-diagnostics" aria-labelledby="recognition-diagnostics-title">
       <div className="recognition-diagnostics-heading">
         <div>
-          <p className="eyebrow">识别引擎 V2</p>
+          <p className="eyebrow">识别引擎 V3</p>
           <h2 id="recognition-diagnostics-title">手势诊断</h2>
         </div>
         {onSaveTrace && (
@@ -54,6 +59,23 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
         <div><dt>深度验证</dt><dd>{diagnostics.pinchDepthReliable ? "可靠" : "不可用"}</dd></div>
         <div><dt>滚动评分</dt><dd>{numberOrDash(diagnostics.scrollPoseScore)}</dd></div>
         <div><dt>质量</dt><dd>{Math.round(diagnostics.quality * 100)}%</dd></div>
+        <div><dt>接触概率</dt><dd>{diagnostics.pinchProbability === null
+          ? "—"
+          : `${Math.round(diagnostics.pinchProbability * 100)}%`}</dd></div>
+        <div><dt>世界坐标质量</dt><dd>{Math.round(diagnostics.pinchWorldQuality * 100)}%</dd></div>
+        <div><dt>投票</dt><dd>{diagnostics.pinchEnterVotes}/{diagnostics.pinchRequiredVotes}</dd></div>
+        <div><dt>质量提示</dt><dd>{diagnostics.pinchQualityReasons.length === 0
+          ? "无"
+          : diagnostics.pinchQualityReasons.map(pinchQualityReasonLabel).join("、")}</dd></div>
+        <div><dt>阻断原因</dt><dd>{diagnostics.pinchBlockingReason === null
+          ? "—"
+          : pinchBlockingReasonLabel(diagnostics.pinchBlockingReason)}</dd></div>
+        <div><dt>有效帧率</dt><dd>{diagnostics.effectiveFps === null
+          ? "—"
+          : `${diagnostics.effectiveFps.toFixed(1)} 帧/秒`}</dd></div>
+        <div><dt>推理耗时</dt><dd>{diagnostics.inferenceMs === null
+          ? "—"
+          : `${diagnostics.inferenceMs.toFixed(1)} 毫秒`}</dd></div>
       </dl>
       {saveStatus && <p className="trace-save-status" role="status">{saveStatus}</p>}
     </section>
