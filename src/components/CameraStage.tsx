@@ -71,7 +71,11 @@ export function CameraStage({
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720 },
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
+          },
         });
 
         if (!active) {

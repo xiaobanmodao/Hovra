@@ -33,6 +33,13 @@ it("reports an ended camera stream and stops every track on cleanup", async () =
   );
 
   await waitFor(() => expect(videoRef.current?.srcObject).toBe(stream));
+  expect(getUserMedia).toHaveBeenCalledWith({
+    video: {
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      frameRate: { ideal: 30 },
+    },
+  });
   act(() => firstTrack.dispatchEvent(new Event("ended")));
 
   expect(onCameraError).toHaveBeenCalledWith(
