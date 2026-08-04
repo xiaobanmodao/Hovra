@@ -77,16 +77,16 @@ describe("Playground", () => {
     );
 
     expect(container.querySelector(".interaction-layer")).toBeInTheDocument();
-    expect(screen.getByText(/pinch here/i).parentElement).toHaveStyle({
+    expect(screen.getByText("在此捏合").parentElement).toHaveStyle({
       left: "848px",
       top: "32px",
     });
-    expect(screen.getByText(/clicks: 1/i)).toBeInTheDocument();
+    expect(screen.getByText("点击次数：1")).toBeInTheDocument();
 
     rerender(<Playground cursor={{ x: 20, y: 20 }} output={{ ...idle, click: false }} />);
     rerender(<Playground cursor={{ x: 20, y: 20 }} output={{ ...idle, click: true }} />);
 
-    expect(screen.getByText(/clicks: 1/i)).toBeInTheDocument();
+    expect(screen.getByText("点击次数：1")).toBeInTheDocument();
   });
 
   it("clamps a grabbed card to the viewport margin and retains its released position", () => {
@@ -154,7 +154,7 @@ describe("Playground", () => {
       window.dispatchEvent(new Event("resize"));
     });
 
-    expect(screen.getByText(/pinch here/i).parentElement).toHaveStyle({
+    expect(screen.getByText("在此捏合").parentElement).toHaveStyle({
       left: "440px",
       top: "20px",
     });
@@ -178,9 +178,9 @@ describe("Playground", () => {
     rerender(<Playground cursor={null} output={{ ...idle, doubleClick: true }} />);
     rerender(<Playground cursor={null} output={{ ...idle, doubleClick: false, scrollY: 4 }} />);
 
-    expect(screen.getByText("Right clicks: 1")).toBeInTheDocument();
-    expect(screen.getByText("Double clicks: 1")).toBeInTheDocument();
-    expect(screen.getByText("Scroll: 4")).toBeInTheDocument();
-    expect(screen.getByText(/thumb \+ middle/i)).toBeInTheDocument();
+    expect(screen.getByText("右键次数：1")).toBeInTheDocument();
+    expect(screen.getByText("双击次数：1")).toBeInTheDocument();
+    expect(screen.getByText("滚动：4")).toBeInTheDocument();
+    expect(screen.getByText(/拇指 \+ 中指/)).toBeInTheDocument();
   });
 });

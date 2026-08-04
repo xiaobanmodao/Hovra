@@ -40,11 +40,11 @@ it("keeps system control paused and disables enable while Accessibility permissi
     />,
   );
 
-  expect(await screen.findByText("Permission required")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Enable system control" })).toBeDisabled();
-  expect(screen.getByText(/privacy & security.*accessibility/i)).toBeInTheDocument();
+  expect(await screen.findByText("需要辅助功能权限")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "启用系统控制" })).toBeDisabled();
+  expect(screen.getByText(/隐私与安全性.*辅助功能/)).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Open Accessibility Settings" }));
+  fireEvent.click(screen.getByRole("button", { name: "打开辅助功能设置" }));
   expect(bridge.openAccessibilitySettings).toHaveBeenCalledOnce();
 });
 
@@ -60,9 +60,9 @@ it("enables system control only after granted permission and an explicit click",
     />,
   );
 
-  const enable = await screen.findByRole("button", { name: "Enable system control" });
+  const enable = await screen.findByRole("button", { name: "启用系统控制" });
   await waitFor(() => expect(enable).toBeEnabled());
-  expect(screen.getByText("Paused")).toBeInTheDocument();
+  expect(screen.getByText("已暂停")).toBeInTheDocument();
 
   fireEvent.click(enable);
   expect(onEnable).toHaveBeenCalledOnce();
@@ -74,7 +74,7 @@ it("enables system control only after granted permission and an explicit click",
       onPause={vi.fn()}
     />,
   );
-  expect(screen.getByText("Enabled")).toBeInTheDocument();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
 });
 
 it("labels a missing desktop bridge as browser demo mode", () => {
@@ -86,6 +86,6 @@ it("labels a missing desktop bridge as browser demo mode", () => {
     />,
   );
 
-  expect(screen.getByText("Browser demo")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Enable system control" })).not.toBeInTheDocument();
+  expect(screen.getByText("浏览器演示模式")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "启用系统控制" })).not.toBeInTheDocument();
 });

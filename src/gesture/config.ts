@@ -26,8 +26,8 @@ export const DEFAULT_GESTURE_SETTINGS: Readonly<GestureSettings> = {
 export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[] = [
   {
     key: "gestureSensitivity",
-    label: "Gesture sensitivity",
-    accessibleLabel: "gesture sensitivity",
+    label: "手势灵敏度",
+    accessibleLabel: "手势灵敏度",
     min: 0,
     max: 1,
     step: 0.05,
@@ -35,8 +35,8 @@ export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[]
   },
   {
     key: "cursorSmoothingFactor",
-    label: "Cursor smoothing",
-    accessibleLabel: "cursor smoothing",
+    label: "光标平滑",
+    accessibleLabel: "光标平滑",
     min: 0.05,
     max: 1,
     step: 0.05,
@@ -44,8 +44,8 @@ export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[]
   },
   {
     key: "cursorOffsetX",
-    label: "Horizontal cursor offset",
-    accessibleLabel: "horizontal cursor offset",
+    label: "水平光标偏移",
+    accessibleLabel: "水平光标偏移",
     min: -0.15,
     max: 0.15,
     step: 0.01,
@@ -53,8 +53,8 @@ export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[]
   },
   {
     key: "cursorOffsetY",
-    label: "Vertical cursor offset",
-    accessibleLabel: "vertical cursor offset",
+    label: "垂直光标偏移",
+    accessibleLabel: "垂直光标偏移",
     min: -0.15,
     max: 0.15,
     step: 0.01,
@@ -62,13 +62,13 @@ export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[]
   },
   {
     key: "dragHoldMs",
-    label: "Drag hold",
-    accessibleLabel: "drag hold",
+    label: "拖动保持时间",
+    accessibleLabel: "拖动保持时间",
     min: 150,
     max: 1000,
     step: 50,
     precision: 0,
-    unit: "ms",
+    unit: "毫秒",
   },
 ];
 

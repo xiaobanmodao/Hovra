@@ -165,11 +165,11 @@ export function Playground({ cursor, output }: PlaygroundProps) {
     <section className="playground" aria-labelledby="playground-title">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Interaction playground</p>
-          <h2 id="playground-title">Try every gesture</h2>
+          <p className="eyebrow">交互测试区</p>
+          <h2 id="playground-title">测试全部手势</h2>
         </div>
         <p className="gesture-hint">
-          Thumb + index: click/drag · Thumb + middle: right-click · Thumb + ring: double-click · Two fingers: scroll
+          拇指 + 食指：点击 / 拖动 · 拇指 + 中指：右键 · 拇指 + 无名指：双击 · 双指：滚动
         </p>
       </div>
 
@@ -179,8 +179,8 @@ export function Playground({ cursor, output }: PlaygroundProps) {
           className="click-target"
           style={{ left: clickTargetPosition.x, top: clickTargetPosition.y }}
         >
-          <span>Pinch here</span>
-          <strong>Clicks: {clickCount}</strong>
+          <span>在此捏合</span>
+          <strong>点击次数：{clickCount}</strong>
         </div>
 
         <div
@@ -190,14 +190,14 @@ export function Playground({ cursor, output }: PlaygroundProps) {
           style={{ left: cardPosition.x, top: cardPosition.y }}
         >
           <span aria-hidden="true">&#x2726;</span>
-          <strong>Drag me</strong>
-          <small>Pinch and hold</small>
+          <strong>拖动我</strong>
+          <small>捏合并保持</small>
         </div>
 
         <div className="gesture-diagnostics" aria-live="polite">
-          <strong>Right clicks: {rightClickCount}</strong>
-          <strong>Double clicks: {doubleClickCount}</strong>
-          <strong>Scroll: {scrollTotal}</strong>
+          <strong>右键次数：{rightClickCount}</strong>
+          <strong>双击次数：{doubleClickCount}</strong>
+          <strong>滚动：{scrollTotal}</strong>
         </div>
       </div>
     </section>

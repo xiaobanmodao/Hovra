@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { GestureOutput } from "../gesture/types";
+import { gestureKindLabel, gesturePhaseLabel } from "../i18n/zh-CN";
 
 type GestureDiagnosticsProps = {
   output: GestureOutput;
@@ -19,9 +20,9 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
     setSaveStatus(null);
     try {
       const result = await onSaveTrace?.();
-      setSaveStatus(result === "saved" ? "Trace saved locally" : "Save cancelled");
+      setSaveStatus(result === "saved" ? "诊断记录已保存到本机" : "已取消保存");
     } catch {
-      setSaveStatus("Trace save failed");
+      setSaveStatus("诊断记录保存失败");
     }
   };
 
@@ -29,28 +30,28 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
     <section className="recognition-diagnostics" aria-labelledby="recognition-diagnostics-title">
       <div className="recognition-diagnostics-heading">
         <div>
-          <p className="eyebrow">Recognition engine V2</p>
-          <h2 id="recognition-diagnostics-title">Gesture diagnostics</h2>
+          <p className="eyebrow">识别引擎 V2</p>
+          <h2 id="recognition-diagnostics-title">手势诊断</h2>
         </div>
         {onSaveTrace && (
           <button type="button" onClick={() => void saveTrace()}>
-            Save diagnostic trace
+            保存诊断记录
           </button>
         )}
       </div>
       <dl>
-        <div><dt>Phase</dt><dd>{output.phase}</dd></div>
-        <div><dt>Candidate</dt><dd>{output.candidate ?? "—"}</dd></div>
-        <div><dt>Locked action</dt><dd>{output.lockedGesture ?? "—"}</dd></div>
-        <div><dt>Confirmation</dt><dd>{progressQuarter}/4</dd></div>
-        <div><dt>Palm scale</dt><dd>{numberOrDash(diagnostics.palmScale)}</dd></div>
+        <div><dt>阶段</dt><dd>{gesturePhaseLabel(output.phase)}</dd></div>
+        <div><dt>候选动作</dt><dd>{gestureKindLabel(output.candidate)}</dd></div>
+        <div><dt>锁定动作</dt><dd>{gestureKindLabel(output.lockedGesture)}</dd></div>
+        <div><dt>确认进度</dt><dd>{progressQuarter}/4</dd></div>
+        <div><dt>手掌尺度</dt><dd>{numberOrDash(diagnostics.palmScale)}</dd></div>
         <div>
-          <dt>Pinch ratios L / R / D</dt>
+          <dt>捏合比例（左 / 右 / 双）</dt>
           <dd>{[diagnostics.leftPinchRatio, diagnostics.rightPinchRatio, diagnostics.doublePinchRatio]
             .map((value) => numberOrDash(value)).join(" / ")}</dd>
         </div>
-        <div><dt>Scroll score</dt><dd>{numberOrDash(diagnostics.scrollPoseScore)}</dd></div>
-        <div><dt>Quality</dt><dd>{Math.round(diagnostics.quality * 100)}%</dd></div>
+        <div><dt>滚动评分</dt><dd>{numberOrDash(diagnostics.scrollPoseScore)}</dd></div>
+        <div><dt>质量</dt><dd>{Math.round(diagnostics.quality * 100)}%</dd></div>
       </dl>
       {saveStatus && <p className="trace-save-status" role="status">{saveStatus}</p>}
     </section>

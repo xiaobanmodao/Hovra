@@ -10,18 +10,18 @@ export function StatusPanel({ camera, tracker, gesture }: StatusPanelProps) {
       className="status-panel"
       role="status"
       aria-live="polite"
-      aria-label="Camera, tracker and gesture status"
+      aria-label="摄像头、追踪器和手势状态"
     >
       <div>
-        <span>Camera</span>
+        <span>摄像头</span>
         <strong>{camera}</strong>
       </div>
       <div>
-        <span>Tracker</span>
+        <span>追踪器</span>
         <strong>{tracker}</strong>
       </div>
       <div>
-        <span>Gesture</span>
+        <span>手势</span>
         <strong>{gesture}</strong>
       </div>
     </section>

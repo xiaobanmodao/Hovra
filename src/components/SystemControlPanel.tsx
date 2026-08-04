@@ -58,34 +58,34 @@ export function SystemControlPanel({
   }, [enabled, onPause, permission]);
 
   const status = permission === "browser"
-    ? "Browser demo"
+    ? "浏览器演示模式"
     : permission === "denied"
-      ? "Permission required"
+      ? "需要辅助功能权限"
       : enabled
-        ? "Enabled"
-        : "Paused";
+        ? "已启用"
+        : "已暂停";
 
   return (
     <section className={`system-control-panel is-${permission}`} aria-labelledby="system-control-title">
       <div>
-        <p className="eyebrow">System mouse</p>
-        <h2 id="system-control-title">Desktop control</h2>
+        <p className="eyebrow">系统鼠标</p>
+        <h2 id="system-control-title">桌面控制</h2>
       </div>
 
       <div className="system-control-copy" aria-live="polite">
         <strong>{status}</strong>
         {permission === "browser" && (
-          <p>Open the Electron app to control the system pointer. This browser remains a safe demo.</p>
+          <p>请打开桌面应用控制系统指针；浏览器内仅提供安全演示。</p>
         )}
-        {permission === "checking" && <p>Checking macOS Accessibility permission…</p>}
+        {permission === "checking" && <p>正在检查 macOS 辅助功能权限…</p>}
         {permission === "denied" && (
-          <p>Allow this app in System Settings → Privacy &amp; Security → Accessibility.</p>
+          <p>请在“系统设置”→“隐私与安全性”→“辅助功能”中允许此应用。</p>
         )}
         {permission === "granted" && !enabled && (
-          <p>System control is paused until you explicitly enable it.</p>
+          <p>系统控制已暂停，需由你主动启用。</p>
         )}
         {permission === "granted" && enabled && (
-          <p>Gestures can move, click, drag, right-click, double-click and scroll.</p>
+          <p>现在可用手势移动、点击、拖动、右键、双击和滚动。</p>
         )}
       </div>
 
@@ -103,7 +103,7 @@ export function SystemControlPanel({
               }
             }}
           >
-            {enabled ? "Pause system control" : "Enable system control"}
+            {enabled ? "暂停系统控制" : "启用系统控制"}
           </button>
           {permission === "denied" && (
             <button
@@ -113,7 +113,7 @@ export function SystemControlPanel({
                 void bridge?.openAccessibilitySettings();
               }}
             >
-              Open Accessibility Settings
+              打开辅助功能设置
             </button>
           )}
         </div>

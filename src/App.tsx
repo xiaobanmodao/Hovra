@@ -9,6 +9,7 @@ import { SystemControlPanel } from "./components/SystemControlPanel";
 import { mapMirroredPoint, smoothPoint, type Point } from "./cursor/cursorController";
 import { DEFAULT_GESTURE_SETTINGS } from "./gesture/config";
 import { GestureEngine } from "./gesture/gestureEngine";
+import { gestureStateLabel } from "./i18n/zh-CN";
 import { thumbIndexDistance } from "./gesture/landmarkMetrics";
 import {
   type GestureOutput,
@@ -77,8 +78,8 @@ function App() {
   const engineRef = useRef(engine);
   engineRef.current = engine;
   const [cameraReady, setCameraReady] = useState(false);
-  const [cameraStatus, setCameraStatus] = useState("Requesting access");
-  const [trackerStatus, setTrackerStatus] = useState("Waiting for camera");
+  const [cameraStatus, setCameraStatus] = useState("正在请求摄像头权限");
+  const [trackerStatus, setTrackerStatus] = useState("等待摄像头");
   const [landmarker, setLandmarker] = useState<HandLandmarker | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [output, setOutput] = useState<GestureOutput>(INITIAL_OUTPUT);
@@ -89,22 +90,22 @@ function App() {
 
   const handleCameraReady = useCallback(() => {
     setCameraReady(true);
-    setCameraStatus("Active");
+    setCameraStatus("摄像头已启用");
   }, []);
 
   const handleCameraError = useCallback((message: string) => {
     const nextOutput = engineRef.current.update(null, performance.now());
     setCameraReady(false);
     setCameraStatus(message);
-    setTrackerStatus("Unavailable");
+    setTrackerStatus("不可用");
     setLandmarks(null);
     setOutput(nextOutput);
   }, []);
 
   const handleCameraRetry = useCallback(() => {
     setCameraReady(false);
-    setCameraStatus("Requesting access");
-    setTrackerStatus("Waiting for camera");
+    setCameraStatus("正在请求摄像头权限");
+    setTrackerStatus("等待摄像头");
     setLandmarks(null);
     setOutput(engineRef.current.update(null, performance.now()));
   }, []);
@@ -266,7 +267,7 @@ function App() {
 
     let active = true;
     let tracker: HandLandmarker | null = null;
-    setTrackerStatus("Loading model");
+    setTrackerStatus("正在加载模型");
 
     void createHandLandmarker()
       .then((createdTracker) => {
@@ -277,11 +278,11 @@ function App() {
 
         tracker = createdTracker;
         setLandmarker(createdTracker);
-        setTrackerStatus("Ready — show one hand");
+        setTrackerStatus("准备就绪，请展示一只手");
       })
       .catch(() => {
         if (active) {
-          setTrackerStatus("Model failed to load — reload to retry");
+          setTrackerStatus("模型加载失败，请重新加载后重试");
         }
       });
 
@@ -321,14 +322,14 @@ function App() {
           let failed = false;
           const nextLandmarks = detectFirstHand(landmarker, video, nowMs, () => {
             failed = true;
-            setTrackerStatus("Recognition error — reload to retry");
+            setTrackerStatus("识别出错，请重新加载后重试");
           });
           const nextOutput = engine.update(nextLandmarks, nowMs);
 
           setLandmarks(nextLandmarks);
           setOutput(nextOutput);
           if (!failed) {
-            setTrackerStatus(nextLandmarks ? "Hand detected" : "No hand detected");
+            setTrackerStatus(nextLandmarks ? "已检测到手部" : "未检测到手部");
           }
 
           if (
@@ -366,7 +367,7 @@ function App() {
           staleFrameHandled = true;
           setLandmarks(null);
           setOutput(engine.update(null, nowMs));
-          setTrackerStatus("Camera frame stalled");
+          setTrackerStatus("摄像头画面停滞");
         }
       }
 
@@ -385,16 +386,16 @@ function App() {
     <main className="app-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">Browser-only interaction</p>
-          <h1>Hand Gesture Control</h1>
+          <p className="eyebrow">本机实时交互</p>
+          <h1>手势控制</h1>
         </div>
-        <p>Move, click, drag, right-click, double-click and scroll with one hand.</p>
+        <p>单手即可控制移动、点击、拖动、右键、双击和滚动。</p>
       </header>
 
       <StatusPanel
         camera={cameraStatus}
         tracker={trackerStatus}
-        gesture={output.state}
+        gesture={gestureStateLabel(output.state)}
       />
 
       <SystemControlPanel

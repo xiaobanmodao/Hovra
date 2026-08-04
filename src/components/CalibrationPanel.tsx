@@ -6,6 +6,7 @@ import {
   type CalibrationControlMetadata,
 } from "../gesture/config";
 import type { GestureSettings, GestureState } from "../gesture/types";
+import { gestureStateLabel } from "../i18n/zh-CN";
 
 type CalibrationPanelProps = {
   settings: GestureSettings;
@@ -44,7 +45,7 @@ function SettingControl({
       <div className="calibration-stepper" role="group" aria-labelledby={labelId}>
         <button
           type="button"
-          aria-label={`Decrease ${accessibleLabel}`}
+          aria-label={`调低${accessibleLabel}`}
           disabled={value <= min}
           onClick={onDecrease}
         >
@@ -53,7 +54,7 @@ function SettingControl({
         <output aria-live="polite">{displayValue}</output>
         <button
           type="button"
-          aria-label={`Increase ${accessibleLabel}`}
+          aria-label={`调高${accessibleLabel}`}
           disabled={value >= max}
           onClick={onIncrease}
         >
@@ -102,15 +103,15 @@ export function CalibrationPanel({
     <section className="calibration-panel" aria-labelledby={`${contentId}-heading`}>
       <div className="calibration-heading">
         <div>
-          <p className="eyebrow">Live diagnostics</p>
-          <h2 id={`${contentId}-heading`}>Calibration</h2>
+          <p className="eyebrow">实时诊断</p>
+          <h2 id={`${contentId}-heading`}>校准</h2>
         </div>
         <button
           type="button"
           className="calibration-toggle"
           aria-controls={contentId}
           aria-expanded={isExpanded}
-          aria-label={`${isExpanded ? "Collapse" : "Expand"} calibration panel`}
+          aria-label={`${isExpanded ? "收起" : "展开"}校准面板`}
           onClick={() => setIsExpanded((expanded) => !expanded)}
         >
           <span aria-hidden="true">{isExpanded ? "−" : "+"}</span>
@@ -120,15 +121,15 @@ export function CalibrationPanel({
       <div id={contentId} className="calibration-content" hidden={!isExpanded}>
           <dl className="calibration-diagnostics">
             <div>
-              <dt>Pinch distance</dt>
+              <dt>捏合距离</dt>
               <dd>{pinchDistance === null ? "—" : pinchDistance.toFixed(3)}</dd>
             </div>
             <div>
-              <dt>Gesture state</dt>
-              <dd>{gestureState}</dd>
+              <dt>手势状态</dt>
+              <dd>{gestureStateLabel(gestureState)}</dd>
             </div>
             <div>
-              <dt>Cursor</dt>
+              <dt>光标</dt>
               <dd>{cursor === null ? "—" : `${Math.round(cursor.x)}, ${Math.round(cursor.y)}`}</dd>
             </div>
           </dl>
@@ -157,7 +158,7 @@ export function CalibrationPanel({
             className="calibration-reset"
             onClick={() => onSettingsChange({ ...DEFAULT_GESTURE_SETTINGS })}
           >
-            Reset defaults
+            恢复默认设置
           </button>
       </div>
     </section>

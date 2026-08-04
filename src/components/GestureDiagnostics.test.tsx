@@ -33,8 +33,8 @@ describe("GestureDiagnostics", () => {
   it("renders candidate, lock, progress, normalized ratios, scale, score, and quality", () => {
     render(<GestureDiagnostics output={output} />);
 
-    expect(screen.getByText("candidate")).toBeInTheDocument();
-    expect(screen.getByText("left")).toBeInTheDocument();
+    expect(screen.getByText("候选确认")).toBeInTheDocument();
+    expect(screen.getByText("左键")).toBeInTheDocument();
     expect(screen.getByText("3/4")).toBeInTheDocument();
     expect(screen.getByText("0.234")).toBeInTheDocument();
     expect(screen.getByText("0.210 / 0.610 / 0.720")).toBeInTheDocument();
@@ -46,12 +46,12 @@ describe("GestureDiagnostics", () => {
   it("offers explicit local export only when a desktop callback is provided", async () => {
     const onSaveTrace = vi.fn().mockResolvedValue("saved");
     const { rerender } = render(<GestureDiagnostics output={output} />);
-    expect(screen.queryByRole("button", { name: /save diagnostic trace/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存诊断记录" })).not.toBeInTheDocument();
 
     rerender(<GestureDiagnostics output={output} onSaveTrace={onSaveTrace} />);
-    fireEvent.click(screen.getByRole("button", { name: /save diagnostic trace/i }));
+    fireEvent.click(screen.getByRole("button", { name: "保存诊断记录" }));
 
     expect(onSaveTrace).toHaveBeenCalledOnce();
-    expect(await screen.findByText("Trace saved locally")).toBeInTheDocument();
+    expect(await screen.findByText("诊断记录已保存到本机")).toBeInTheDocument();
   });
 });

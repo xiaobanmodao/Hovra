@@ -19,14 +19,14 @@ const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
 
 const cameraErrorMessage = (error: unknown): string => {
   if (error instanceof DOMException && error.name === "NotAllowedError") {
-    return "Camera permission was denied. Allow camera access, then retry.";
+    return "摄像头权限被拒绝。请允许摄像头访问后重试。";
   }
 
   if (error instanceof DOMException && error.name === "NotFoundError") {
-    return "No camera was found on this device.";
+    return "此设备未发现可用摄像头。";
   }
 
-  return "The camera could not start. Check browser permissions and camera availability.";
+  return "摄像头无法启动。请检查浏览器权限与设备可用性。";
 };
 
 export function CameraStage({
@@ -56,14 +56,14 @@ export function CameraStage({
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
-      const message = "Camera stream ended. Reconnect the camera, then retry.";
+      const message = "摄像头流已结束。请重新连接摄像头后重试。";
       setCameraError(message);
       onCameraError(message);
     };
 
     const startCamera = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        const message = "This browser does not support camera access.";
+        const message = "此浏览器不支持摄像头访问。";
         setCameraError(message);
         onCameraError(message);
         return;
@@ -179,10 +179,10 @@ export function CameraStage({
     <section className="camera-panel" aria-labelledby="camera-title">
       <div className="section-heading compact">
         <div>
-          <p className="eyebrow">Live camera</p>
-          <h2 id="camera-title">Hand tracking</h2>
+          <p className="eyebrow">实时摄像头</p>
+          <h2 id="camera-title">手部追踪</h2>
         </div>
-        <span className="privacy-badge">Browser only</span>
+        <span className="privacy-badge">仅本机处理</span>
       </div>
       <div className="camera-media">
         <video
@@ -191,14 +191,14 @@ export function CameraStage({
           muted
           playsInline
           onLoadedData={onCameraReady}
-          aria-label="Mirrored camera preview"
+          aria-label="镜像摄像头预览"
         />
         <canvas ref={canvasRef} aria-hidden="true" />
         <div className="camera-reticle" aria-hidden="true" />
         {cameraError && (
           <div className="camera-error" role="alert">
             <p>{cameraError}</p>
-            <button type="button" onClick={retryCamera}>Retry camera</button>
+            <button type="button" onClick={retryCamera}>重试摄像头</button>
           </div>
         )}
       </div>

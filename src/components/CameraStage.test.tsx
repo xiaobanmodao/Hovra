@@ -36,7 +36,7 @@ it("reports an ended camera stream and stops every track on cleanup", async () =
   act(() => firstTrack.dispatchEvent(new Event("ended")));
 
   expect(onCameraError).toHaveBeenCalledWith(
-    "Camera stream ended. Reconnect the camera, then retry.",
+    "摄像头流已结束。请重新连接摄像头后重试。",
   );
 
   unmount();
@@ -68,8 +68,8 @@ it("offers a retry after camera failure and requests a new stream", async () => 
     />,
   );
 
-  expect(await screen.findByRole("alert")).toHaveTextContent(/permission was denied/i);
-  fireEvent.click(screen.getByRole("button", { name: /retry camera/i }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("摄像头权限被拒绝。请允许摄像头访问后重试。");
+  fireEvent.click(screen.getByRole("button", { name: "重试摄像头" }));
 
   expect(onCameraRetry).toHaveBeenCalledOnce();
   await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));

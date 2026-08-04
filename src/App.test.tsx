@@ -143,7 +143,7 @@ const renderDesktopApp = async (options: {
   window.gestureDesktop = bridge;
 
   const rendered = render(<App />);
-  const video = screen.getByLabelText(/mirrored camera preview/i) as HTMLVideoElement;
+  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
   Object.defineProperty(video, "readyState", {
     configurable: true,
     value: HTMLMediaElement.HAVE_CURRENT_DATA,
@@ -168,11 +168,11 @@ const renderDesktopApp = async (options: {
   };
 
   runFrame(16);
-  const enable = await screen.findByRole("button", { name: "Enable system control" });
+  const enable = await screen.findByRole("button", { name: "启用系统控制" });
   await waitFor(() => expect(enable).toBeEnabled());
   if (options.enable !== false) {
     fireEvent.click(enable);
-    await screen.findByText("Enabled");
+    await screen.findByText("已启用");
   }
 
   return { ...rendered, bridge, enable, runAnimationFrame, runFrame, video };
@@ -194,7 +194,7 @@ const startDesktopDrag = async (
 
 it("renders the hand gesture demo heading", () => {
   render(<App />);
-  expect(screen.getByRole("heading", { name: /hand gesture/i })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "手势控制" })).toBeInTheDocument();
 });
 
 it("propagates calibration settings and displays the live three-dimensional pinch distance", async () => {
@@ -220,17 +220,17 @@ it("propagates calibration settings and displays the live three-dimensional pinc
 
   render(<App />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Increase drag hold" }));
+  fireEvent.click(screen.getByRole("button", { name: "调高拖动保持时间" }));
   expect(gestureEngine.createdWith).toHaveBeenLastCalledWith(
     expect.objectContaining({ dragHoldMs: 400 }),
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
+  fireEvent.click(screen.getByRole("button", { name: "恢复默认设置" }));
   expect(gestureEngine.createdWith).toHaveBeenLastCalledWith(
     expect.objectContaining({ dragHoldMs: 350 }),
   );
 
-  const video = screen.getByLabelText(/mirrored camera preview/i) as HTMLVideoElement;
+  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
   Object.defineProperty(video, "readyState", {
     configurable: true,
     value: HTMLMediaElement.HAVE_CURRENT_DATA,
@@ -244,7 +244,7 @@ it("propagates calibration settings and displays the live three-dimensional pinc
   await waitFor(() => expect(nextFrame).not.toBeNull());
   act(() => nextFrame?.(16));
 
-  expect(screen.getByText("Pinch distance").nextElementSibling).toHaveTextContent("0.050");
+  expect(screen.getByText("捏合距离").nextElementSibling).toHaveTextContent("0.050");
 });
 
 it("ends an active drag before replacing the engine when calibration settings change", async () => {
@@ -277,7 +277,7 @@ it("ends an active drag before replacing the engine when calibration settings ch
   });
 
   render(<App />);
-  const video = screen.getByLabelText(/mirrored camera preview/i) as HTMLVideoElement;
+  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
   Object.defineProperty(video, "readyState", {
     configurable: true,
     value: HTMLMediaElement.HAVE_CURRENT_DATA,
@@ -296,14 +296,14 @@ it("ends an active drag before replacing the engine when calibration settings ch
   video.currentTime = 3;
   act(() => nextFrame?.(446));
 
-  const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
+  const status = screen.getByRole("status", { name: "摄像头、追踪器和手势状态" });
   const card = screen.getByTestId("draggable-card");
-  expect(status).toHaveTextContent(/gesturedragging/i);
+  expect(status).toHaveTextContent(/手势拖动中/);
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
 
-  fireEvent.click(screen.getByRole("button", { name: "Increase drag hold" }));
+  fireEvent.click(screen.getByRole("button", { name: "调高拖动保持时间" }));
 
-  expect(status).toHaveTextContent(/gesturelost/i);
+  expect(status).toHaveTextContent(/手势未检测到手部/);
   expect(card).not.toHaveClass("is-dragging");
 
   const distantCursor = {
@@ -324,7 +324,7 @@ it("ends an active drag before replacing the engine when calibration settings ch
   video.currentTime = 9;
   act(() => nextFrame?.(1_510));
 
-  expect(status).toHaveTextContent(/gesturedragging/i);
+  expect(status).toHaveTextContent(/手势拖动中/);
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
 });
 
@@ -355,7 +355,7 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
   });
 
   render(<App />);
-  const video = screen.getByLabelText(/mirrored camera preview/i) as HTMLVideoElement;
+  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
   Object.defineProperty(video, "readyState", {
     configurable: true,
     value: HTMLMediaElement.HAVE_CURRENT_DATA,
@@ -378,8 +378,8 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
   video.currentTime = 3;
   act(() => nextFrame?.(446));
   expect(vision.detectFirstHand).toHaveBeenCalledTimes(3);
-  const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
-  expect(status).toHaveTextContent(/gesturedragging/i);
+  const status = screen.getByRole("status", { name: "摄像头、追踪器和手势状态" });
+  expect(status).toHaveTextContent(/手势拖动中/);
   const card = screen.getByTestId("draggable-card");
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
 
@@ -389,8 +389,8 @@ it("marks a stalled frame lost when video readiness drops during a drag", async 
   });
   act(() => nextFrame?.(950));
   expect(vision.detectFirstHand).toHaveBeenCalledTimes(3);
-  expect(status).toHaveTextContent(/camera frame stalled/i);
-  expect(status).toHaveTextContent(/gesturelost/i);
+  expect(status).toHaveTextContent(/摄像头画面停滞/);
+  expect(status).toHaveTextContent(/手势未检测到手部/);
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
 });
 
@@ -423,7 +423,7 @@ it("ends an active drag and cleans up recognition when the camera stream becomes
   });
 
   render(<App />);
-  const video = screen.getByLabelText(/mirrored camera preview/i) as HTMLVideoElement;
+  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
   Object.defineProperty(video, "readyState", {
     configurable: true,
     value: HTMLMediaElement.HAVE_CURRENT_DATA,
@@ -441,14 +441,14 @@ it("ends an active drag and cleans up recognition when the camera stream becomes
   act(() => nextFrame?.(96));
   video.currentTime = 3;
   act(() => nextFrame?.(446));
-  const status = screen.getByRole("status", { name: /camera, tracker and gesture status/i });
-  expect(status).toHaveTextContent(/gesturedragging/i);
+  const status = screen.getByRole("status", { name: "摄像头、追踪器和手势状态" });
+  expect(status).toHaveTextContent(/手势拖动中/);
   const card = screen.getByTestId("draggable-card");
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
 
   act(() => stream.dispatchEvent(new Event("inactive")));
 
-  expect(status).toHaveTextContent(/gesturelost/i);
+  expect(status).toHaveTextContent(/手势未检测到手部/);
   expect(card).toHaveStyle({ left: "20px", top: "30px" });
   expect(track.stop).toHaveBeenCalledOnce();
   expect(vision.close).toHaveBeenCalledOnce();
@@ -537,7 +537,7 @@ it("dispatches right click and double click without disabling explicit control",
   await waitFor(() => expect(bridge.doubleClick).toHaveBeenCalledOnce());
   expect(bridge.click).not.toHaveBeenCalled();
   expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  expect(screen.getByText("Enabled")).toBeInTheDocument();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
 });
 
 it("keeps the system pointer fixed while two-finger movement scrolls", async () => {
@@ -584,7 +584,7 @@ it.each(["lost", "stale-frame"] as const)(
 
     await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
     expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-    expect(screen.getByText("Enabled")).toBeInTheDocument();
+    expect(screen.getByText("已启用")).toBeInTheDocument();
   },
 );
 
@@ -603,7 +603,7 @@ it("keeps system control enabled when an open palm completes a click", async () 
 
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
   expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  expect(screen.getByText("Enabled")).toBeInTheDocument();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
 });
 
 it("keeps system control enabled when an open palm ends a drag", async () => {
@@ -619,7 +619,7 @@ it("keeps system control enabled when an open palm ends a drag", async () => {
 
   await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
   expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  expect(screen.getByText("Enabled")).toBeInTheDocument();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
 });
 
 it("keeps system control enabled when the app window loses focus", async () => {
@@ -629,7 +629,7 @@ it("keeps system control enabled when the app window loses focus", async () => {
   act(() => window.dispatchEvent(new Event("blur")));
 
   expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  expect(screen.getByText("Enabled")).toBeInTheDocument();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
 });
 
 it("requests a mouse release when the renderer unmounts", async () => {
@@ -647,12 +647,12 @@ it("reconciles a rejected main-process activation and remains paused", async () 
   window.gestureDesktop = bridge;
 
   render(<App />);
-  const enable = await screen.findByRole("button", { name: "Enable system control" });
+  const enable = await screen.findByRole("button", { name: "启用系统控制" });
   await waitFor(() => expect(enable).toBeEnabled());
   fireEvent.click(enable);
 
   await waitFor(() => expect(bridge.activate).toHaveBeenCalledOnce());
-  expect(screen.getByText("Paused")).toBeInTheDocument();
+  expect(screen.getByText("已暂停")).toBeInTheDocument();
   expect(bridge.move).not.toHaveBeenCalled();
   expect(bridge.click).not.toHaveBeenCalled();
   expect(bridge.mouseDown).not.toHaveBeenCalled();
@@ -676,5 +676,5 @@ it("does not cancel an explicit pending activation when tracking becomes lost", 
     resolveActivation(true);
     await activation;
   });
-  await screen.findByText("Enabled");
+  await screen.findByText("已启用");
 });
