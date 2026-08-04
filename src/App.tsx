@@ -54,11 +54,11 @@ const clampNormalizedPoint = (point: Point): Point => ({
 });
 
 const desktopCursorState = (output: GestureOutput) => {
-  if (output.phase === "candidate" && output.candidate && output.candidate !== "open-palm") {
-    return `candidate-${output.candidate}` as const;
+  if (output.phase === "candidate" && output.candidate === "left") {
+    return "candidate-left" as const;
   }
-  if (output.phase === "releasing" && output.lockedGesture && output.lockedGesture !== "open-palm") {
-    return `releasing-${output.lockedGesture}` as const;
+  if (output.phase === "releasing" && output.lockedGesture === "left") {
+    return "releasing-left" as const;
   }
   return output.state === "lost" || output.state === "paused" ? "tracking" : output.state;
 };
@@ -222,41 +222,15 @@ function App() {
       if (output.click) {
         void desktopBridge.click().catch(() => pauseSystemControl());
       }
-      if (output.rightClick) {
-        void desktopBridge.rightClick().catch(() => pauseSystemControl());
-      }
-      if (output.doubleClick) {
-        void desktopBridge.doubleClick().catch(() => pauseSystemControl());
-      }
-      if (output.dragEnd) {
-        void desktopBridge.mouseUp().catch(() => pauseSystemControl());
-      }
       return;
     }
 
-    if (output.dragStart) {
-      void desktopBridge.mouseDown().catch(() => pauseSystemControl());
-    }
     if (systemCursor) {
-      const movement = output.state === "dragging" || output.dragEnd
-        ? desktopBridge.drag(systemCursor.x, systemCursor.y)
-        : desktopBridge.move(systemCursor.x, systemCursor.y, desktopCursorState(output));
-      void movement.catch(() => pauseSystemControl());
+      void desktopBridge.move(systemCursor.x, systemCursor.y, desktopCursorState(output))
+        .catch(() => pauseSystemControl());
     }
     if (output.click) {
       void desktopBridge.click().catch(() => pauseSystemControl());
-    }
-    if (output.rightClick) {
-      void desktopBridge.rightClick().catch(() => pauseSystemControl());
-    }
-    if (output.doubleClick) {
-      void desktopBridge.doubleClick().catch(() => pauseSystemControl());
-    }
-    if (output.scrollY !== 0) {
-      void desktopBridge.scroll(output.scrollY).catch(() => pauseSystemControl());
-    }
-    if (output.dragEnd) {
-      void desktopBridge.mouseUp().catch(() => pauseSystemControl());
     }
   }, [desktopBridge, output, pauseSystemControl, systemCursor]);
 
@@ -336,7 +310,6 @@ function App() {
             nextOutput.cursor
             && nextOutput.state !== "paused"
             && nextOutput.state !== "lost"
-            && nextOutput.state !== "scrolling"
           ) {
             const mapped = mapMirroredPoint(nextOutput.cursor, {
               width: 1,
@@ -389,7 +362,7 @@ function App() {
           <p className="eyebrow">本机实时交互</p>
           <h1>手势控制</h1>
         </div>
-        <p>单手即可控制移动、点击、拖动、右键、双击和滚动。</p>
+        <p>单手即可控制移动、左键点击和张手停止。</p>
       </header>
 
       <StatusPanel

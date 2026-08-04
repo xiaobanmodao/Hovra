@@ -4,7 +4,7 @@ import { GestureClassifier } from "./gestureClassifier";
 import { extractGestureFeatures, type GestureFeatures } from "./gestureFeatures";
 import { GestureStabilizer, type GestureStabilizerOutput } from "./gestureStabilizer";
 import { GestureTraceBuffer, type GestureTrace, type TraceGestureEvent } from "./gestureTrace";
-import { buildHandGeometry, type HandGeometry, type Vector3 } from "./handGeometry";
+import { buildHandGeometry, type HandGeometry } from "./handGeometry";
 import {
   INDEX_FINGER_TIP,
   type GestureDiagnosticsSnapshot,
@@ -15,25 +15,12 @@ import {
   type Landmark,
 } from "./types";
 
-const PINCH_STATES: Record<"left" | "right" | "double", GestureState> = {
-  left: "left-pinching",
-  right: "right-pinching",
-  double: "double-pinching",
-};
-
-const SCROLL_SCALE = 24;
-const MAX_SCROLL_STEP = 12;
-const SCROLL_DEAD_ZONE = 0.015;
-
 export class GestureEngine {
   private readonly settings: GestureSettings;
   private readonly filter = new AdaptiveLandmarkFilter();
   private readonly classifier: GestureClassifier;
   private readonly stabilizer = new GestureStabilizer();
   private readonly trace = new GestureTraceBuffer();
-  private activeStartedAt: number | null = null;
-  private dragging = false;
-  private scrollReference: Vector3 | null = null;
   private lastCursor: Landmark | null = null;
   private traceEpochMs: number | null = null;
   private lastTraceTimestamp = 0;
@@ -45,53 +32,23 @@ export class GestureEngine {
 
   update(landmarks: Landmark[] | null, nowMs: number): GestureOutput {
     const filtered = this.filter.update(landmarks, nowMs);
-    const geometry = buildHandGeometry(filtered);
-    const features = geometry ? extractGestureFeatures(geometry) : null;
+    const cursorGeometry = buildHandGeometry(filtered);
+    const actionGeometry = buildHandGeometry(landmarks);
+    const features = actionGeometry ? extractGestureFeatures(actionGeometry) : null;
     const candidate = features
       ? this.classifier.classify(features, this.stabilizer.lockedGesture)
       : null;
     const stabilized = this.stabilizer.update(candidate, nowMs, features !== null);
     const events: Partial<GestureOutput> = {};
 
-    if (geometry) {
-      this.lastCursor = geometry.landmarks[INDEX_FINGER_TIP] ?? this.lastCursor;
+    if (cursorGeometry) {
+      this.lastCursor = cursorGeometry.landmarks[INDEX_FINGER_TIP] ?? this.lastCursor;
     }
 
-    if (stabilized.activated !== null) {
-      this.activeStartedAt = nowMs;
-      if (stabilized.activated === "scroll") {
-        this.scrollReference = geometry?.origin ?? null;
-      }
-    }
-
-    if (
-      stabilized.lockedGesture === "left"
-      && !this.dragging
-      && this.activeStartedAt !== null
-      && nowMs - this.activeStartedAt >= this.settings.dragHoldMs
-    ) {
-      this.dragging = true;
-      events.dragStart = true;
-    }
-
-    if (stabilized.lockedGesture === "scroll" && geometry) {
-      events.scrollY = this.nextScrollStep(geometry);
-    }
-
-    if (stabilized.timedOut) {
-      if (this.dragging) events.dragEnd = true;
-      this.clearActiveAction();
-    } else if (stabilized.released !== null) {
-      if (this.dragging) {
-        events.dragEnd = true;
-      } else if (stabilized.released === "left") {
+    if (stabilized.released !== null) {
+      if (stabilized.released === "left") {
         events.click = true;
-      } else if (stabilized.released === "right") {
-        events.rightClick = true;
-      } else if (stabilized.released === "double") {
-        events.doubleClick = true;
       }
-      this.clearActiveAction();
     }
 
     const state = this.deriveState(stabilized, features !== null);
@@ -116,37 +73,12 @@ export class GestureEngine {
   }
 
   private deriveState(stabilized: GestureStabilizerOutput, inputValid: boolean): GestureState {
-    if (this.dragging) return "dragging";
     const visibleGesture = stabilized.lockedGesture ?? (
       stabilized.phase === "candidate" ? stabilized.candidate : null
     );
-    if (visibleGesture === "left" || visibleGesture === "right" || visibleGesture === "double") {
-      return PINCH_STATES[visibleGesture];
-    }
-    if (visibleGesture === "scroll") return stabilized.lockedGesture ? "scrolling" : "tracking";
+    if (visibleGesture === "left") return "left-pinching";
     if (visibleGesture === "open-palm") return stabilized.lockedGesture ? "paused" : "tracking";
     return inputValid ? "tracking" : "lost";
-  }
-
-  private nextScrollStep(geometry: HandGeometry): number {
-    if (this.scrollReference === null) {
-      this.scrollReference = geometry.origin;
-      return 0;
-    }
-    const delta = geometry.projectDelta({
-      x: geometry.origin.x - this.scrollReference.x,
-      y: geometry.origin.y - this.scrollReference.y,
-      z: geometry.origin.z - this.scrollReference.z,
-    });
-    this.scrollReference = geometry.origin;
-    if (Math.abs(delta.y) < SCROLL_DEAD_ZONE) return 0;
-    return Math.max(-MAX_SCROLL_STEP, Math.min(MAX_SCROLL_STEP, Math.round(delta.y * SCROLL_SCALE)));
-  }
-
-  private clearActiveAction(): void {
-    this.activeStartedAt = null;
-    this.dragging = false;
-    this.scrollReference = null;
   }
 
   private output(
@@ -166,7 +98,7 @@ export class GestureEngine {
       scrollY: 0,
       dragStart: false,
       dragEnd: false,
-      phase: this.dragging ? "dragging" : stabilized.phase,
+      phase: stabilized.phase,
       candidate: stabilized.candidate,
       lockedGesture: stabilized.lockedGesture,
       confirmationProgress: stabilized.confirmationProgress,
@@ -186,11 +118,6 @@ export class GestureEngine {
     this.lastTraceTimestamp = relativeTimestamp;
     const events: TraceGestureEvent[] = [];
     if (output.click) events.push("click");
-    if (output.rightClick) events.push("rightClick");
-    if (output.doubleClick) events.push("doubleClick");
-    if (output.scrollY !== 0) events.push("scroll");
-    if (output.dragStart) events.push("dragStart");
-    if (output.dragEnd) events.push("dragEnd");
 
     this.trace.push({
       t: relativeTimestamp,

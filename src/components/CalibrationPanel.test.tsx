@@ -52,7 +52,7 @@ describe("CalibrationPanel", () => {
     expect(screen.getByText("320, 240")).toBeInTheDocument();
     expect(screen.getByText("0.50")).toBeInTheDocument();
     expect(screen.getByText("0.20")).toBeInTheDocument();
-    expect(screen.getByText("350 毫秒")).toBeInTheDocument();
+    expect(screen.queryByText("350 毫秒")).not.toBeInTheDocument();
   });
 
   it("shows an em dash when pinch distance and cursor diagnostics are unavailable", () => {
@@ -134,9 +134,9 @@ describe("CalibrationPanel", () => {
     const onSettingsChange = vi.fn();
     render(<CalibrationPanelHarness onSettingsChange={onSettingsChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "调高拖动保持时间" }));
+    fireEvent.click(screen.getByRole("button", { name: "调高手势灵敏度" }));
     expect(onSettingsChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ dragHoldMs: 400 }),
+      expect.objectContaining({ gestureSensitivity: 0.55 }),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "恢复默认设置" }));

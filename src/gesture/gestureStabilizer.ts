@@ -33,10 +33,10 @@ export class GestureStabilizer {
   private lastTimestampMs: number | null = null;
 
   constructor(options: GestureStabilizerOptions = {}) {
-    this.entryMs = validDuration(options.entryMs, 80);
-    this.scrollEntryMs = validDuration(options.scrollEntryMs, 100);
-    this.releaseMs = validDuration(options.releaseMs, 60);
-    this.cooldownMs = validDuration(options.cooldownMs, 120);
+    this.entryMs = validDuration(options.entryMs, 16);
+    this.scrollEntryMs = validDuration(options.scrollEntryMs, 16);
+    this.releaseMs = validDuration(options.releaseMs, 16);
+    this.cooldownMs = validDuration(options.cooldownMs, 50);
     this.dropoutGraceMs = validDuration(options.dropoutGraceMs, 120);
   }
 

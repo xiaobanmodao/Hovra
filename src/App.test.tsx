@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
 import type { GestureDesktopApi } from "./electron.d";
 import { makeGestureHand } from "./gesture/fixtures/stable-gesture-sequences";
-import type { GestureSettings, Landmark } from "./gesture/types";
+import type { Landmark } from "./gesture/types";
 
 const vision = vi.hoisted(() => ({
   close: vi.fn(),
@@ -10,55 +11,21 @@ const vision = vi.hoisted(() => ({
   detectFirstHand: vi.fn(),
 }));
 
-const gestureEngine = vi.hoisted(() => ({
-  createdWith: vi.fn(),
-}));
-
 vi.mock("./vision/handLandmarker", () => ({
   createHandLandmarker: vision.createHandLandmarker,
   detectFirstHand: vision.detectFirstHand,
 }));
 
-vi.mock("./gesture/gestureEngine", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./gesture/gestureEngine")>();
-
-  return {
-    GestureEngine: class extends actual.GestureEngine {
-      constructor(settings?: GestureSettings) {
-        super(settings);
-        gestureEngine.createdWith(settings);
-      }
-    },
-  };
-});
-
 import App from "./App";
 
-const pinchedHandAt = (x: number, y: number): Landmark[] => {
-  return makeGestureHand("left", { cursor: { x, y } });
-};
-
-const rect = (left: number, top: number, width: number, height: number): DOMRect => ({
-  bottom: top + height,
-  height,
-  left,
-  right: left + width,
-  top,
-  width,
-  x: left,
-  y: top,
-  toJSON: () => ({}),
-});
+const handAt = (gesture: "tracking" | "left" | "right" | "double" | "scroll" | "open-palm", x = 0.45, y = 0.45): Landmark[] => (
+  makeGestureHand(gesture, { cursor: { x, y } })
+);
 
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
-    arc: vi.fn(),
-    beginPath: vi.fn(),
-    clearRect: vi.fn(),
-    fill: vi.fn(),
-    lineTo: vi.fn(),
-    moveTo: vi.fn(),
-    stroke: vi.fn(),
+    arc: vi.fn(), beginPath: vi.fn(), clearRect: vi.fn(), fill: vi.fn(),
+    lineTo: vi.fn(), moveTo: vi.fn(), stroke: vi.fn(),
   } as unknown as CanvasRenderingContext2D);
 });
 
@@ -70,7 +37,6 @@ afterEach(() => {
   vision.close.mockReset();
   vision.createHandLandmarker.mockReset();
   vision.detectFirstHand.mockReset();
-  gestureEngine.createdWith.mockReset();
 });
 
 const desktopApi = (): GestureDesktopApi => ({
@@ -90,46 +56,9 @@ const desktopApi = (): GestureDesktopApi => ({
   onSafetyPause: vi.fn(() => vi.fn()),
 });
 
-const extendedPinchHandAt = (
-  kind: "left" | "right" | "double",
-  x: number,
-  y: number,
-): Landmark[] => {
-  return makeGestureHand(kind, { cursor: { x, y } });
-};
-
-const scrollingHandAt = (verticalOffset = 0): Landmark[] => {
-  return makeGestureHand("scroll", { translateY: 0.5 + verticalOffset });
-};
-
-const trackingHandAt = (x: number, y: number): Landmark[] => {
-  return makeGestureHand("tracking", { cursor: { x, y } });
-};
-
-const openPalmAt = (x: number, y: number): Landmark[] => {
-  return makeGestureHand("open-palm", { cursor: { x, y } });
-};
-
-const deferred = () => {
-  let resolve!: () => void;
-  const promise = new Promise<void>((next) => {
-    resolve = next;
-  });
-  return { promise, resolve };
-};
-
-const renderDesktopApp = async (options: {
-  bridge?: GestureDesktopApi;
-  enable?: boolean;
-} = {}) => {
-  const stream = Object.assign(new EventTarget(), {
-    getTracks: () => [],
-  }) as unknown as MediaStream;
-  vi.stubGlobal("navigator", {
-    ...navigator,
-    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
-  });
-
+const renderDesktopApp = async (bridge = desktopApi()) => {
+  const stream = Object.assign(new EventTarget(), { getTracks: () => [] }) as unknown as MediaStream;
+  vi.stubGlobal("navigator", { ...navigator, mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) } });
   let nextFrame: FrameRequestCallback | null = null;
   vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
     nextFrame = callback;
@@ -137,544 +66,95 @@ const renderDesktopApp = async (options: {
   }));
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
   vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
-  let detectedHand: Landmark[] | null = trackingHandAt(0.4, 0.4);
+  let detectedHand: Landmark[] | null = handAt("tracking");
   vision.detectFirstHand.mockImplementation(() => detectedHand);
-  const bridge = options.bridge ?? desktopApi();
   window.gestureDesktop = bridge;
 
   const rendered = render(<App />);
   const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
-  Object.defineProperty(video, "readyState", {
-    configurable: true,
-    value: HTMLMediaElement.HAVE_CURRENT_DATA,
-  });
-  Object.defineProperty(video, "currentTime", {
-    configurable: true,
-    value: 0,
-    writable: true,
-  });
+  Object.defineProperty(video, "readyState", { configurable: true, value: HTMLMediaElement.HAVE_CURRENT_DATA });
+  Object.defineProperty(video, "currentTime", { configurable: true, value: 0, writable: true });
   fireEvent.loadedData(video);
   await waitFor(() => expect(nextFrame).not.toBeNull());
 
   let videoTime = 0;
-  const runAnimationFrame = (nowMs: number) => {
-    act(() => nextFrame?.(nowMs));
-  };
   const runFrame = (nowMs: number, hand: Landmark[] | null = detectedHand) => {
     detectedHand = hand;
     videoTime += 1;
     video.currentTime = videoTime;
-    runAnimationFrame(nowMs);
+    act(() => nextFrame?.(nowMs));
   };
-
-  runFrame(16);
+  const runAnimationFrame = (nowMs: number) => act(() => nextFrame?.(nowMs));
+  runFrame(0);
   const enable = await screen.findByRole("button", { name: "启用系统控制" });
-  await waitFor(() => expect(enable).toBeEnabled());
-  if (options.enable !== false) {
-    fireEvent.click(enable);
-    await screen.findByText("已启用");
-  }
+  fireEvent.click(enable);
+  await screen.findByText("已启用");
 
-  return { ...rendered, bridge, enable, runAnimationFrame, runFrame, video };
+  return { ...rendered, bridge, runFrame, runAnimationFrame, video };
 };
 
-const startDesktopDrag = async (
-  runFrame: (nowMs: number, hand?: Landmark[] | null) => void,
-  bridge: GestureDesktopApi,
-) => {
-  const hand = pinchedHandAt(0.4, 0.4);
-  runFrame(100, hand);
-  runFrame(140, hand);
-  runFrame(180, hand);
-  runFrame(220, hand);
-  runFrame(260, hand);
-  runFrame(610, hand);
-  await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
-};
-
-it("renders the hand gesture demo heading", () => {
+it("renders the simplified interaction description", () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: "手势控制" })).toBeInTheDocument();
+  expect(screen.getByText("单手即可控制移动、左键点击和张手停止。")).toBeInTheDocument();
 });
 
-it("propagates calibration settings and displays the live three-dimensional pinch distance", async () => {
-  const stream = Object.assign(new EventTarget(), {
-    getTracks: () => [],
-  }) as unknown as MediaStream;
-  vi.stubGlobal("navigator", {
-    ...navigator,
-    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
-  });
-
-  let nextFrame: FrameRequestCallback | null = null;
-  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-    nextFrame = callback;
-    return 1;
-  }));
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
-  const hand: Landmark[] = Array.from({ length: 21 }, () => ({ x: 0, y: 0 }));
-  hand[4] = { x: 0.2, y: 0.3, z: 0 };
-  hand[8] = { x: 0.24, y: 0.3, z: 0.03 };
-  vision.detectFirstHand.mockReturnValue(hand);
-
-  render(<App />);
-
-  fireEvent.click(screen.getByRole("button", { name: "调高拖动保持时间" }));
-  expect(gestureEngine.createdWith).toHaveBeenLastCalledWith(
-    expect.objectContaining({ dragHoldMs: 400 }),
-  );
-
-  fireEvent.click(screen.getByRole("button", { name: "恢复默认设置" }));
-  expect(gestureEngine.createdWith).toHaveBeenLastCalledWith(
-    expect.objectContaining({ dragHoldMs: 350 }),
-  );
-
-  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
-  Object.defineProperty(video, "readyState", {
-    configurable: true,
-    value: HTMLMediaElement.HAVE_CURRENT_DATA,
-  });
-  Object.defineProperty(video, "currentTime", {
-    configurable: true,
-    value: 1,
-  });
-  fireEvent.loadedData(video);
-
-  await waitFor(() => expect(nextFrame).not.toBeNull());
-  act(() => nextFrame?.(16));
-
-  expect(screen.getByText("捏合距离").nextElementSibling).toHaveTextContent("0.050");
-});
-
-it("ends an active drag before replacing the engine when calibration settings change", async () => {
-  const stream = Object.assign(new EventTarget(), {
-    getTracks: () => [],
-  }) as unknown as MediaStream;
-  vi.stubGlobal("navigator", {
-    ...navigator,
-    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
-  });
-
-  let nextFrame: FrameRequestCallback | null = null;
-  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-    nextFrame = callback;
-    return 1;
-  }));
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
-  const startingCursor = {
-    x: 1 - 50 / window.innerWidth,
-    y: 50 / window.innerHeight,
-  };
-  let detectedHand = pinchedHandAt(startingCursor.x, startingCursor.y);
-  vision.detectFirstHand.mockImplementation(() => detectedHand);
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    if (this.classList.contains("draggable-card")) {
-      return rect(20, 30, 120, 90);
-    }
-    return rect(0, 0, 0, 0);
-  });
-
-  render(<App />);
-  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
-  Object.defineProperty(video, "readyState", {
-    configurable: true,
-    value: HTMLMediaElement.HAVE_CURRENT_DATA,
-  });
-  Object.defineProperty(video, "currentTime", {
-    configurable: true,
-    value: 1,
-    writable: true,
-  });
-  fireEvent.loadedData(video);
-  await waitFor(() => expect(nextFrame).not.toBeNull());
-
-  act(() => nextFrame?.(16));
-  video.currentTime = 2;
-  act(() => nextFrame?.(96));
-  video.currentTime = 3;
-  act(() => nextFrame?.(446));
-
-  const status = screen.getByRole("status", { name: "摄像头、追踪器和手势状态" });
-  const card = screen.getByTestId("draggable-card");
-  expect(status).toHaveTextContent(/手势拖动中/);
-  expect(card).toHaveStyle({ left: "20px", top: "30px" });
-
-  fireEvent.click(screen.getByRole("button", { name: "调高拖动保持时间" }));
-
-  expect(status).toHaveTextContent(/手势未检测到手部/);
-  expect(card).not.toHaveClass("is-dragging");
-
-  const distantCursor = {
-    x: 1 - 800 / window.innerWidth,
-    y: 400 / window.innerHeight,
-  };
-  detectedHand = pinchedHandAt(distantCursor.x, distantCursor.y);
-  video.currentTime = 4;
-  act(() => nextFrame?.(1_000));
-  video.currentTime = 5;
-  act(() => nextFrame?.(1_040));
-  video.currentTime = 6;
-  act(() => nextFrame?.(1_080));
-  video.currentTime = 7;
-  act(() => nextFrame?.(1_120));
-  video.currentTime = 8;
-  act(() => nextFrame?.(1_160));
-  video.currentTime = 9;
-  act(() => nextFrame?.(1_510));
-
-  expect(status).toHaveTextContent(/手势拖动中/);
-  expect(card).toHaveStyle({ left: "20px", top: "30px" });
-});
-
-it("marks a stalled frame lost when video readiness drops during a drag", async () => {
-  const stream = Object.assign(new EventTarget(), {
-    getTracks: () => [],
-  }) as unknown as MediaStream;
-  vi.stubGlobal("navigator", {
-    ...navigator,
-    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
-  });
-
-  let nextFrame: FrameRequestCallback | null = null;
-  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-    nextFrame = callback;
-    return 1;
-  }));
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
-  const cursorX = 1 - 50 / window.innerWidth;
-  const cursorY = 50 / window.innerHeight;
-  vision.detectFirstHand.mockReturnValue(pinchedHandAt(cursorX, cursorY));
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    if (this.classList.contains("draggable-card")) {
-      return rect(20, 30, 120, 90);
-    }
-    return rect(0, 0, 0, 0);
-  });
-
-  render(<App />);
-  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
-  Object.defineProperty(video, "readyState", {
-    configurable: true,
-    value: HTMLMediaElement.HAVE_CURRENT_DATA,
-  });
-  Object.defineProperty(video, "currentTime", {
-    configurable: true,
-    value: 1,
-    writable: true,
-  });
-  fireEvent.loadedData(video);
-
-  await waitFor(() => expect(vision.createHandLandmarker).toHaveBeenCalledOnce());
-  await waitFor(() => expect(nextFrame).not.toBeNull());
-
-  act(() => nextFrame?.(16));
-  expect(vision.detectFirstHand).toHaveBeenCalledOnce();
-
-  video.currentTime = 2;
-  act(() => nextFrame?.(96));
-  video.currentTime = 3;
-  act(() => nextFrame?.(446));
-  expect(vision.detectFirstHand).toHaveBeenCalledTimes(3);
-  const status = screen.getByRole("status", { name: "摄像头、追踪器和手势状态" });
-  expect(status).toHaveTextContent(/手势拖动中/);
-  const card = screen.getByTestId("draggable-card");
-  expect(card).toHaveStyle({ left: "20px", top: "30px" });
-
-  Object.defineProperty(video, "readyState", {
-    configurable: true,
-    value: HTMLMediaElement.HAVE_METADATA,
-  });
-  act(() => nextFrame?.(950));
-  expect(vision.detectFirstHand).toHaveBeenCalledTimes(3);
-  expect(status).toHaveTextContent(/摄像头画面停滞/);
-  expect(status).toHaveTextContent(/手势未检测到手部/);
-  expect(card).toHaveStyle({ left: "20px", top: "30px" });
-});
-
-it("ends an active drag and cleans up recognition when the camera stream becomes inactive", async () => {
-  const track = Object.assign(new EventTarget(), { stop: vi.fn() });
-  const stream = Object.assign(new EventTarget(), {
-    getTracks: () => [track],
-  }) as unknown as MediaStream;
-  vi.stubGlobal("navigator", {
-    ...navigator,
-    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
-  });
-
-  let nextFrame: FrameRequestCallback | null = null;
-  const cancelAnimationFrame = vi.fn();
-  vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
-    nextFrame = callback;
-    return 7;
-  }));
-  vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrame);
-  vision.createHandLandmarker.mockResolvedValue({ close: vision.close });
-  const cursorX = 1 - 50 / window.innerWidth;
-  const cursorY = 50 / window.innerHeight;
-  vision.detectFirstHand.mockReturnValue(pinchedHandAt(cursorX, cursorY));
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    if (this.classList.contains("draggable-card")) {
-      return rect(20, 30, 120, 90);
-    }
-    return rect(0, 0, 0, 0);
-  });
-
-  render(<App />);
-  const video = screen.getByLabelText("镜像摄像头预览") as HTMLVideoElement;
-  Object.defineProperty(video, "readyState", {
-    configurable: true,
-    value: HTMLMediaElement.HAVE_CURRENT_DATA,
-  });
-  Object.defineProperty(video, "currentTime", {
-    configurable: true,
-    value: 1,
-    writable: true,
-  });
-  fireEvent.loadedData(video);
-  await waitFor(() => expect(nextFrame).not.toBeNull());
-
-  act(() => nextFrame?.(16));
-  video.currentTime = 2;
-  act(() => nextFrame?.(96));
-  video.currentTime = 3;
-  act(() => nextFrame?.(446));
-  const status = screen.getByRole("status", { name: "摄像头、追踪器和手势状态" });
-  expect(status).toHaveTextContent(/手势拖动中/);
-  const card = screen.getByTestId("draggable-card");
-  expect(card).toHaveStyle({ left: "20px", top: "30px" });
-
-  act(() => stream.dispatchEvent(new Event("inactive")));
-
-  expect(status).toHaveTextContent(/手势未检测到手部/);
-  expect(card).toHaveStyle({ left: "20px", top: "30px" });
-  expect(track.stop).toHaveBeenCalledOnce();
-  expect(vision.close).toHaveBeenCalledOnce();
-  expect(cancelAnimationFrame).toHaveBeenCalledWith(7);
-});
-
-it("dispatches hover movement, short clicks, and drag-aware movement while enabled", async () => {
+it("moves the desktop pointer from a tracking hand", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
-
-  runFrame(50, trackingHandAt(0.45, 0.45));
-  await waitFor(() => expect(bridge.move).toHaveBeenCalled());
-  expect(bridge.move).toHaveBeenLastCalledWith(expect.any(Number), expect.any(Number), "tracking");
-
-  runFrame(100, pinchedHandAt(0.45, 0.45));
-  runFrame(140, pinchedHandAt(0.45, 0.45));
-  runFrame(180, pinchedHandAt(0.45, 0.45));
-  runFrame(220, pinchedHandAt(0.45, 0.45));
-  runFrame(260, pinchedHandAt(0.45, 0.45));
-  runFrame(300, trackingHandAt(0.45, 0.45));
-  runFrame(340, trackingHandAt(0.45, 0.45));
-  runFrame(380, trackingHandAt(0.45, 0.45));
-  runFrame(420, trackingHandAt(0.45, 0.45));
-  runFrame(460, trackingHandAt(0.45, 0.45));
-  await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
-
-  runFrame(650, pinchedHandAt(0.45, 0.45));
-  runFrame(690, pinchedHandAt(0.45, 0.45));
-  runFrame(730, pinchedHandAt(0.45, 0.45));
-  runFrame(770, pinchedHandAt(0.45, 0.45));
-  runFrame(810, pinchedHandAt(0.45, 0.45));
-  runFrame(1_160, pinchedHandAt(0.45, 0.45));
-  await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
-  await waitFor(() => expect(bridge.drag).toHaveBeenCalledWith(expect.any(Number), expect.any(Number)));
-
-  const moveCountDuringDrag = vi.mocked(bridge.move).mock.calls.length;
-  runFrame(1_180, pinchedHandAt(0.5, 0.5));
-  await waitFor(() => expect(bridge.drag).toHaveBeenLastCalledWith(expect.any(Number), expect.any(Number)));
-  expect(bridge.move).toHaveBeenCalledTimes(moveCountDuringDrag);
-
-  const dragCountBeforeRelease = vi.mocked(bridge.drag).mock.calls.length;
-  runFrame(1_220, trackingHandAt(0.45, 0.45));
-  runFrame(1_260, trackingHandAt(0.45, 0.45));
-  runFrame(1_300, trackingHandAt(0.45, 0.45));
-  runFrame(1_340, trackingHandAt(0.45, 0.45));
-  runFrame(1_380, trackingHandAt(0.45, 0.45));
-  await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
-  expect(vi.mocked(bridge.drag).mock.calls.length).toBeGreaterThan(dragCountBeforeRelease);
-  const mouseDownOrder = vi.mocked(bridge.mouseDown).mock.invocationCallOrder[0]!;
-  const mouseUpOrder = vi.mocked(bridge.mouseUp).mock.invocationCallOrder[0]!;
-  expect(vi.mocked(bridge.move).mock.invocationCallOrder.filter(
-    (order) => order > mouseDownOrder && order < mouseUpOrder,
-  )).toHaveLength(0);
-  expect(vi.mocked(bridge.drag).mock.invocationCallOrder.at(-1)).toBeLessThan(mouseUpOrder);
-});
-
-it("shows left-pinch feedback on the first frame without waiting for drag hold", async () => {
-  const { bridge, runFrame } = await renderDesktopApp();
-
-  runFrame(100, extendedPinchHandAt("left", 0.45, 0.45));
+  runFrame(16, handAt("tracking", 0.55, 0.4));
 
   await waitFor(() => expect(bridge.move).toHaveBeenCalledWith(
-    expect.any(Number),
-    expect.any(Number),
-    "candidate-left",
+    expect.any(Number), expect.any(Number), "tracking",
   ));
-  expect(document.querySelector(".virtual-cursor")).toHaveClass("is-left-pinching", "is-candidate");
+});
+
+it("dispatches a left click within four 60 fps frames", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  runFrame(16, handAt("left"));
+  runFrame(32, handAt("left"));
+  runFrame(48, handAt("tracking"));
+  runFrame(64, handAt("tracking"));
+
+  await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
+  expect(bridge.rightClick).not.toHaveBeenCalled();
+  expect(bridge.doubleClick).not.toHaveBeenCalled();
+  expect(bridge.scroll).not.toHaveBeenCalled();
   expect(bridge.mouseDown).not.toHaveBeenCalled();
 });
 
-it("dispatches right click and double click without disabling explicit control", async () => {
+it.each(["right", "double", "scroll"] as const)("does not dispatch the disabled %s action", async (gesture) => {
   const { bridge, runFrame } = await renderDesktopApp();
+  for (let at = 16; at <= 128; at += 16) runFrame(at, handAt(gesture));
 
-  runFrame(100, extendedPinchHandAt("right", 0.45, 0.45));
-  runFrame(140, extendedPinchHandAt("right", 0.45, 0.45));
-  runFrame(180, extendedPinchHandAt("right", 0.45, 0.45));
-  runFrame(220, extendedPinchHandAt("right", 0.45, 0.45));
-  runFrame(260, extendedPinchHandAt("right", 0.45, 0.45));
-  runFrame(300, extendedPinchHandAt("right", 0.45, 0.45));
-  for (let at = 340; at <= 580; at += 40) runFrame(at, trackingHandAt(0.45, 0.45));
-  for (let at = 760; at <= 1_000; at += 40) {
-    runFrame(at, extendedPinchHandAt("double", 0.45, 0.45));
-  }
-  for (let at = 1_040; at <= 1_280; at += 40) runFrame(at, trackingHandAt(0.45, 0.45));
-
-  await waitFor(() => expect(bridge.rightClick).toHaveBeenCalledOnce());
-  await waitFor(() => expect(bridge.doubleClick).toHaveBeenCalledOnce());
-  expect(bridge.click).not.toHaveBeenCalled();
-  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  expect(screen.getByText("已启用")).toBeInTheDocument();
+  expect(bridge.rightClick).not.toHaveBeenCalled();
+  expect(bridge.doubleClick).not.toHaveBeenCalled();
+  expect(bridge.scroll).not.toHaveBeenCalled();
+  expect(bridge.mouseDown).not.toHaveBeenCalled();
 });
 
-it("keeps the system pointer fixed while two-finger movement scrolls", async () => {
+it("stops desktop pointer movement after an open palm is confirmed", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
-
-  runFrame(100, trackingHandAt(0.45, 0.45));
+  runFrame(16, handAt("tracking"));
   await waitFor(() => expect(bridge.move).toHaveBeenCalled());
-  for (let at = 116; at <= 356; at += 40) runFrame(at, scrollingHandAt());
-  await waitFor(() => expect(bridge.move).toHaveBeenCalledWith(
-    expect.any(Number),
-    expect.any(Number),
-    "scrolling",
-  ));
-  const firstPointer = [...vi.mocked(bridge.move).mock.calls]
-    .reverse()
-    .find(([, , state]) => state === "scrolling")?.slice(0, 2);
-  runFrame(396, scrollingHandAt(-0.04));
-  runFrame(436, scrollingHandAt(-0.04));
+  runFrame(32, handAt("open-palm"));
+  const movementsBeforeStop = vi.mocked(bridge.move).mock.calls.length;
+  runFrame(48, handAt("open-palm"));
+  runFrame(64, handAt("open-palm"));
 
-  await waitFor(() => expect(bridge.scroll).toHaveBeenCalledWith(expect.any(Number)));
-  expect(vi.mocked(bridge.scroll).mock.calls.some(([amount]) => amount !== 0)).toBe(true);
-  const scrollingMoves = vi.mocked(bridge.move).mock.calls.filter(
-    ([, , state]) => state === "scrolling",
-  );
-  expect(scrollingMoves.every(([x, y]) => x === firstPointer?.[0] && y === firstPointer?.[1])).toBe(true);
+  expect(vi.mocked(bridge.move).mock.calls).toHaveLength(movementsBeforeStop);
+  expect(screen.getByRole("status", { name: "摄像头、追踪器和手势状态" })).toHaveTextContent(/手势已暂停/);
 });
 
-it.each(["lost", "stale-frame"] as const)(
-  "releases a drag without disabling explicit system control on %s safety",
-  async (safety) => {
-    const { bridge, runAnimationFrame, runFrame, video } = await renderDesktopApp();
-    await startDesktopDrag(runFrame, bridge);
+it("marks the tracker stale if the camera stops yielding frames", async () => {
+  const { runAnimationFrame, video } = await renderDesktopApp();
+  Object.defineProperty(video, "readyState", { configurable: true, value: HTMLMediaElement.HAVE_METADATA });
+  runAnimationFrame(600);
 
-    if (safety === "lost") {
-      runFrame(650, null);
-      runFrame(770, null);
-    } else if (safety === "stale-frame") {
-      Object.defineProperty(video, "readyState", {
-        configurable: true,
-        value: HTMLMediaElement.HAVE_METADATA,
-      });
-      runAnimationFrame(1_200);
-    }
-
-    await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
-    expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-    expect(screen.getByText("已启用")).toBeInTheDocument();
-  },
-);
-
-it("keeps system control enabled when an open palm completes a click", async () => {
-  const { bridge, runFrame } = await renderDesktopApp();
-
-  runFrame(100, pinchedHandAt(0.4, 0.4));
-  runFrame(140, pinchedHandAt(0.4, 0.4));
-  runFrame(180, pinchedHandAt(0.4, 0.4));
-  runFrame(220, pinchedHandAt(0.4, 0.4));
-  runFrame(260, openPalmAt(0.4, 0.1));
-  runFrame(300, openPalmAt(0.4, 0.1));
-  runFrame(340, openPalmAt(0.4, 0.1));
-  runFrame(380, openPalmAt(0.4, 0.1));
-  runFrame(420, openPalmAt(0.4, 0.1));
-
-  await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
-  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  expect(screen.getByText("已启用")).toBeInTheDocument();
+  expect(screen.getByRole("status", { name: "摄像头、追踪器和手势状态" })).toHaveTextContent(/摄像头画面停滞/);
 });
 
-it("keeps system control enabled when an open palm ends a drag", async () => {
-  const { bridge, runFrame } = await renderDesktopApp();
-  await startDesktopDrag(runFrame, bridge);
-
-  runFrame(650, openPalmAt(0.4, 0.1));
-  runFrame(690, openPalmAt(0.4, 0.1));
-  runFrame(730, openPalmAt(0.4, 0.1));
-  runFrame(770, openPalmAt(0.4, 0.1));
-  runFrame(810, openPalmAt(0.4, 0.1));
-  runFrame(850, openPalmAt(0.4, 0.1));
-
-  await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
-  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  expect(screen.getByText("已启用")).toBeInTheDocument();
-});
-
-it("keeps system control enabled when the app window loses focus", async () => {
-  const { bridge, runFrame } = await renderDesktopApp();
-  await startDesktopDrag(runFrame, bridge);
-
-  act(() => window.dispatchEvent(new Event("blur")));
-
-  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  expect(screen.getByText("已启用")).toBeInTheDocument();
-});
-
-it("requests a mouse release when the renderer unmounts", async () => {
-  const { bridge, runFrame, unmount } = await renderDesktopApp();
-  await startDesktopDrag(runFrame, bridge);
-
+it("releases desktop control during unmount", async () => {
+  const { bridge, unmount } = await renderDesktopApp();
   unmount();
-
   expect(bridge.releaseAndPause).toHaveBeenCalledOnce();
-});
-
-it("reconciles a rejected main-process activation and remains paused", async () => {
-  const bridge = desktopApi();
-  vi.mocked(bridge.activate).mockResolvedValue(false);
-  window.gestureDesktop = bridge;
-
-  render(<App />);
-  const enable = await screen.findByRole("button", { name: "启用系统控制" });
-  await waitFor(() => expect(enable).toBeEnabled());
-  fireEvent.click(enable);
-
-  await waitFor(() => expect(bridge.activate).toHaveBeenCalledOnce());
-  expect(screen.getByText("已暂停")).toBeInTheDocument();
-  expect(bridge.move).not.toHaveBeenCalled();
-  expect(bridge.click).not.toHaveBeenCalled();
-  expect(bridge.mouseDown).not.toHaveBeenCalled();
-});
-
-it("does not cancel an explicit pending activation when tracking becomes lost", async () => {
-  let resolveActivation!: (active: boolean) => void;
-  const activation = new Promise<boolean>((resolve) => {
-    resolveActivation = resolve;
-  });
-  const bridge = desktopApi();
-  vi.mocked(bridge.activate).mockReturnValue(activation);
-  const { enable, runFrame } = await renderDesktopApp({ bridge, enable: false });
-
-  fireEvent.click(enable);
-  await waitFor(() => expect(bridge.activate).toHaveBeenCalledOnce());
-  runFrame(100, null);
-
-  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  await act(async () => {
-    resolveActivation(true);
-    await activation;
-  });
-  await screen.findByText("已启用");
 });

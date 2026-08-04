@@ -1,6 +1,6 @@
 import type { GestureSettings } from "./types";
 
-export type CalibrationSettingKey = "gestureSensitivity" | "cursorSmoothingFactor" | "cursorOffsetX" | "cursorOffsetY" | "dragHoldMs";
+export type CalibrationSettingKey = "gestureSensitivity" | "cursorSmoothingFactor" | "cursorOffsetX" | "cursorOffsetY";
 
 export type CalibrationControlMetadata = {
   key: CalibrationSettingKey;
@@ -15,7 +15,6 @@ export type CalibrationControlMetadata = {
 
 export const DEFAULT_GESTURE_SETTINGS: Readonly<GestureSettings> = {
   gestureSensitivity: 0.5,
-  dragHoldMs: 350,
   openPalmMinTipDistance: 0.18,
   cursorSmoothingFactor: 0.2,
   cursorOffsetX: 0,
@@ -59,16 +58,6 @@ export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[]
     max: 0.15,
     step: 0.01,
     precision: 2,
-  },
-  {
-    key: "dragHoldMs",
-    label: "拖动保持时间",
-    accessibleLabel: "拖动保持时间",
-    min: 150,
-    max: 1000,
-    step: 50,
-    precision: 0,
-    unit: "毫秒",
   },
 ];
 

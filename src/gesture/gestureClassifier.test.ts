@@ -15,7 +15,7 @@ const features = (overrides: Partial<GestureFeatures> = {}): GestureFeatures => 
 });
 
 describe("GestureClassifier", () => {
-  it("selects only the strongest qualifying pinch before lock", () => {
+  it("recognizes the left pinch even when other fingertips are closer", () => {
     const classifier = new GestureClassifier(0.5);
     const result = classifier.classify(features({
       leftPinchRatio: 0.22,
@@ -23,7 +23,7 @@ describe("GestureClassifier", () => {
       doublePinchRatio: 0.2,
     }));
 
-    expect(result?.kind).toBe("right");
+    expect(result?.kind).toBe("left");
   });
 
   it("uses the wider exit threshold and never switches while locked", () => {
@@ -35,11 +35,12 @@ describe("GestureClassifier", () => {
       .toBeNull();
   });
 
-  it("recognizes scroll and open-palm poses only above stable thresholds", () => {
+  it("ignores right, double, and scroll poses while retaining open-palm stop", () => {
     const classifier = new GestureClassifier(0.5);
 
-    expect(classifier.classify(features({ scrollPoseScore: 0.76 }))?.kind).toBe("scroll");
+    expect(classifier.classify(features({ rightPinchRatio: 0.1 }))).toBeNull();
+    expect(classifier.classify(features({ doublePinchRatio: 0.1 }))).toBeNull();
+    expect(classifier.classify(features({ scrollPoseScore: 0.95 }))).toBeNull();
     expect(classifier.classify(features({ openPalmScore: 0.83 }))?.kind).toBe("open-palm");
-    expect(classifier.classify(features({ scrollPoseScore: 0.74, openPalmScore: 0.81 }))).toBeNull();
   });
 });

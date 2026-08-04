@@ -85,7 +85,7 @@ export function SystemControlPanel({
           <p>系统控制已暂停，需由你主动启用。</p>
         )}
         {permission === "granted" && enabled && (
-          <p>现在可用手势移动、点击、拖动、右键、双击和滚动。</p>
+          <p>现在可用手势移动、左键点击和张开手掌停止。</p>
         )}
       </div>
 

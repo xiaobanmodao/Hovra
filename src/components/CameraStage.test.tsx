@@ -37,7 +37,7 @@ it("reports an ended camera stream and stops every track on cleanup", async () =
     video: {
       width: { ideal: 1920 },
       height: { ideal: 1080 },
-      frameRate: { ideal: 30 },
+      frameRate: { ideal: 60 },
     },
   });
   act(() => firstTrack.dispatchEvent(new Event("ended")));
