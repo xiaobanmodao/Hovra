@@ -1,5 +1,30 @@
 import type { GestureSettings } from "./types";
 
+export type PinchBoundaries = {
+  imageContact: number;
+  imageSeparate: number;
+  worldContact: number;
+  worldSeparate: number;
+  depthContact: number;
+  depthSeparate: number;
+};
+
+export const DEFAULT_PINCH_BOUNDARIES: Readonly<PinchBoundaries> = {
+  imageContact: 0.34,
+  imageSeparate: 0.5,
+  worldContact: 0.34,
+  worldSeparate: 0.5,
+  depthContact: 0.16,
+  depthSeparate: 0.3,
+};
+
+export const PINCH_RELEASE_PROBABILITY = 0.38;
+
+export function pinchEntryProbabilityForSensitivity(sensitivity: number): number {
+  const normalized = Number.isFinite(sensitivity) ? Math.max(0, Math.min(1, sensitivity)) : 0.5;
+  return 0.72 + (0.5 - normalized) * 0.12;
+}
+
 export type CalibrationSettingKey = "gestureSensitivity" | "cursorSmoothingFactor" | "cursorOffsetX" | "cursorOffsetY";
 
 export type CalibrationControlMetadata = {
