@@ -641,7 +641,9 @@ it("does not cancel an explicit pending activation when tracking becomes lost", 
   runFrame(100, null);
 
   expect(bridge.releaseAndPause).not.toHaveBeenCalled();
-  resolveActivation(true);
-  await activation;
+  await act(async () => {
+    resolveActivation(true);
+    await activation;
+  });
   await screen.findByText("Enabled");
 });
