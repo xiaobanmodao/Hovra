@@ -10,11 +10,9 @@ describe("GestureEngine 简化模式", () => {
     const tracking = makeGestureHand("tracking");
 
     expect(engine.update(left, 0, left).phase).toBe("candidate");
-    expect(engine.update(left, 16, left).lockedGesture).toBeNull();
-    expect(engine.update(left, 32, left).lockedGesture).toBeNull();
-    expect(engine.update(left, 48, left).lockedGesture).toBe("left");
-    expect(engine.update(tracking, 64, tracking).click).toBe(false);
-    expect(engine.update(tracking, 80, tracking)).toMatchObject({
+    expect(engine.update(left, 16, left).lockedGesture).toBe("left");
+    expect(engine.update(tracking, 32, tracking).click).toBe(false);
+    expect(engine.update(tracking, 48, tracking)).toMatchObject({
       click: true,
       rightClick: false,
       doubleClick: false,
@@ -22,18 +20,17 @@ describe("GestureEngine 简化模式", () => {
       dragStart: false,
       dragEnd: false,
     });
+    expect(engine.update(tracking, 64, tracking).click).toBe(false);
   });
 
-  it("ignores a two-frame fingertip overlap", () => {
+  it("ignores a single-frame fingertip overlap", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");
     const tracking = makeGestureHand("tracking");
 
     engine.update(left, 0, left);
-    engine.update(left, 16, left);
-    engine.update(left, 32, left);
-    expect(engine.update(tracking, 48, tracking).click).toBe(false);
-    expect(engine.update(tracking, 64, tracking).click).toBe(false);
+    expect(engine.update(tracking, 16, tracking).click).toBe(false);
+    expect(engine.update(tracking, 32, tracking).click).toBe(false);
   });
 
   it("pauses tracking with an open palm on the next 60 fps frame", () => {
@@ -69,28 +66,49 @@ describe("GestureEngine 简化模式", () => {
     expect(engine.update(makeGestureHand("tracking"), 48, worldSeparated).click).toBe(false);
   });
 
-  it("does not click without world landmarks", () => {
+  it("keeps a real pinch candidate through one noisy world-distance frame", () => {
     const engine = new GestureEngine();
+    const left = makeGestureHand("left");
+    const worldSeparated = makeGestureHand("left");
+    worldSeparated[8] = { ...worldSeparated[4]!, z: 0.3 };
 
-    engine.update(makeGestureHand("left"), 0, null);
-    engine.update(makeGestureHand("left"), 16, null);
-    engine.update(makeGestureHand("tracking"), 32, null);
-    expect(engine.update(makeGestureHand("tracking"), 48, null).click).toBe(false);
+    expect(engine.update(left, 0, left).phase).toBe("candidate");
+    expect(engine.update(left, 16, worldSeparated).lockedGesture).toBeNull();
+    expect(engine.update(left, 32, left).lockedGesture).toBe("left");
   });
 
-  it("cancels a locked pinch without clicking when world depth disappears", () => {
+  it("clicks without world landmarks only after approach and stricter voting", () => {
+    const engine = new GestureEngine();
+    const tracking = makeGestureHand("tracking");
+    const left = makeGestureHand("left");
+
+    engine.update(tracking, 0, null);
+    engine.update(left, 16, null);
+    engine.update(left, 32, null);
+    expect(engine.update(left, 48, null).lockedGesture).toBe("left");
+    expect(engine.update(tracking, 64, null).click).toBe(false);
+    expect(engine.update(tracking, 80, null).click).toBe(true);
+  });
+
+  it("does not click on static image overlap when world landmarks are missing", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");
 
+    for (let at = 0; at <= 96; at += 16) {
+      expect(engine.update(left, at, null).lockedGesture).toBeNull();
+    }
+  });
+
+  it("tolerates one missing world frame during a real locked pinch", () => {
+    const engine = new GestureEngine();
+    const left = makeGestureHand("left");
+    const tracking = makeGestureHand("tracking");
+
     engine.update(left, 0, left);
-    engine.update(left, 16, left);
-    engine.update(left, 32, left);
-    expect(engine.update(left, 48, left).lockedGesture).toBe("left");
-    expect(engine.update(left, 64, null).click).toBe(false);
-    expect(engine.update(left, 80, null)).toMatchObject({
-      click: false,
-      lockedGesture: null,
-    });
+    expect(engine.update(left, 16, left).lockedGesture).toBe("left");
+    expect(engine.update(left, 32, null).lockedGesture).toBe("left");
+    expect(engine.update(tracking, 48, tracking).click).toBe(false);
+    expect(engine.update(tracking, 64, tracking).click).toBe(true);
   });
 
   it.each(["right", "double", "scroll"] as const)("does not activate %s", (gesture) => {

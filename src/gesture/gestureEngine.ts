@@ -1,10 +1,21 @@
 import { AdaptiveLandmarkFilter } from "./adaptiveLandmarkFilter";
-import { DEFAULT_GESTURE_SETTINGS } from "./config";
+import {
+  DEFAULT_GESTURE_SETTINGS,
+  DEFAULT_PINCH_BOUNDARIES,
+  type PinchBoundaries,
+} from "./config";
 import { GestureClassifier } from "./gestureClassifier";
 import { extractGestureFeatures, type GestureFeatures } from "./gestureFeatures";
 import { GestureStabilizer, type GestureStabilizerOutput } from "./gestureStabilizer";
 import { GestureTraceBuffer, type GestureTrace, type TraceGestureEvent } from "./gestureTrace";
 import { buildHandGeometry, type HandGeometry } from "./handGeometry";
+import { PinchFeatureExtractor } from "./pinchFeatures";
+import { PinchProbabilityEstimator } from "./pinchProbability";
+import { PinchQualityEstimator } from "./pinchQuality";
+import {
+  PinchTemporalRecognizer,
+  type PinchTemporalOutput,
+} from "./pinchTemporalRecognizer";
 import {
   INDEX_FINGER_TIP,
   type GestureDiagnosticsSnapshot,
@@ -20,14 +31,25 @@ export class GestureEngine {
   private readonly filter = new AdaptiveLandmarkFilter();
   private readonly classifier: GestureClassifier;
   private readonly stabilizer = new GestureStabilizer();
+  private readonly pinchFeatureExtractor = new PinchFeatureExtractor();
+  private readonly pinchQualityEstimator = new PinchQualityEstimator();
+  private readonly pinchProbabilityEstimator: PinchProbabilityEstimator;
+  private readonly pinchTemporalRecognizer = new PinchTemporalRecognizer();
   private readonly trace = new GestureTraceBuffer();
   private lastCursor: Landmark | null = null;
   private traceEpochMs: number | null = null;
   private lastTraceTimestamp = 0;
 
-  constructor(settings: GestureSettings = DEFAULT_GESTURE_SETTINGS) {
+  constructor(
+    settings: GestureSettings = DEFAULT_GESTURE_SETTINGS,
+    pinchBoundaries: PinchBoundaries = DEFAULT_PINCH_BOUNDARIES,
+  ) {
     this.settings = { ...settings };
     this.classifier = new GestureClassifier(settings.gestureSensitivity);
+    this.pinchProbabilityEstimator = new PinchProbabilityEstimator(
+      pinchBoundaries,
+      settings.gestureSensitivity,
+    );
   }
 
   update(
@@ -42,30 +64,28 @@ export class GestureEngine {
     const features = actionGeometry
       ? extractGestureFeatures(actionGeometry, worldGeometry)
       : null;
-    const candidate = features
+    const openPalmCandidate = features
       ? this.classifier.classify(features, this.stabilizer.lockedGesture)
       : null;
-    const stabilized = this.stabilizer.update(candidate, nowMs, features !== null);
-    const events: Partial<GestureOutput> = {};
+    const stabilized = this.stabilizer.update(openPalmCandidate, nowMs, features !== null);
+    const pinch = actionGeometry
+      ? this.updatePinch(actionGeometry, worldGeometry, nowMs)
+      : this.updateMissingPinch(nowMs);
 
     if (cursorGeometry) {
       this.lastCursor = cursorGeometry.landmarks[INDEX_FINGER_TIP] ?? this.lastCursor;
     }
 
-    if (stabilized.released !== null) {
-      if (stabilized.released === "left" && features?.pinchDepthReliable) {
-        events.click = true;
-      }
-    }
-
-    const state = this.deriveState(stabilized, features !== null);
+    const openPalmLocked = stabilized.lockedGesture === "open-palm";
+    const state = this.deriveState(stabilized, pinch, features !== null);
     const output = this.output(
       state,
-      features === null && stabilized.lockedGesture === null ? null : this.lastCursor,
+      features === null ? null : this.lastCursor,
       stabilized,
+      pinch,
       features,
       nowMs,
-      events,
+      { click: pinch.clicked && !openPalmLocked },
     );
     this.recordTrace(landmarks, worldLandmarks, output, features, nowMs);
     return output;
@@ -79,12 +99,33 @@ export class GestureEngine {
     return this.trace.serialize();
   }
 
-  private deriveState(stabilized: GestureStabilizerOutput, inputValid: boolean): GestureState {
-    const visibleGesture = stabilized.lockedGesture ?? (
-      stabilized.phase === "candidate" ? stabilized.candidate : null
-    );
-    if (visibleGesture === "left") return "left-pinching";
-    if (visibleGesture === "open-palm") return stabilized.lockedGesture ? "paused" : "tracking";
+  private updatePinch(
+    imageGeometry: HandGeometry,
+    worldGeometry: HandGeometry | null,
+    nowMs: number,
+  ): PinchTemporalOutput {
+    const pinchFeatures = this.pinchFeatureExtractor.update(imageGeometry, worldGeometry, nowMs);
+    const quality = this.pinchQualityEstimator.update(pinchFeatures, worldGeometry);
+    const probability = this.pinchProbabilityEstimator.update(pinchFeatures, quality);
+    return this.pinchTemporalRecognizer.update(probability, nowMs, quality.usableForVoting);
+  }
+
+  private updateMissingPinch(nowMs: number): PinchTemporalOutput {
+    this.pinchFeatureExtractor.reset();
+    this.pinchQualityEstimator.reset();
+    this.pinchProbabilityEstimator.reset();
+    return this.pinchTemporalRecognizer.update(null, nowMs, false);
+  }
+
+  private deriveState(
+    stabilized: GestureStabilizerOutput,
+    pinch: PinchTemporalOutput,
+    inputValid: boolean,
+  ): GestureState {
+    if (stabilized.lockedGesture === "open-palm") return "paused";
+    if (pinch.phase === "candidate" || pinch.phase === "active" || pinch.phase === "releasing") {
+      return "left-pinching";
+    }
     return inputValid ? "tracking" : "lost";
   }
 
@@ -92,6 +133,7 @@ export class GestureEngine {
     state: GestureState,
     cursor: Landmark | null,
     stabilized: GestureStabilizerOutput,
+    pinch: PinchTemporalOutput,
     features: GestureFeatures | null,
     nowMs: number,
     events: Partial<GestureOutput>,
@@ -105,10 +147,16 @@ export class GestureEngine {
       scrollY: 0,
       dragStart: false,
       dragEnd: false,
-      phase: stabilized.phase,
-      candidate: stabilized.candidate,
-      lockedGesture: stabilized.lockedGesture,
-      confirmationProgress: stabilized.confirmationProgress,
+      phase: stabilized.lockedGesture === "open-palm" ? stabilized.phase : pinch.phase,
+      candidate: stabilized.lockedGesture === "open-palm"
+        ? stabilized.candidate
+        : pinch.phase === "candidate" ? "left" : null,
+      lockedGesture: stabilized.lockedGesture === "open-palm"
+        ? "open-palm"
+        : pinch.phase === "active" || pinch.phase === "releasing" ? "left" : null,
+      confirmationProgress: stabilized.lockedGesture === "open-palm"
+        ? stabilized.confirmationProgress
+        : pinch.confirmationProgress,
       diagnostics: diagnosticsFor(features, nowMs),
       ...events,
     };

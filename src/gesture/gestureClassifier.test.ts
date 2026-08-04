@@ -19,20 +19,8 @@ const features = (overrides: Partial<GestureFeatures> = {}): GestureFeatures => 
   };
 };
 
-const depthFeatures = (
-  overrides: Partial<GestureFeatures & {
-    worldLeftPinchRatio: number | null;
-    pinchDepthReliable: boolean;
-  }> = {},
-): GestureFeatures => features({
-  leftPinchRatio: 0.2,
-  worldLeftPinchRatio: 0.2,
-  pinchDepthReliable: true,
-  ...overrides,
-});
-
 describe("GestureClassifier", () => {
-  it("recognizes the left pinch even when other fingertips are closer", () => {
+  it("leaves every pinch pose to the adaptive temporal recognizer", () => {
     const classifier = new GestureClassifier(0.5);
     const result = classifier.classify(features({
       leftPinchRatio: 0.22,
@@ -40,15 +28,15 @@ describe("GestureClassifier", () => {
       doublePinchRatio: 0.2,
     }));
 
-    expect(result?.kind).toBe("left");
+    expect(result).toBeNull();
   });
 
-  it("uses the wider exit threshold and never switches while locked", () => {
+  it("uses hysteresis only for a locked open palm", () => {
     const classifier = new GestureClassifier(0.5);
-    const ambiguous = features({ leftPinchRatio: 0.36, rightPinchRatio: 0.1 });
+    const ambiguous = features({ openPalmScore: 0.72, leftPinchRatio: 0.1 });
 
-    expect(classifier.classify(ambiguous, "left")?.kind).toBe("left");
-    expect(classifier.classify(features({ leftPinchRatio: 0.42, rightPinchRatio: 0.1 }), "left"))
+    expect(classifier.classify(ambiguous, "open-palm")?.kind).toBe("open-palm");
+    expect(classifier.classify(features({ openPalmScore: 0.6 }), "open-palm"))
       .toBeNull();
   });
 
@@ -59,23 +47,5 @@ describe("GestureClassifier", () => {
     expect(classifier.classify(features({ doublePinchRatio: 0.1 }))).toBeNull();
     expect(classifier.classify(features({ scrollPoseScore: 0.95 }))).toBeNull();
     expect(classifier.classify(features({ openPalmScore: 0.83 }))?.kind).toBe("open-palm");
-  });
-
-  it("requires both image and reliable world-space pinch evidence", () => {
-    const classifier = new GestureClassifier(0.5);
-
-    expect(classifier.classify(depthFeatures({
-      leftPinchRatio: 0.2,
-      worldLeftPinchRatio: 0.8,
-    }))).toBeNull();
-    expect(classifier.classify(depthFeatures({
-      leftPinchRatio: 0.2,
-      worldLeftPinchRatio: 0.2,
-      pinchDepthReliable: false,
-    }))).toBeNull();
-    expect(classifier.classify(depthFeatures({
-      leftPinchRatio: 0.2,
-      worldLeftPinchRatio: 0.2,
-    }))?.kind).toBe("left");
   });
 });

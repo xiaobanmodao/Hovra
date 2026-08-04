@@ -10,18 +10,8 @@ export class GestureClassifier {
   }
 
   classify(features: GestureFeatures, lockedGesture: GestureKind | null = null): GestureCandidate | null {
-    if (lockedGesture) {
+    if (lockedGesture === "open-palm") {
       return this.classifyLocked(features, lockedGesture);
-    }
-
-    if (hasPinchEvidence(features, this.thresholds.pinchEnterRatio)) {
-      return {
-        kind: "left",
-        score: Math.min(
-          pinchScore(features.leftPinchRatio, this.thresholds),
-          pinchScore(features.worldLeftPinchRatio!, this.thresholds),
-        ),
-      };
     }
 
     if (features.openPalmScore >= this.thresholds.openPalmEnterScore) {
@@ -31,34 +21,10 @@ export class GestureClassifier {
   }
 
   private classifyLocked(features: GestureFeatures, locked: GestureKind): GestureCandidate | null {
-    if (locked === "open-palm") {
-      return features.openPalmScore >= this.thresholds.openPalmExitScore
-        ? { kind: locked, score: clampUnit(features.openPalmScore) }
-        : null;
-    }
-
-    return hasPinchEvidence(features, this.thresholds.pinchExitRatio)
-      ? {
-          kind: "left",
-          score: Math.min(
-            pinchScore(features.leftPinchRatio, this.thresholds),
-            pinchScore(features.worldLeftPinchRatio!, this.thresholds),
-          ),
-        }
+    return features.openPalmScore >= this.thresholds.openPalmExitScore
+      ? { kind: locked, score: clampUnit(features.openPalmScore) }
       : null;
   }
-}
-
-function hasPinchEvidence(features: GestureFeatures, threshold: number): boolean {
-  return features.pinchDepthReliable
-    && features.worldLeftPinchRatio !== null
-    && features.leftPinchRatio <= threshold
-    && features.worldLeftPinchRatio <= threshold;
-}
-
-function pinchScore(ratio: number, thresholds: GestureThresholds): number {
-  const width = thresholds.pinchExitRatio - thresholds.pinchEnterRatio;
-  return clampUnit((thresholds.pinchExitRatio - ratio) / width);
 }
 
 function clampUnit(value: number): number {
