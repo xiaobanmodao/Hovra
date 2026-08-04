@@ -1,6 +1,6 @@
 import type { Landmark } from "../types";
 
-export type SyntheticGesture = "tracking" | "left" | "right" | "double" | "scroll" | "open-palm";
+export type SyntheticGesture = "tracking" | "left" | "right" | "double" | "scroll" | "open-palm" | "fist";
 
 export type SyntheticHandOptions = {
   scale?: number;
@@ -30,7 +30,12 @@ export function makeGestureHand(
 ): Landmark[] {
   const hand = extendedHand();
 
-  if (gesture === "tracking") {
+  if (gesture === "fist") {
+    foldFingerTowardWrist(hand, 5, 6, 7, 8);
+    foldFingerTowardWrist(hand, 9, 10, 11, 12);
+    foldFingerTowardWrist(hand, 13, 14, 15, 16);
+    foldFingerTowardWrist(hand, 17, 18, 19, 20);
+  } else if (gesture === "tracking") {
     curlFinger(hand, 5, 6, 7, 8, -0.12);
     curlFinger(hand, 9, 10, 11, 12, 0.02);
     curlFinger(hand, 13, 14, 15, 16, 0.16);
@@ -69,6 +74,25 @@ export function makeGestureHand(
     }));
   }
   return transformed;
+}
+
+function foldFingerTowardWrist(
+  hand: Landmark[],
+  mcp: number,
+  pip: number,
+  dip: number,
+  tip: number,
+): void {
+  const base = hand[mcp]!;
+  const wrist = hand[0]!;
+  const pointAt = (progress: number): Landmark => ({
+    x: base.x + (wrist.x - base.x) * progress,
+    y: base.y + (wrist.y - base.y) * progress,
+    z: (base.z ?? 0) + ((wrist.z ?? 0) - (base.z ?? 0)) * progress,
+  });
+  hand[pip] = pointAt(0.25);
+  hand[dip] = pointAt(0.5);
+  hand[tip] = pointAt(0.75);
 }
 
 function curlFinger(

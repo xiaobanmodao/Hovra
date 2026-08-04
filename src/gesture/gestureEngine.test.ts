@@ -30,6 +30,17 @@ describe("GestureEngine 简化模式", () => {
     });
   });
 
+  it("keeps a closed fist in tracking instead of open-palm stop", () => {
+    const engine = new GestureEngine();
+
+    expect(engine.update(makeGestureHand("fist"), 0).state).toBe("tracking");
+    expect(engine.update(makeGestureHand("fist"), 16)).toMatchObject({
+      state: "tracking",
+      candidate: null,
+      lockedGesture: null,
+    });
+  });
+
   it.each(["right", "double", "scroll"] as const)("does not activate %s", (gesture) => {
     const engine = new GestureEngine();
 

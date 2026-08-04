@@ -16,9 +16,12 @@ import {
   RING_FINGER_MCP,
   RING_FINGER_PIP,
   RING_FINGER_TIP,
+  WRIST,
   type Landmark,
 } from "./types";
 import { landmarkDistance } from "./landmarkMetrics";
+
+const OPEN_PALM_FULL_REACH = 1.8;
 
 export type FingerExtension = {
   index: number;
@@ -45,7 +48,18 @@ export function extractGestureFeatures(geometry: HandGeometry): GestureFeatures 
     ring: extension(points, RING_FINGER_MCP, RING_FINGER_PIP, RING_FINGER_DIP, RING_FINGER_TIP),
     pinky: extension(points, PINKY_MCP, PINKY_PIP, PINKY_DIP, PINKY_TIP),
   };
-  const openPalmScore = average(Object.values(fingerExtension));
+  const fingertipReach = [
+    INDEX_FINGER_TIP,
+    MIDDLE_FINGER_TIP,
+    RING_FINGER_TIP,
+    PINKY_TIP,
+  ].map((tip) => clamp01(
+    landmarkDistance(points[WRIST], points[tip]) / geometry.scale / OPEN_PALM_FULL_REACH,
+  ));
+  const openPalmScore = Math.min(
+    ...Object.values(fingerExtension),
+    ...fingertipReach,
+  );
   const scrollPoseScore = average([
     fingerExtension.index,
     fingerExtension.middle,

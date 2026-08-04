@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Landmark } from "./types";
 import { buildHandGeometry } from "./handGeometry";
 import { extractGestureFeatures } from "./gestureFeatures";
+import { makeGestureHand } from "./fixtures/stable-gesture-sequences";
 
 const extendedHand = (): Landmark[] => [
   { x: 0, y: 0.6, z: 0 },
@@ -26,6 +27,13 @@ describe("extractGestureFeatures", () => {
     expect(features.fingerExtension.middle).toBeGreaterThan(0.95);
     expect(features.openPalmScore).toBeGreaterThan(0.9);
     expect(features.scrollPoseScore).toBeLessThan(0.6);
+  });
+
+  it("rejects a fist whose projected finger segments look deceptively straight", () => {
+    const features = extractGestureFeatures(buildHandGeometry(makeGestureHand("fist"))!);
+
+    expect(Math.min(...Object.values(features.fingerExtension))).toBeGreaterThan(0.95);
+    expect(features.openPalmScore).toBeLessThan(0.82);
   });
 
   it("reports a strong two-finger scroll pose when ring and pinky are curled", () => {
