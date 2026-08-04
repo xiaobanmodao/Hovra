@@ -25,9 +25,9 @@ export async function saveGestureTrace(
 ): Promise<GestureTraceSaveResult> {
   const trace = parseGestureTrace(json);
   const result = await dependencies.showSaveDialog({
-    title: "Save gesture diagnostic trace",
+    title: "保存手势诊断记录",
     defaultPath: "gesture-trace.json",
-    filters: [{ name: "Gesture trace", extensions: ["json"] }],
+    filters: [{ name: "手势诊断记录", extensions: ["json"] }],
   });
   if (result.canceled || !result.filePath) return "cancelled";
 
