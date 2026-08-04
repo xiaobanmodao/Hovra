@@ -319,6 +319,60 @@ h2 {
   cursor: pointer;
 }
 
+.pinch-calibration-entry {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid #253955;
+}
+
+.pinch-calibration-entry > p {
+  margin: 0;
+  color: #8fe2f2;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.pinch-calibration-entry button {
+  min-height: 2.25rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.pinch-calibration-wizard {
+  display: grid;
+  width: 100%;
+  gap: 0.7rem;
+  padding: 1rem;
+  border: 1px solid rgba(99, 215, 238, 0.34);
+  border-radius: 0.8rem;
+  background: rgba(7, 16, 31, 0.78);
+}
+
+.pinch-calibration-wizard h3,
+.pinch-calibration-wizard p {
+  margin: 0;
+}
+
+.pinch-calibration-wizard > div {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.pinch-calibration-wizard button {
+  justify-self: start;
+}
+
+.pinch-calibration-wizard button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .calibration-toggle {
   display: grid;
   width: 2.25rem;

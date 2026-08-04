@@ -9,6 +9,12 @@ import { SystemControlPanel } from "./components/SystemControlPanel";
 import { mapMirroredPoint, smoothPoint, type Point } from "./cursor/cursorController";
 import { DEFAULT_GESTURE_SETTINGS } from "./gesture/config";
 import { GestureEngine } from "./gesture/gestureEngine";
+import {
+  PINCH_CALIBRATION_STORAGE_KEY,
+  parsePinchCalibration,
+  type PinchCalibrationProfile,
+  type PinchCalibrationSample,
+} from "./gesture/pinchCalibration";
 import { gestureStateLabel } from "./i18n/zh-CN";
 import { thumbIndexDistance } from "./gesture/landmarkMetrics";
 import {
@@ -43,6 +49,7 @@ const INITIAL_OUTPUT: GestureOutput = {
     openPalmScore: null,
     scrollPoseScore: null,
     pinchProbability: null,
+    pinchImageDepthGap: null,
     pinchWorldQuality: 0,
     pinchQualityReasons: [],
     pinchBlockingReason: null,
@@ -84,7 +91,13 @@ function App() {
   const lastDispatchedOutputRef = useRef<GestureOutput>(INITIAL_OUTPUT);
   const safetyGenerationRef = useRef(0);
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_GESTURE_SETTINGS }));
-  const engine = useMemo(() => new GestureEngine(settings), [settings]);
+  const [pinchCalibration, setPinchCalibration] = useState<PinchCalibrationProfile | null>(() => (
+    parsePinchCalibration(window.localStorage.getItem(PINCH_CALIBRATION_STORAGE_KEY))
+  ));
+  const engine = useMemo(
+    () => new GestureEngine(settings, pinchCalibration?.boundaries),
+    [settings, pinchCalibration],
+  );
   const engineRef = useRef(engine);
   engineRef.current = engine;
   const [cameraReady, setCameraReady] = useState(false);
@@ -97,6 +110,14 @@ function App() {
   const [systemCursor, setSystemCursor] = useState<Point | null>(null);
   const [systemControlEnabled, setSystemControlEnabled] = useState(false);
   const pinchDistance = useMemo(() => thumbIndexDistance(landmarks), [landmarks]);
+  const currentPinchSample = useMemo<PinchCalibrationSample | null>(() => {
+    const imageRatio = output.diagnostics.leftPinchRatio;
+    const worldRatio = output.diagnostics.worldLeftPinchRatio;
+    const depthGap = output.diagnostics.pinchImageDepthGap;
+    return imageRatio === null || worldRatio === null || depthGap === null
+      ? null
+      : { imageRatio, worldRatio, depthGap };
+  }, [output.diagnostics]);
 
   const handleCameraReady = useCallback(() => {
     setCameraReady(true);
@@ -123,6 +144,18 @@ function App() {
   const handleSettingsChange = useCallback((nextSettings: GestureSettings) => {
     setOutput(engineRef.current.update(null, performance.now()));
     setSettings(nextSettings);
+  }, []);
+
+  const handlePinchCalibrationComplete = useCallback((profile: PinchCalibrationProfile) => {
+    window.localStorage.setItem(PINCH_CALIBRATION_STORAGE_KEY, JSON.stringify(profile));
+    setOutput(engineRef.current.update(null, performance.now()));
+    setPinchCalibration(profile);
+  }, []);
+
+  const handleClearPinchCalibration = useCallback(() => {
+    window.localStorage.removeItem(PINCH_CALIBRATION_STORAGE_KEY);
+    setOutput(engineRef.current.update(null, performance.now()));
+    setPinchCalibration(null);
   }, []);
 
   const handleSaveTrace = useCallback((): Promise<"saved" | "cancelled"> => {
@@ -397,6 +430,10 @@ function App() {
         pinchDistance={pinchDistance}
         gestureState={output.state}
         cursor={cursor}
+        currentPinchSample={currentPinchSample}
+        hasPinchCalibration={pinchCalibration !== null}
+        onPinchCalibrationComplete={handlePinchCalibrationComplete}
+        onClearPinchCalibration={handleClearPinchCalibration}
       />
 
       <GestureDiagnostics

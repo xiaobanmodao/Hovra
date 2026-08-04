@@ -29,6 +29,7 @@ const output: GestureOutput = {
     openPalmScore: 0.18,
     scrollPoseScore: 0.43,
     pinchProbability: 0.81,
+    pinchImageDepthGap: 0.07,
     pinchWorldQuality: 0.76,
     pinchQualityReasons: ["ratio-jitter"],
     pinchBlockingReason: "approach",

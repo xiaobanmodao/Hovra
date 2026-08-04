@@ -90,6 +90,26 @@ describe("GestureEngine 简化模式", () => {
     expect(engine.update(tracking, 80, null).click).toBe(true);
   });
 
+  it("preserves low-quality voting after world coordinates disappear during tracking", () => {
+    const engine = new GestureEngine();
+    const tracking = makeGestureHand("tracking");
+    const left = makeGestureHand("left");
+
+    const outputs = [
+      engine.update(tracking, 0, tracking),
+      engine.update(tracking, 16, null),
+      engine.update(left, 32, null),
+      engine.update(left, 48, null),
+      engine.update(left, 64, null),
+      engine.update(left, 80, null),
+      engine.update(tracking, 96, null),
+      engine.update(tracking, 112, null),
+    ];
+    expect(outputs[4]!.lockedGesture).toBe("left");
+    expect(outputs[6]!.click).toBe(false);
+    expect(outputs[7]!.click).toBe(true);
+  });
+
   it("does not click on static image overlap when world landmarks are missing", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");

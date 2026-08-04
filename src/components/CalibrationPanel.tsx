@@ -6,7 +6,12 @@ import {
   type CalibrationControlMetadata,
 } from "../gesture/config";
 import type { GestureSettings, GestureState } from "../gesture/types";
+import type {
+  PinchCalibrationProfile,
+  PinchCalibrationSample,
+} from "../gesture/pinchCalibration";
 import { gestureStateLabel } from "../i18n/zh-CN";
+import { PinchCalibrationWizard } from "./PinchCalibrationWizard";
 
 type CalibrationPanelProps = {
   settings: GestureSettings;
@@ -14,6 +19,10 @@ type CalibrationPanelProps = {
   pinchDistance: number | null;
   gestureState: GestureState;
   cursor: Point | null;
+  currentPinchSample: PinchCalibrationSample | null;
+  hasPinchCalibration: boolean;
+  onPinchCalibrationComplete: (profile: PinchCalibrationProfile) => void;
+  onClearPinchCalibration: () => void;
 };
 
 type SettingControlProps = {
@@ -79,8 +88,13 @@ export function CalibrationPanel({
   pinchDistance,
   gestureState,
   cursor,
+  currentPinchSample,
+  hasPinchCalibration,
+  onPinchCalibrationComplete,
+  onClearPinchCalibration,
 }: CalibrationPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [showPinchWizard, setShowPinchWizard] = useState(false);
   const contentId = useId();
 
   const changeSetting = <Key extends keyof GestureSettings>(
@@ -153,10 +167,35 @@ export function CalibrationPanel({
             })}
           </div>
 
+          <div className="pinch-calibration-entry">
+            {hasPinchCalibration && <p role="status">个人点击参数已启用</p>}
+            {!showPinchWizard && (
+              <button type="button" onClick={() => setShowPinchWizard(true)}>
+                {hasPinchCalibration ? "重新进行个人点击校准" : "开始个人点击校准"}
+              </button>
+            )}
+            {hasPinchCalibration && !showPinchWizard && (
+              <button type="button" onClick={onClearPinchCalibration}>清除个人点击参数</button>
+            )}
+            {showPinchWizard && (
+              <PinchCalibrationWizard
+                currentSample={currentPinchSample}
+                onComplete={(profile) => {
+                  onPinchCalibrationComplete(profile);
+                  setShowPinchWizard(false);
+                }}
+                onCancel={() => setShowPinchWizard(false)}
+              />
+            )}
+          </div>
+
           <button
             type="button"
             className="calibration-reset"
-            onClick={() => onSettingsChange({ ...DEFAULT_GESTURE_SETTINGS })}
+            onClick={() => {
+              onSettingsChange({ ...DEFAULT_GESTURE_SETTINGS });
+              onClearPinchCalibration();
+            }}
           >
             恢复默认设置
           </button>

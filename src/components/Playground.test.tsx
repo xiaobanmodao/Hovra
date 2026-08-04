@@ -29,6 +29,7 @@ const idle: GestureOutput = {
     openPalmScore: null,
     scrollPoseScore: null,
     pinchProbability: null,
+    pinchImageDepthGap: null,
     pinchWorldQuality: 0,
     pinchQualityReasons: [],
     pinchBlockingReason: null,

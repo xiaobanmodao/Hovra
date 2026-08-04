@@ -7,6 +7,10 @@ import {
 } from "../gesture/config";
 import type { GestureSettings, GestureState } from "../gesture/types";
 import type { Point } from "../cursor/cursorController";
+import type {
+  PinchCalibrationProfile,
+  PinchCalibrationSample,
+} from "../gesture/pinchCalibration";
 import { CalibrationPanel } from "./CalibrationPanel";
 
 type HarnessProps = {
@@ -15,6 +19,10 @@ type HarnessProps = {
   pinchDistance?: number | null;
   gestureState?: GestureState;
   cursor?: Point | null;
+  currentPinchSample?: PinchCalibrationSample | null;
+  hasPinchCalibration?: boolean;
+  onPinchCalibrationComplete?: (profile: PinchCalibrationProfile) => void;
+  onClearPinchCalibration?: () => void;
 };
 
 function CalibrationPanelHarness({
@@ -23,6 +31,10 @@ function CalibrationPanelHarness({
   pinchDistance = 0.041,
   gestureState = "tracking",
   cursor = { x: 320, y: 240 },
+  currentPinchSample = { imageRatio: 0.24, worldRatio: 0.24, depthGap: 0.08 },
+  hasPinchCalibration = false,
+  onPinchCalibrationComplete = vi.fn(),
+  onClearPinchCalibration = vi.fn(),
 }: HarnessProps) {
   const [settings, setSettings] = useState(initialSettings);
 
@@ -38,6 +50,10 @@ function CalibrationPanelHarness({
       pinchDistance={pinchDistance}
       gestureState={gestureState}
       cursor={cursor}
+      currentPinchSample={currentPinchSample}
+      hasPinchCalibration={hasPinchCalibration}
+      onPinchCalibrationComplete={onPinchCalibrationComplete}
+      onClearPinchCalibration={onClearPinchCalibration}
     />
   );
 }
@@ -162,5 +178,26 @@ describe("CalibrationPanel", () => {
     expect(collapsedContent).toBeInTheDocument();
     expect(collapsedContent).not.toBeVisible();
     expect(screen.getByText("捏合距离")).not.toBeVisible();
+  });
+
+  it("opens personal click calibration and can clear an active profile", () => {
+    const onClearPinchCalibration = vi.fn();
+    const { rerender } = render(
+      <CalibrationPanelHarness onClearPinchCalibration={onClearPinchCalibration} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "开始个人点击校准" }));
+    expect(screen.getByRole("heading", { name: "个人点击校准" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "取消校准" }));
+
+    rerender(
+      <CalibrationPanelHarness
+        hasPinchCalibration
+        onClearPinchCalibration={onClearPinchCalibration}
+      />,
+    );
+    expect(screen.getByText("个人点击参数已启用")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "清除个人点击参数" }));
+    expect(onClearPinchCalibration).toHaveBeenCalledOnce();
   });
 });

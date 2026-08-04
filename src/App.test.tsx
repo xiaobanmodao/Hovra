@@ -5,6 +5,7 @@ import type { GestureDesktopApi } from "./electron.d";
 import { makeGestureHand } from "./gesture/fixtures/stable-gesture-sequences";
 import type { Landmark } from "./gesture/types";
 import type { DetectedHand } from "./vision/handLandmarker";
+import { PINCH_CALIBRATION_STORAGE_KEY } from "./gesture/pinchCalibration";
 
 const vision = vi.hoisted(() => ({
   close: vi.fn(),
@@ -24,10 +25,33 @@ const handAt = (gesture: "tracking" | "left" | "right" | "double" | "scroll" | "
 );
 
 beforeEach(() => {
+  localStorage.clear();
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
     arc: vi.fn(), beginPath: vi.fn(), clearRect: vi.fn(), fill: vi.fn(),
     lineTo: vi.fn(), moveTo: vi.fn(), stroke: vi.fn(),
   } as unknown as CanvasRenderingContext2D);
+});
+
+it("loads and clears a valid local pinch calibration profile", () => {
+  localStorage.setItem(PINCH_CALIBRATION_STORAGE_KEY, JSON.stringify({
+    version: 1,
+    createdAt: "2026-08-04T12:00:00.000Z",
+    boundaries: {
+      imageContact: 0.3,
+      imageSeparate: 0.5,
+      worldContact: 0.3,
+      worldSeparate: 0.55,
+      depthContact: 0.15,
+      depthSeparate: 0.35,
+    },
+    baselineNoise: 0.02,
+  }));
+
+  render(<App />);
+
+  expect(screen.getByText("个人点击参数已启用")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "清除个人点击参数" }));
+  expect(localStorage.getItem(PINCH_CALIBRATION_STORAGE_KEY)).toBeNull();
 });
 
 afterEach(() => {
@@ -146,7 +170,7 @@ it("does not click when fingertips overlap only in the camera image", async () =
   expect(bridge.click).not.toHaveBeenCalled();
 });
 
-it("keeps moving but does not click when world depth is unavailable", async () => {
+it("uses the stricter multi-signal path when world depth is unavailable", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
   runFrame(16, handAt("tracking", 0.55, 0.4), null);
   runFrame(32, handAt("left"), null);
@@ -157,7 +181,7 @@ it("keeps moving but does not click when world depth is unavailable", async () =
   runFrame(112, handAt("tracking"), null);
 
   await waitFor(() => expect(bridge.move).toHaveBeenCalled());
-  expect(bridge.click).not.toHaveBeenCalled();
+  await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
 });
 
 it.each(["right", "double", "scroll"] as const)("does not dispatch the disabled %s action", async (gesture) => {

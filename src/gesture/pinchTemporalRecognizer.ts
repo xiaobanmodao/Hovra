@@ -91,7 +91,9 @@ export class PinchTemporalRecognizer {
       this.releaseWindow.length = 0;
       return this.output("active", true, false, enterVotes, requiredVotes);
     }
-    if (this.enterWindow.length >= windowSize && enterVotes < requiredVotes) {
+    const lastTwoReject = this.enterWindow.length >= 2
+      && this.enterWindow.slice(-2).every((vote) => !vote.entered);
+    if (lastTwoReject) {
       this.enterWindow.length = 0;
       this.phase = "neutral";
       return this.output("neutral", false, false, 0, requiredVotes);

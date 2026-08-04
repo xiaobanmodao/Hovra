@@ -260,6 +260,7 @@ function diagnosticsFor(
     openPalmScore: features?.openPalmScore ?? null,
     scrollPoseScore: features?.scrollPoseScore ?? null,
     pinchProbability: pinch.probability?.probability ?? null,
+    pinchImageDepthGap: pinch.features?.imageDepthGap ?? null,
     pinchWorldQuality: pinch.quality?.score ?? 0,
     pinchQualityReasons: pinch.quality?.reasons ?? [],
     pinchBlockingReason: pinch.probability?.blockingReason ?? null,
