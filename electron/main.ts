@@ -9,6 +9,7 @@ import {
 } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { spawn } from "node:child_process";
 
 import {
   createMouseController,
@@ -18,6 +19,7 @@ import {
 } from "./mouseController";
 import { systemMouse } from "./systemMouseAdapter";
 import { toOverlayPoint } from "./overlayCoordinates";
+import { createCursorVisibilityController, type CursorVisibilityController } from "./cursorVisibility";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -32,6 +34,7 @@ let mainWindow: BrowserWindow | undefined;
 let cursorOverlay: BrowserWindow | undefined;
 let activationFrame: WebFrameMain | undefined;
 let mouseController: MouseController | undefined;
+let cursorVisibility: CursorVisibilityController | undefined;
 let quitCleanupStarted = false;
 let quitCleanupComplete = false;
 
@@ -270,6 +273,7 @@ function canActivateRendererEvent(event: unknown): boolean {
 }
 
 void app.whenReady().then(() => {
+  cursorVisibility = createNativeCursorVisibility();
   mouseController = createMouseController({
     permission: () =>
       process.platform === "darwin" &&
@@ -277,6 +281,7 @@ void app.whenReady().then(() => {
     isActive: () => isAppActive,
     mouse: systemMouse,
     overlay: { show: setCursorOverlayState, hide: hideCursorOverlay },
+    cursor: cursorVisibility,
   });
   createMainWindow();
   screen.on("display-metrics-changed", syncCursorOverlayBounds);
@@ -301,6 +306,8 @@ void app.whenReady().then(() => {
 });
 
 app.on("before-quit", (event) => {
+  cursorVisibility?.show();
+  cursorVisibility?.dispose();
   if (!mouseController || quitCleanupComplete) {
     return;
   }
@@ -323,6 +330,21 @@ app.on("before-quit", (event) => {
     console.error("Failed to release the mouse before quit", error);
   });
 });
+
+function createNativeCursorVisibility(): CursorVisibilityController | undefined {
+  if (process.platform !== "darwin" || process.env.VITEST) {
+    return undefined;
+  }
+
+  const helperPath = app.isPackaged
+    ? path.join(process.resourcesPath, "cursor-visibility-helper")
+    : path.join(__dirname, "../../native/cursor-visibility-helper");
+
+  return createCursorVisibilityController({
+    helperPath,
+    spawn: (command, args) => spawn(command, [...args], { stdio: ["pipe", "ignore", "ignore"] }),
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

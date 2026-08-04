@@ -1,5 +1,6 @@
 .DS_Store
 .worktrees/
+native/cursor-visibility-helper
 .superpowers/
 node_modules/
 dist/

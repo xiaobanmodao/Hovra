@@ -16,6 +16,10 @@ export interface MouseControllerDependencies {
     show(x: number, y: number, state: "tracking" | "dragging"): void;
     hide(): void;
   };
+  cursor?: {
+    hide(): void;
+    show(): void;
+  };
 }
 
 export interface MouseController {
@@ -104,6 +108,7 @@ export function createMouseController(
       }
 
       isSessionActive = true;
+      deps.cursor?.hide();
       return true;
     },
 
@@ -170,6 +175,7 @@ export function createMouseController(
       isSessionActive = false;
       activationGeneration += 1;
       deps.overlay?.hide();
+      deps.cursor?.show();
       return queueAction(releasePressedButton);
     },
   };

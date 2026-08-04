@@ -5,8 +5,8 @@
   "main": ".vite/build/main.js",
   "scripts": {
     "dev": "vite",
-    "electron:dev": "electron-forge start",
-    "electron:make": "electron-forge make",
+    "electron:dev": "sh scripts/build-cursor-visibility-helper.sh && electron-forge start",
+    "electron:make": "sh scripts/build-cursor-visibility-helper.sh && electron-forge make",
     "electron:typecheck": "tsc --noEmit -p tsconfig.electron.json",
     "build": "tsc -b && vite build",
     "test": "vitest run"

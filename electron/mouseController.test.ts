@@ -18,6 +18,10 @@ function createDependencies() {
       press: vi.fn<() => Promise<void>>().mockResolvedValue(),
       release: vi.fn<() => Promise<void>>().mockResolvedValue(),
     },
+    cursor: {
+      hide: vi.fn(),
+      show: vi.fn(),
+    },
   };
 }
 
@@ -61,6 +65,16 @@ describe("createMouseController", () => {
     await controller.move(120, 80);
 
     expect(deps.mouse.move).toHaveBeenCalledWith(120, 80);
+  });
+
+  it("replaces the native cursor only for an active control session", async () => {
+    const controller = createMouseController(deps);
+
+    await expect(controller.activate()).resolves.toBe(true);
+    expect(deps.cursor.hide).toHaveBeenCalledOnce();
+
+    await controller.releaseAndPause();
+    expect(deps.cursor.show).toHaveBeenCalledOnce();
   });
 
   it("does not activate if focus is lost while permission is pending", async () => {
