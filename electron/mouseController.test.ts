@@ -18,9 +18,15 @@ function createDependencies() {
       press: vi.fn<() => Promise<void>>().mockResolvedValue(),
       release: vi.fn<() => Promise<void>>().mockResolvedValue(),
     },
+    overlay: {
+      show: vi.fn(),
+      hide: vi.fn(),
+      refresh: vi.fn(),
+    },
     cursor: {
       hide: vi.fn(),
       show: vi.fn(),
+      refresh: vi.fn(),
     },
   };
 }
@@ -75,6 +81,32 @@ describe("createMouseController", () => {
 
     await controller.releaseAndPause();
     expect(deps.cursor.show).toHaveBeenCalledOnce();
+  });
+
+  it("re-obscures the native cursor after synthetic mouse events", async () => {
+    const controller = createMouseController(deps);
+    await controller.activate();
+
+    await controller.move(120, 80);
+    await controller.click();
+    await controller.mouseDown();
+    await controller.drag(140, 90);
+    await controller.mouseUp();
+
+    expect(deps.cursor.refresh).toHaveBeenCalledTimes(5);
+  });
+
+  it("reapplies the hidden native cursor after clicking the underlying application", async () => {
+    const controller = createMouseController(deps);
+    await controller.activate();
+
+    await controller.click();
+
+    expect(deps.mouse.click).toHaveBeenCalledOnce();
+    expect(deps.overlay.refresh).toHaveBeenCalledOnce();
+    expect(deps.mouse.click.mock.invocationCallOrder[0]).toBeLessThan(
+      deps.overlay.refresh.mock.invocationCallOrder[0],
+    );
   });
 
   it("does not activate if focus is lost while permission is pending", async () => {

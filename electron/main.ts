@@ -9,7 +9,7 @@ import {
 } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 
 import {
   createMouseController,
@@ -18,20 +18,26 @@ import {
   type MouseController,
 } from "./mouseController";
 import { systemMouse } from "./systemMouseAdapter";
-import { toOverlayPoint } from "./overlayCoordinates";
-import { createCursorVisibilityController, type CursorVisibilityController } from "./cursorVisibility";
+import { cursorOverlayBounds } from "./overlayCoordinates";
+import {
+  createCursorVisibilityController,
+  type CursorVisibilityController,
+  type NativeCursorVisibility,
+} from "./cursorVisibility";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
 const ACCESSIBILITY_SETTINGS_URL =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+const CURSOR_OVERLAY_SIZE = 40;
 
 app.enableSandbox();
 
 let isAppActive = false;
 let mainWindow: BrowserWindow | undefined;
 let cursorOverlay: BrowserWindow | undefined;
+let cursorOverlayVisible = false;
 let activationFrame: WebFrameMain | undefined;
 let mouseController: MouseController | undefined;
 let cursorVisibility: CursorVisibilityController | undefined;
@@ -143,17 +149,17 @@ function createMainWindow(): BrowserWindow {
 function createCursorOverlay(): BrowserWindow {
   const bounds = screen.getPrimaryDisplay().bounds;
   const overlay = new BrowserWindow({
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
+    x: bounds.x - CURSOR_OVERLAY_SIZE,
+    y: bounds.y - CURSOR_OVERLAY_SIZE,
+    width: CURSOR_OVERLAY_SIZE,
+    height: CURSOR_OVERLAY_SIZE,
     transparent: true,
     frame: false,
     alwaysOnTop: true,
     focusable: false,
     skipTaskbar: true,
     hasShadow: false,
-    show: true,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, "overlayPreload.js"),
       contextIsolation: true,
@@ -166,17 +172,9 @@ function createCursorOverlay(): BrowserWindow {
   overlay.setIgnoreMouseEvents(true, { forward: true });
   overlay.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   overlay.webContents.on("will-navigate", (event) => event.preventDefault());
-  void overlay.loadURL(`data:text/html,${encodeURIComponent(`<!doctype html><style>html,body{margin:0;background:transparent;overflow:hidden}.cursor{position:fixed;width:28px;height:28px;border:3px solid #7cf7ff;border-radius:50%;box-sizing:border-box;transform:translate(-50%,-50%);display:none;box-shadow:0 0 12px #00d9ff}.cursor.dragging{border-color:#ffcc66;box-shadow:0 0 12px #ff9900}</style><div id="cursor" class="cursor"></div><script>window.addEventListener('message',event=>{const state=event.data;if(!state||state.type!=='gesture-overlay')return;const cursor=document.getElementById('cursor');cursor.style.left=state.x+'px';cursor.style.top=state.y+'px';cursor.style.display=state.visible?'block':'none';cursor.className='cursor '+state.state})</script>`)} `);
+  void overlay.loadURL(`data:text/html,${encodeURIComponent(`<!doctype html><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden;cursor:none}.cursor{position:absolute;left:6px;top:6px;width:28px;height:28px;border:3px solid #7cf7ff;border-radius:50%;box-sizing:border-box;box-shadow:0 0 12px #00d9ff}.cursor.dragging{border-color:#ffcc66;box-shadow:0 0 12px #ff9900}</style><div id="cursor" class="cursor"></div><script>window.addEventListener('message',event=>{const state=event.data;if(!state||state.type!=='gesture-overlay')return;document.getElementById('cursor').className='cursor '+state.state})</script>`)} `);
   cursorOverlay = overlay;
   return overlay;
-}
-
-function syncCursorOverlayBounds(): void {
-  if (!cursorOverlay || cursorOverlay.isDestroyed()) {
-    return;
-  }
-
-  cursorOverlay.setBounds(screen.getPrimaryDisplay().bounds);
 }
 
 function setCursorOverlayState(
@@ -187,19 +185,43 @@ function setCursorOverlayState(
   if (!cursorOverlay || cursorOverlay.isDestroyed() || !Number.isFinite(x) || !Number.isFinite(y)) {
     return;
   }
-  const point = toOverlayPoint({ x, y }, screen.getPrimaryDisplay().bounds);
+  cursorOverlay.setBounds(cursorOverlayBounds({ x, y }, CURSOR_OVERLAY_SIZE));
   cursorOverlay.webContents.executeJavaScript(
-    `window.postMessage(${JSON.stringify({ type: "gesture-overlay", x: point.x, y: point.y, visible: true, state })}, "*")`,
+    `window.postMessage(${JSON.stringify({ type: "gesture-overlay", state })}, "*")`,
   ).catch(() => undefined);
+  cursorOverlay.showInactive();
+  cursorOverlayVisible = true;
+  refreshCursorOverlay();
 }
 
 function hideCursorOverlay(): void {
   if (!cursorOverlay || cursorOverlay.isDestroyed()) {
     return;
   }
-  cursorOverlay.webContents.executeJavaScript(
-    `window.postMessage(${JSON.stringify({ type: "gesture-overlay", x: 0, y: 0, visible: false, state: "tracking" })}, "*")`,
-  ).catch(() => undefined);
+  cursorOverlay.hide();
+  cursorOverlayVisible = false;
+}
+
+function refreshCursorOverlay(): void {
+  if (!cursorOverlay || cursorOverlay.isDestroyed() || !cursorOverlayVisible) {
+    return;
+  }
+
+  try {
+    if (!cursorOverlay.webContents.debugger.isAttached()) {
+      cursorOverlay.webContents.debugger.attach();
+    }
+    void cursorOverlay.webContents.debugger.sendCommand(
+      "Input.dispatchMouseEvent",
+      {
+        type: "mouseMoved",
+        x: CURSOR_OVERLAY_SIZE / 2,
+        y: CURSOR_OVERLAY_SIZE / 2,
+      },
+    ).catch(() => undefined);
+  } catch {
+    // The next gesture frame retries if the overlay renderer is still loading.
+  }
 }
 
 function releaseForRendererLifecycle(reason: string): Promise<void> {
@@ -280,11 +302,31 @@ void app.whenReady().then(() => {
       systemPreferences.isTrustedAccessibilityClient(false),
     isActive: () => isAppActive,
     mouse: systemMouse,
-    overlay: { show: setCursorOverlayState, hide: hideCursorOverlay },
+    overlay: {
+      show: setCursorOverlayState,
+      hide: hideCursorOverlay,
+      refresh: refreshCursorOverlay,
+    },
     cursor: cursorVisibility,
   });
   createMainWindow();
-  screen.on("display-metrics-changed", syncCursorOverlayBounds);
+  if (process.env.GESTURE_CURSOR_PROBE === "center") {
+    setTimeout(() => {
+      const bounds = screen.getPrimaryDisplay().bounds;
+      const x = bounds.x + (bounds.width - 1) / 2;
+      const y = bounds.y + (bounds.height - 1) / 2;
+      let remainingFrames = 30;
+      const interval = setInterval(() => {
+        void systemMouse.move(x, y).then(() => {
+          setCursorOverlayState(x, y, "tracking");
+        });
+        remainingFrames -= 1;
+        if (remainingFrames === 0) {
+          clearInterval(interval);
+        }
+      }, 100);
+    }, 1_000);
+  }
   registerMouseControllerIpc(ipcMain, mouseController, {
     isTrustedEvent: isTrustedRendererEvent,
     canActivate: canActivateRendererEvent,
@@ -336,14 +378,18 @@ function createNativeCursorVisibility(): CursorVisibilityController | undefined 
     return undefined;
   }
 
-  const helperPath = app.isPackaged
-    ? path.join(process.resourcesPath, "cursor-visibility-helper")
-    : path.join(__dirname, "../../native/cursor-visibility-helper");
+  const addonPath = app.isPackaged
+    ? path.join(process.resourcesPath, "cursor-visibility.node")
+    : path.join(__dirname, "../../native/cursor-visibility.node");
 
-  return createCursorVisibilityController({
-    helperPath,
-    spawn: (command, args) => spawn(command, [...args], { stdio: ["pipe", "ignore", "ignore"] }),
-  });
+  try {
+    const requireNative = createRequire(path.join(path.dirname(addonPath), "package.json"));
+    const nativeCursor = requireNative(addonPath) as NativeCursorVisibility;
+    return createCursorVisibilityController(nativeCursor);
+  } catch (error) {
+    console.error("Failed to load native cursor visibility support", error);
+    return undefined;
+  }
 }
 
 app.on("window-all-closed", () => {

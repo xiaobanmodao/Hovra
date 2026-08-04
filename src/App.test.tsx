@@ -463,18 +463,14 @@ it("dispatches hover movement, short clicks, and drag-aware movement while enabl
   );
 });
 
-it.each(["lost", "open-palm", "stale-frame"] as const)(
-  "awaits mouse release before showing system control paused on %s safety",
+it.each(["lost", "stale-frame"] as const)(
+  "releases a drag without disabling explicit system control on %s safety",
   async (safety) => {
     const { bridge, runAnimationFrame, runFrame, video } = await renderDesktopApp();
     await startDesktopDrag(runFrame, bridge);
-    const release = deferred();
-    vi.mocked(bridge.releaseAndPause).mockImplementation(() => release.promise);
 
     if (safety === "lost") {
       runFrame(600, null);
-    } else if (safety === "open-palm") {
-      runFrame(600, openPalmAt(0.4, 0.1));
     } else if (safety === "stale-frame") {
       Object.defineProperty(video, "readyState", {
         configurable: true,
@@ -483,16 +479,33 @@ it.each(["lost", "open-palm", "stale-frame"] as const)(
       runAnimationFrame(1_100);
     }
 
-    expect(bridge.releaseAndPause).toHaveBeenCalledOnce();
+    await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
+    expect(bridge.releaseAndPause).not.toHaveBeenCalled();
     expect(screen.getByText("Enabled")).toBeInTheDocument();
-
-    await act(async () => {
-      release.resolve();
-      await release.promise;
-    });
-    await screen.findByText("Paused");
   },
 );
+
+it("keeps system control enabled when an open palm completes a click", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+
+  runFrame(100, pinchedHandAt(0.4, 0.4));
+  runFrame(200, openPalmAt(0.4, 0.1));
+
+  await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
+  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
+  expect(screen.getByText("Enabled")).toBeInTheDocument();
+});
+
+it("keeps system control enabled when an open palm ends a drag", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  await startDesktopDrag(runFrame, bridge);
+
+  runFrame(600, openPalmAt(0.4, 0.1));
+
+  await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
+  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
+  expect(screen.getByText("Enabled")).toBeInTheDocument();
+});
 
 it("keeps system control enabled when the app window loses focus", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
@@ -530,7 +543,7 @@ it("reconciles a rejected main-process activation and remains paused", async () 
   expect(bridge.mouseDown).not.toHaveBeenCalled();
 });
 
-it("cancels a pending main-process activation when tracking becomes lost", async () => {
+it("does not cancel an explicit pending activation when tracking becomes lost", async () => {
   let resolveActivation!: (active: boolean) => void;
   const activation = new Promise<boolean>((resolve) => {
     resolveActivation = resolve;
@@ -543,9 +556,8 @@ it("cancels a pending main-process activation when tracking becomes lost", async
   await waitFor(() => expect(bridge.activate).toHaveBeenCalledOnce());
   runFrame(100, null);
 
-  await waitFor(() => expect(bridge.releaseAndPause).toHaveBeenCalledOnce());
+  expect(bridge.releaseAndPause).not.toHaveBeenCalled();
   resolveActivation(true);
   await activation;
-  await screen.findByText("Paused");
-  expect(screen.queryByText("Enabled")).not.toBeInTheDocument();
+  await screen.findByText("Enabled");
 });

@@ -5,6 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 interface CapturedControllerDependencies {
   isActive(): boolean;
+  overlay?: {
+    show(x: number, y: number, state: "tracking" | "dragging"): void;
+    hide(): void;
+    refresh?(): void;
+  };
 }
 
 interface CapturedIpcSecurity {
@@ -36,6 +41,11 @@ const mainMocks = vi.hoisted(() => ({
       on: ReturnType<typeof vi.fn>;
       send: ReturnType<typeof vi.fn>;
       executeJavaScript: ReturnType<typeof vi.fn>;
+      debugger: {
+        attach: ReturnType<typeof vi.fn>;
+        isAttached: ReturnType<typeof vi.fn>;
+        sendCommand: ReturnType<typeof vi.fn>;
+      };
       setWindowOpenHandler: ReturnType<typeof vi.fn>;
     };
     loadFile: ReturnType<typeof vi.fn>;
@@ -43,6 +53,8 @@ const mainMocks = vi.hoisted(() => ({
     setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
     setBounds: ReturnType<typeof vi.fn>;
+    hide: ReturnType<typeof vi.fn>;
+    showInactive: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -63,6 +75,11 @@ vi.mock("electron", () => {
       on: vi.fn(),
       send: vi.fn(),
       executeJavaScript: vi.fn().mockResolvedValue(undefined),
+      debugger: {
+        attach: vi.fn(),
+        isAttached: vi.fn().mockReturnValue(false),
+        sendCommand: vi.fn().mockResolvedValue(undefined),
+      },
       setWindowOpenHandler: vi.fn(),
     };
     loadURL = vi.fn().mockResolvedValue(undefined);
@@ -70,6 +87,8 @@ vi.mock("electron", () => {
     setIgnoreMouseEvents = vi.fn();
     destroy = vi.fn();
     setBounds = vi.fn();
+    hide = vi.fn();
+    showInactive = vi.fn();
     isDestroyed = vi.fn().mockReturnValue(false);
     isFocused = vi.fn().mockReturnValue(false);
 
@@ -184,6 +203,9 @@ describe("main BrowserWindow security", () => {
     expect(mainMocks.windows).toHaveLength(2);
     const overlay = mainMocks.windows[1];
     expect(overlay.options).toMatchObject({
+      width: 40,
+      height: 40,
+      show: false,
       transparent: true,
       frame: false,
       alwaysOnTop: true,
@@ -196,6 +218,11 @@ describe("main BrowserWindow security", () => {
       },
     });
     expect(overlay.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
+    const overlayDocument = decodeURIComponent(
+      String(overlay.loadURL.mock.calls[0]?.[0] ?? ""),
+    );
+    expect(overlayDocument).toContain("cursor:none");
+    expect(overlayDocument).toContain("background:transparent");
   });
 
   it("destroys the cursor overlay with the main renderer", async () => {
@@ -210,19 +237,51 @@ describe("main BrowserWindow security", () => {
     expect(overlay.destroy).toHaveBeenCalledOnce();
   });
 
-  it("resizes the cursor overlay when primary display metrics change", async () => {
+  it("centers the cursor overlay window on the system pointer", async () => {
     await bootMain("http://localhost:5173");
     const overlay = mainMocks.windows[1];
-    const displayMetricsChanged = mainMocks.screenHandlers.get("display-metrics-changed");
 
-    displayMetricsChanged?.();
+    mainMocks.controllerDependencies?.overlay?.show(600, 400, "tracking");
 
     expect(overlay.setBounds).toHaveBeenCalledWith({
-      x: -1440,
-      y: 0,
-      width: 1440,
-      height: 900,
+      x: 580,
+      y: 380,
+      width: 40,
+      height: 40,
     });
+    expect(overlay.showInactive).toHaveBeenCalledOnce();
+    expect(overlay.webContents.debugger.attach).toHaveBeenCalledOnce();
+    expect(overlay.webContents.debugger.sendCommand).toHaveBeenCalledWith(
+      "Input.dispatchMouseEvent",
+      { type: "mouseMoved", x: 20, y: 20 },
+    );
+  });
+
+  it("hides the cursor overlay without changing its last calibrated position", async () => {
+    await bootMain("http://localhost:5173");
+    const overlay = mainMocks.windows[1];
+
+    mainMocks.controllerDependencies?.overlay?.hide();
+
+    expect(overlay.hide).toHaveBeenCalledOnce();
+    expect(overlay.setBounds).not.toHaveBeenCalled();
+  });
+
+  it("reapplies cursor:none after underlying system actions change the cursor", async () => {
+    await bootMain("http://localhost:5173");
+    const overlay = mainMocks.windows[1];
+    mainMocks.controllerDependencies?.overlay?.show(600, 400, "tracking");
+    overlay.webContents.debugger.attach.mockClear();
+    overlay.webContents.debugger.isAttached.mockReturnValue(true);
+    overlay.webContents.debugger.sendCommand.mockClear();
+
+    mainMocks.controllerDependencies?.overlay?.refresh?.();
+
+    expect(overlay.webContents.debugger.attach).not.toHaveBeenCalled();
+    expect(overlay.webContents.debugger.sendCommand).toHaveBeenCalledWith(
+      "Input.dispatchMouseEvent",
+      { type: "mouseMoved", x: 20, y: 20 },
+    );
   });
 
   it("loads only the packaged renderer file in production", async () => {

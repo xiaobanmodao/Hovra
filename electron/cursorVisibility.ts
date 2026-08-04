@@ -1,43 +1,41 @@
-export type CursorHelperProcess = {
-  stdin?: { write(message: string): void };
-  kill?(): void;
+export type NativeCursorVisibility = {
+  hide(): void;
+  show(): void;
+  obscure(): void;
 };
 
 export type CursorVisibilityController = {
   hide(): void;
   show(): void;
+  refresh(): void;
   dispose(): void;
 };
 
-export function createCursorVisibilityController({
-  helperPath,
-  spawn,
-}: {
-  helperPath: string;
-  spawn: (command: string, args: readonly string[]) => CursorHelperProcess;
-}): CursorVisibilityController {
-  const helper = spawn(helperPath, []);
+export function createCursorVisibilityController(
+  nativeCursor: NativeCursorVisibility,
+): CursorVisibilityController {
   let isHidden = false;
-
-  const send = (command: "hide" | "show") => helper.stdin?.write(`${command}\n`);
 
   return {
     hide() {
       if (isHidden) return;
-      send("hide");
+      nativeCursor.hide();
       isHidden = true;
     },
     show() {
       if (!isHidden) return;
-      send("show");
+      nativeCursor.show();
       isHidden = false;
+    },
+    refresh() {
+      if (!isHidden) return;
+      nativeCursor.obscure();
     },
     dispose() {
       if (isHidden) {
-        send("show");
+        nativeCursor.show();
         isHidden = false;
       }
-      helper.kill?.();
     },
   };
 }

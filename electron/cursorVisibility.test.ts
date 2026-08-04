@@ -4,32 +4,38 @@ import { createCursorVisibilityController } from "./cursorVisibility";
 
 describe("cursor visibility controller", () => {
   it("hides once and always restores the native cursor", () => {
-    const write = vi.fn();
-    const controller = createCursorVisibilityController({
-      helperPath: "/tmp/cursor-helper",
-      spawn: vi.fn(() => ({ stdin: { write } })),
-    });
+    const nativeCursor = { hide: vi.fn(), show: vi.fn(), obscure: vi.fn() };
+    const controller = createCursorVisibilityController(nativeCursor);
 
     controller.hide();
     controller.hide();
     controller.show();
     controller.show();
 
-    expect(write).toHaveBeenNthCalledWith(1, "hide\n");
-    expect(write).toHaveBeenNthCalledWith(2, "show\n");
-    expect(write).toHaveBeenCalledTimes(2);
+    expect(nativeCursor.hide).toHaveBeenCalledOnce();
+    expect(nativeCursor.show).toHaveBeenCalledOnce();
   });
 
   it("restores the native cursor while disposing an active session", () => {
-    const write = vi.fn();
-    const controller = createCursorVisibilityController({
-      helperPath: "/tmp/cursor-helper",
-      spawn: vi.fn(() => ({ stdin: { write } })),
-    });
+    const nativeCursor = { hide: vi.fn(), show: vi.fn(), obscure: vi.fn() };
+    const controller = createCursorVisibilityController(nativeCursor);
 
     controller.hide();
     controller.dispose();
 
-    expect(write).toHaveBeenLastCalledWith("show\n");
+    expect(nativeCursor.show).toHaveBeenCalledOnce();
+  });
+
+  it("re-obscures the cursor after system events only while control is active", () => {
+    const nativeCursor = { hide: vi.fn(), show: vi.fn(), obscure: vi.fn() };
+    const controller = createCursorVisibilityController(nativeCursor);
+
+    controller.refresh();
+    controller.hide();
+    controller.refresh();
+    controller.show();
+    controller.refresh();
+
+    expect(nativeCursor.obscure).toHaveBeenCalledOnce();
   });
 });

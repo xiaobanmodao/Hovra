@@ -15,10 +15,12 @@ export interface MouseControllerDependencies {
   overlay?: {
     show(x: number, y: number, state: "tracking" | "dragging"): void;
     hide(): void;
+    refresh?(): void;
   };
   cursor?: {
     hide(): void;
     show(): void;
+    refresh?(): void;
   };
 }
 
@@ -84,6 +86,8 @@ export function createMouseController(
     }
 
     await deps.mouse.release();
+    deps.cursor?.refresh?.();
+    deps.overlay?.refresh?.();
     isButtonDown = false;
   }
 
@@ -124,6 +128,7 @@ export function createMouseController(
         }
 
         await deps.mouse.move(x, y);
+        deps.cursor?.refresh?.();
         deps.overlay?.show(x, y, "tracking");
       });
     },
@@ -140,6 +145,7 @@ export function createMouseController(
         }
 
         await deps.mouse.drag(x, y);
+        deps.cursor?.refresh?.();
         deps.overlay?.show(x, y, "dragging");
       });
     },
@@ -151,6 +157,8 @@ export function createMouseController(
         }
 
         await deps.mouse.click();
+        deps.cursor?.refresh?.();
+        deps.overlay?.refresh?.();
       });
     },
 
@@ -161,6 +169,8 @@ export function createMouseController(
         }
 
         await deps.mouse.press();
+        deps.cursor?.refresh?.();
+        deps.overlay?.refresh?.();
         isButtonDown = true;
       });
     },

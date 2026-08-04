@@ -173,14 +173,24 @@ function App() {
       return;
     }
 
-    if (output.state === "lost" || output.state === "paused") {
-      if (systemControlActiveRef.current || activationPendingRef.current) {
-        void pauseSystemControl();
+    if (output.state === "lost") {
+      if (systemControlActiveRef.current) {
+        void desktopBridge.mouseUp().catch(() => pauseSystemControl());
       }
       return;
     }
 
     if (!systemControlActiveRef.current) {
+      return;
+    }
+
+    if (output.state === "paused") {
+      if (output.click) {
+        void desktopBridge.click().catch(() => pauseSystemControl());
+      }
+      if (output.dragEnd) {
+        void desktopBridge.mouseUp().catch(() => pauseSystemControl());
+      }
       return;
     }
 
