@@ -226,6 +226,73 @@ h2 {
   background: rgba(12, 28, 49, 0.96);
 }
 
+.recognition-diagnostics {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px solid #253955;
+  border-radius: 1rem;
+  background: rgba(12, 28, 49, 0.96);
+}
+
+.recognition-diagnostics-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.recognition-diagnostics-heading .eyebrow {
+  margin-bottom: 0.25rem;
+}
+
+.recognition-diagnostics-heading h2 {
+  font-size: 1.1rem;
+}
+
+.recognition-diagnostics-heading button {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgba(99, 215, 238, 0.48);
+  border-radius: 0.65rem;
+  color: #e6fbff;
+  background: rgba(99, 215, 238, 0.12);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.recognition-diagnostics dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+}
+
+.recognition-diagnostics dl div {
+  min-width: 0;
+}
+
+.recognition-diagnostics dt {
+  color: #7f94ae;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.recognition-diagnostics dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+  color: #eef5ff;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-save-status {
+  margin: 0.75rem 0 0;
+  color: #8fe2f2;
+  font-size: 0.78rem;
+}
+
 .calibration-heading {
   display: flex;
   align-items: center;
@@ -596,6 +663,15 @@ h2 {
   pointer-events: none;
   transform: translate(-50%, -50%);
   transition: transform 45ms linear, border-color 45ms linear, background 45ms linear, box-shadow 45ms linear;
+}
+
+.virtual-cursor.is-candidate {
+  opacity: 0.62;
+  filter: saturate(0.7);
+}
+
+.virtual-cursor.is-releasing {
+  opacity: 0.45;
 }
 
 .virtual-cursor.is-left-pinching {

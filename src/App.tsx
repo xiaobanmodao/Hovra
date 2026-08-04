@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HandLandmarker } from "@mediapipe/tasks-vision";
 import { CalibrationPanel } from "./components/CalibrationPanel";
 import { CameraStage } from "./components/CameraStage";
+import { GestureDiagnostics } from "./components/GestureDiagnostics";
 import { Playground } from "./components/Playground";
 import { StatusPanel } from "./components/StatusPanel";
 import { SystemControlPanel } from "./components/SystemControlPanel";
@@ -50,6 +51,16 @@ const clampNormalizedPoint = (point: Point): Point => ({
   x: Math.min(1, Math.max(0, point.x)),
   y: Math.min(1, Math.max(0, point.y)),
 });
+
+const desktopCursorState = (output: GestureOutput) => {
+  if (output.phase === "candidate" && output.candidate && output.candidate !== "open-palm") {
+    return `candidate-${output.candidate}` as const;
+  }
+  if (output.phase === "releasing" && output.lockedGesture && output.lockedGesture !== "open-palm") {
+    return `releasing-${output.lockedGesture}` as const;
+  }
+  return output.state === "lost" || output.state === "paused" ? "tracking" : output.state;
+};
 
 function App() {
   const desktopBridge = window.gestureDesktop;
@@ -102,6 +113,11 @@ function App() {
     setOutput(engineRef.current.update(null, performance.now()));
     setSettings(nextSettings);
   }, []);
+
+  const handleSaveTrace = useCallback((): Promise<"saved" | "cancelled"> => {
+    if (!desktopBridge) return Promise.resolve("cancelled");
+    return desktopBridge.saveGestureTrace(engineRef.current.serializeTrace());
+  }, [desktopBridge]);
 
   const pauseSystemControl = useCallback((): Promise<void> => {
     systemControlActiveRef.current = false;
@@ -223,7 +239,7 @@ function App() {
     if (systemCursor) {
       const movement = output.state === "dragging" || output.dragEnd
         ? desktopBridge.drag(systemCursor.x, systemCursor.y)
-        : desktopBridge.move(systemCursor.x, systemCursor.y, output.state);
+        : desktopBridge.move(systemCursor.x, systemCursor.y, desktopCursorState(output));
       void movement.catch(() => pauseSystemControl());
     }
     if (output.click) {
@@ -395,6 +411,11 @@ function App() {
         cursor={cursor}
       />
 
+      <GestureDiagnostics
+        output={output}
+        onSaveTrace={desktopBridge ? handleSaveTrace : undefined}
+      />
+
       <div className="gesture-workspace">
         <CameraStage
           videoRef={videoRef}
@@ -408,7 +429,7 @@ function App() {
 
       {cursor && (
         <div
-          className={`virtual-cursor is-${output.state}`}
+          className={`virtual-cursor is-${output.state}${output.phase === "candidate" ? " is-candidate" : ""}${output.phase === "releasing" ? " is-releasing" : ""}`}
           style={{ left: cursor.x, top: cursor.y, pointerEvents: "none" }}
           aria-hidden="true"
         />

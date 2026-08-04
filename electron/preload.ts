@@ -14,6 +14,7 @@ const channels = {
   releaseAndPause: "gesture:release-and-pause",
   openAccessibilitySettings: "gesture:open-accessibility-settings",
   safetyPause: "gesture:safety-pause",
+  saveTrace: "gesture:save-trace",
 } as const;
 
 type PermissionStatus = "granted" | "denied";
@@ -23,7 +24,15 @@ type CursorOverlayState =
   | "right-pinching"
   | "double-pinching"
   | "dragging"
-  | "scrolling";
+  | "scrolling"
+  | "candidate-left"
+  | "candidate-right"
+  | "candidate-double"
+  | "candidate-scroll"
+  | "releasing-left"
+  | "releasing-right"
+  | "releasing-double"
+  | "releasing-scroll";
 
 const CURSOR_STATES = new Set<CursorOverlayState>([
   "tracking",
@@ -32,6 +41,14 @@ const CURSOR_STATES = new Set<CursorOverlayState>([
   "double-pinching",
   "dragging",
   "scrolling",
+  "candidate-left",
+  "candidate-right",
+  "candidate-double",
+  "candidate-scroll",
+  "releasing-left",
+  "releasing-right",
+  "releasing-double",
+  "releasing-scroll",
 ]);
 
 const gestureDesktop = {
@@ -59,6 +76,26 @@ const gestureDesktop = {
   mouseUp: (): Promise<void> => ipcRenderer.invoke(channels.mouseUp),
   releaseAndPause: (): Promise<void> =>
     ipcRenderer.invoke(channels.releaseAndPause),
+  saveGestureTrace: (json: string): Promise<"saved" | "cancelled"> => {
+    if (typeof json !== "string" || new TextEncoder().encode(json).byteLength > 2 * 1024 * 1024) {
+      return Promise.reject(new TypeError("Gesture trace must not exceed 2 MiB"));
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(json);
+    } catch {
+      return Promise.reject(new TypeError("Gesture trace must be valid JSON"));
+    }
+    if (
+      typeof value !== "object"
+      || value === null
+      || (value as { version?: unknown }).version !== 1
+      || !Array.isArray((value as { frames?: unknown }).frames)
+    ) {
+      return Promise.reject(new TypeError("Gesture trace must use version 1"));
+    }
+    return ipcRenderer.invoke(channels.saveTrace, json);
+  },
   openAccessibilitySettings: (): Promise<void> =>
     ipcRenderer.invoke(channels.openAccessibilitySettings),
   onSafetyPause: (listener: () => void): (() => void) => {

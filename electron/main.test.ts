@@ -9,7 +9,8 @@ interface CapturedControllerDependencies {
     show(
       x: number,
       y: number,
-      state: "tracking" | "left-pinching" | "right-pinching" | "double-pinching" | "dragging" | "scrolling",
+      state: "tracking" | "left-pinching" | "right-pinching" | "double-pinching" | "dragging" | "scrolling"
+        | "candidate-left" | "releasing-left",
     ): void;
     hide(): void;
     refresh?(): void;
@@ -28,8 +29,9 @@ const mainMocks = vi.hoisted(() => ({
   screenHandlers: new Map<string, (...args: unknown[]) => void>(),
   controllerDependencies: undefined as CapturedControllerDependencies | undefined,
   ipcSecurity: undefined as CapturedIpcSecurity | undefined,
-  ipcHandlers: new Map<string, (event: unknown) => Promise<unknown>>(),
+  ipcHandlers: new Map<string, (event: unknown, payload?: unknown) => Promise<unknown>>(),
   openExternal: vi.fn().mockResolvedValue(undefined),
+  saveGestureTrace: vi.fn().mockResolvedValue("saved"),
   isTrustedAccessibilityClient: vi.fn().mockReturnValue(true),
   mouse: {
     move: vi.fn().mockResolvedValue(undefined),
@@ -163,6 +165,9 @@ vi.mock("./mouseController", async (importOriginal) => {
 });
 
 vi.mock("./systemMouseAdapter", () => ({ systemMouse: mainMocks.mouse }));
+vi.mock("./gestureTraceExporter", () => ({
+  saveGestureTrace: mainMocks.saveGestureTrace,
+}));
 
 async function bootMain(devServerUrl: string | undefined) {
   vi.resetModules();
@@ -232,6 +237,8 @@ describe("main BrowserWindow security", () => {
     expect(overlayDocument).toContain(".cursor.right-pinching");
     expect(overlayDocument).toContain(".cursor.double-pinching");
     expect(overlayDocument).toContain(".cursor.scrolling");
+    expect(overlayDocument).toContain(".cursor.candidate-left");
+    expect(overlayDocument).toContain(".cursor.releasing-left");
     expect(overlayDocument).toContain("@keyframes click-pulse");
   });
 
@@ -544,6 +551,22 @@ describe("main IPC trust boundary", () => {
     expect(mainMocks.openExternal).toHaveBeenCalledWith(
       "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
     );
+  });
+
+  it("saves traces only for the trusted top-level renderer", async () => {
+    const window = await bootMain("http://localhost:5173");
+    const topFrame: { url: string; top?: unknown } = {
+      url: "http://localhost:5173/index.html",
+    };
+    topFrame.top = topFrame;
+    const handler = mainMocks.ipcHandlers.get("gesture:save-trace");
+    const json = JSON.stringify({ version: 1, frames: [] });
+
+    await expect(handler?.({ sender: {}, senderFrame: topFrame }, json)).resolves.toBe("cancelled");
+    expect(mainMocks.saveGestureTrace).not.toHaveBeenCalled();
+
+    await expect(handler?.({ sender: window.webContents, senderFrame: topFrame }, json)).resolves.toBe("saved");
+    expect(mainMocks.saveGestureTrace).toHaveBeenCalledWith(json);
   });
 });
 

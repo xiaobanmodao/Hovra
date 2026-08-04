@@ -26,6 +26,7 @@ import {
   type CursorVisibilityController,
   type NativeCursorVisibility,
 } from "./cursorVisibility";
+import { saveGestureTrace } from "./gestureTraceExporter";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -183,6 +184,12 @@ html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden
 .cursor.double-pinching{transform:scale(.68);border-color:#ff70dc;background:rgba(255,112,220,.24);box-shadow:0 0 0 4px rgba(255,112,220,.25),0 0 14px #ff39c5}
 .cursor.dragging{border-color:#ffcc66;background:rgba(255,204,102,.18);box-shadow:0 0 12px #ff9900}
 .cursor.scrolling{border-color:#5aa7ff;box-shadow:0 0 0 5px rgba(90,167,255,.22),0 0 14px #2687ff}
+.cursor.candidate-left,.cursor.candidate-right,.cursor.candidate-double,.cursor.candidate-scroll{opacity:.62;filter:saturate(.7)}
+.cursor.candidate-left,.cursor.releasing-left{border-color:#66ff9a}
+.cursor.candidate-right,.cursor.releasing-right{border-color:#b88cff}
+.cursor.candidate-double,.cursor.releasing-double{border-color:#ff70dc}
+.cursor.candidate-scroll,.cursor.releasing-scroll{border-color:#5aa7ff}
+.cursor.releasing-left,.cursor.releasing-right,.cursor.releasing-double,.cursor.releasing-scroll{opacity:.42}
 .pulse{position:absolute;inset:-3px;border:2px solid transparent;border-radius:50%;pointer-events:none}
 .pulse.left{border-color:#66ff9a}.pulse.right{border-color:#b88cff}.pulse.double{border-color:#ff70dc}
 .pulse.animate{animation:click-pulse 140ms ease-out both}
@@ -371,6 +378,10 @@ void app.whenReady().then(() => {
     }
 
     await shell.openExternal(ACCESSIBILITY_SETTINGS_URL);
+  });
+  ipcMain.handle("gesture:save-trace", async (event, json) => {
+    if (!isTrustedRendererEvent(event)) return "cancelled";
+    return saveGestureTrace(typeof json === "string" ? json : "");
   });
 
   app.on("activate", () => {

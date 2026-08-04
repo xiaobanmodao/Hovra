@@ -4,7 +4,9 @@ export interface GestureDesktopApi {
   move(
     x: number,
     y: number,
-    state?: "tracking" | "left-pinching" | "right-pinching" | "double-pinching" | "dragging" | "scrolling",
+    state?: "tracking" | "left-pinching" | "right-pinching" | "double-pinching" | "dragging" | "scrolling"
+      | "candidate-left" | "candidate-right" | "candidate-double" | "candidate-scroll"
+      | "releasing-left" | "releasing-right" | "releasing-double" | "releasing-scroll",
   ): Promise<void>;
   drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
@@ -14,6 +16,7 @@ export interface GestureDesktopApi {
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
   releaseAndPause(): Promise<void>;
+  saveGestureTrace(json: string): Promise<"saved" | "cancelled">;
   openAccessibilitySettings(): Promise<void>;
   onSafetyPause(listener: () => void): () => void;
 }

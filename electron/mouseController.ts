@@ -5,7 +5,15 @@ export type CursorOverlayState =
   | "right-pinching"
   | "double-pinching"
   | "dragging"
-  | "scrolling";
+  | "scrolling"
+  | "candidate-left"
+  | "candidate-right"
+  | "candidate-double"
+  | "candidate-scroll"
+  | "releasing-left"
+  | "releasing-right"
+  | "releasing-double"
+  | "releasing-scroll";
 
 export type CursorPulse = "left" | "right" | "double";
 
@@ -16,6 +24,14 @@ const CURSOR_OVERLAY_STATES = new Set<CursorOverlayState>([
   "double-pinching",
   "dragging",
   "scrolling",
+  "candidate-left",
+  "candidate-right",
+  "candidate-double",
+  "candidate-scroll",
+  "releasing-left",
+  "releasing-right",
+  "releasing-double",
+  "releasing-scroll",
 ]);
 
 const MAX_SCROLL_DELTA = 12;

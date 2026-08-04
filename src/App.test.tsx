@@ -85,6 +85,7 @@ const desktopApi = (): GestureDesktopApi => ({
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),
   releaseAndPause: vi.fn().mockResolvedValue(undefined),
+  saveGestureTrace: vi.fn().mockResolvedValue("saved"),
   openAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
   onSafetyPause: vi.fn(() => vi.fn()),
 });
@@ -509,9 +510,9 @@ it("shows left-pinch feedback on the first frame without waiting for drag hold",
   await waitFor(() => expect(bridge.move).toHaveBeenCalledWith(
     expect.any(Number),
     expect.any(Number),
-    "left-pinching",
+    "candidate-left",
   ));
-  expect(document.querySelector(".virtual-cursor")).toHaveClass("is-left-pinching");
+  expect(document.querySelector(".virtual-cursor")).toHaveClass("is-left-pinching", "is-candidate");
   expect(bridge.mouseDown).not.toHaveBeenCalled();
 });
 

@@ -50,7 +50,7 @@ describe("CalibrationPanel", () => {
     expect(screen.getByText("0.041")).toBeInTheDocument();
     expect(screen.getByText("tracking")).toBeInTheDocument();
     expect(screen.getByText("320, 240")).toBeInTheDocument();
-    expect(screen.getByText("0.055")).toBeInTheDocument();
+    expect(screen.getByText("0.50")).toBeInTheDocument();
     expect(screen.getByText("0.20")).toBeInTheDocument();
     expect(screen.getByText("350 ms")).toBeInTheDocument();
   });
@@ -62,19 +62,19 @@ describe("CalibrationPanel", () => {
     expect(screen.getByText("Cursor").nextElementSibling).toHaveTextContent("—");
   });
 
-  it("steps the pinch threshold and never reports a value above 0.100", () => {
+  it("steps gesture sensitivity and never reports a value above 1", () => {
     const onSettingsChange = vi.fn();
     render(<CalibrationPanelHarness onSettingsChange={onSettingsChange} />);
 
-    const increment = screen.getByRole("button", { name: "Increase pinch threshold" });
+    const increment = screen.getByRole("button", { name: "Increase gesture sensitivity" });
     for (let click = 0; click < 20; click += 1) {
       fireEvent.click(increment);
     }
 
-    const reportedValues = onSettingsChange.mock.calls.map(([settings]) => settings.pinchDistance);
-    expect(reportedValues[0]).toBe(0.06);
-    expect(reportedValues[reportedValues.length - 1]).toBe(0.1);
-    expect(reportedValues.every((value) => value <= 0.1)).toBe(true);
+    const reportedValues = onSettingsChange.mock.calls.map(([settings]) => settings.gestureSensitivity);
+    expect(reportedValues[0]).toBe(0.55);
+    expect(reportedValues[reportedValues.length - 1]).toBe(1);
+    expect(reportedValues.every((value) => value <= 1)).toBe(true);
     expect(increment).toBeDisabled();
   });
 

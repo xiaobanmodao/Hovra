@@ -32,6 +32,7 @@ type ExposedApi = Record<string, unknown> & {
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
   releaseAndPause(): Promise<void>;
+  saveGestureTrace(json: string): Promise<"saved" | "cancelled">;
   openAccessibilitySettings(): Promise<void>;
   onSafetyPause(listener: () => void): () => void;
 };
@@ -69,6 +70,7 @@ describe("gestureDesktop preload bridge", () => {
       "openAccessibilitySettings",
       "releaseAndPause",
       "rightClick",
+      "saveGestureTrace",
       "scroll",
     ]);
     expect(api).not.toHaveProperty("ipcRenderer");
@@ -86,6 +88,7 @@ describe("gestureDesktop preload bridge", () => {
     await api.getPermissionStatus();
     await api.activate();
     await api.move(0.25, 0.75, "right-pinching");
+    await api.move(0.25, 0.75, "candidate-left");
     await api.drag(0.75, 0.25);
     await api.click();
     await api.rightClick();
@@ -94,12 +97,14 @@ describe("gestureDesktop preload bridge", () => {
     await api.mouseDown();
     await api.mouseUp();
     await api.releaseAndPause();
+    await api.saveGestureTrace(JSON.stringify({ version: 1, frames: [] }));
     await api.openAccessibilitySettings();
 
     expect(electronMocks.invoke.mock.calls).toEqual([
       ["gesture:get-permission-status"],
       ["gesture:activate"],
       ["gesture:move", { x: 0.25, y: 0.75, state: "right-pinching" }],
+      ["gesture:move", { x: 0.25, y: 0.75, state: "candidate-left" }],
       ["gesture:drag", { x: 0.75, y: 0.25 }],
       ["gesture:click"],
       ["gesture:right-click"],
@@ -108,6 +113,7 @@ describe("gestureDesktop preload bridge", () => {
       ["gesture:mouse-down"],
       ["gesture:mouse-up"],
       ["gesture:release-and-pause"],
+      ["gesture:save-trace", JSON.stringify({ version: 1, frames: [] })],
       ["gesture:open-accessibility-settings"],
     ]);
   });
@@ -161,5 +167,15 @@ describe("gestureDesktop preload bridge", () => {
       "gesture:safety-pause",
       wrappedListener,
     );
+  });
+
+  it("rejects invalid or oversized trace JSON before IPC", async () => {
+    const api = getExposedApi();
+
+    await expect(api.saveGestureTrace("not json")).rejects.toThrow("valid JSON");
+    await expect(api.saveGestureTrace(" ".repeat(2 * 1024 * 1024 + 1))).rejects.toThrow("2 MiB");
+    await expect(api.saveGestureTrace(JSON.stringify({ version: 2, frames: [] })))
+      .rejects.toThrow("version 1");
+    expect(electronMocks.invoke).not.toHaveBeenCalled();
   });
 });

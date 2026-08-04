@@ -59,7 +59,6 @@ export type GestureDiagnosticsSnapshot = {
 
 export type GestureSettings = {
   gestureSensitivity: number;
-  pinchDistance: number;
   dragHoldMs: number;
   openPalmMinTipDistance: number;
   cursorSmoothingFactor: number;
