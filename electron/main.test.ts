@@ -264,6 +264,7 @@ describe("main BrowserWindow security", () => {
         webSecurity: true,
       },
     });
+    expect(overlay.options.webPreferences).not.toHaveProperty("preload");
     expect(overlay.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
     const overlayDocument = decodeURIComponent(
       String(overlay.loadURL.mock.calls[0]?.[0] ?? ""),

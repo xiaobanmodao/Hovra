@@ -7,6 +7,10 @@ import { execFile } from "node:child_process";
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    appBundleId: "com.hht.hand-gesture-control",
+    extendInfo: {
+      NSCameraUsageDescription: "手势控制需要使用摄像头在本机识别您的手部动作。",
+    },
     extraResource: ["native/cursor-visibility.node", "native/hand-pose-helper"],
     afterCopyExtraResources: [(
       buildPath,

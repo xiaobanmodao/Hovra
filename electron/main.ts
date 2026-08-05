@@ -225,7 +225,6 @@ function createCursorOverlay(): BrowserWindow {
     hasShadow: false,
     show: false,
     webPreferences: {
-      preload: path.join(__dirname, "overlayPreload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
