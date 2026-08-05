@@ -2,11 +2,29 @@ import { MakerZIP } from "@electron-forge/maker-zip";
 import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import type { ForgeConfig } from "@electron-forge/shared-types";
+import { execFile } from "node:child_process";
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     extraResource: ["native/cursor-visibility.node", "native/hand-pose-helper"],
+    afterCopyExtraResources: [(
+      buildPath,
+      _electronVersion,
+      platform,
+      _arch,
+      callback,
+    ) => {
+      if (platform !== "darwin") {
+        callback();
+        return;
+      }
+      execFile("xattr", ["-cr", buildPath], (error) => callback(error ?? undefined));
+    }],
+    osxSign: {
+      identity: "-",
+      identityValidation: false,
+    },
     ignore: (file) =>
       Boolean(file) &&
       !file.startsWith("/.vite") &&
