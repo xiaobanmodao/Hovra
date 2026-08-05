@@ -16,7 +16,7 @@ import { PinchCalibrationWizard } from "./PinchCalibrationWizard";
 type CalibrationPanelProps = {
   settings: GestureSettings;
   onSettingsChange: (next: GestureSettings) => void;
-  pinchDistance: number | null;
+  pinchRatio: number | null;
   gestureState: GestureState;
   cursor: Point | null;
   currentPinchSample: PinchCalibrationSample | null;
@@ -85,7 +85,7 @@ const boundedStep = (
 export function CalibrationPanel({
   settings,
   onSettingsChange,
-  pinchDistance,
+  pinchRatio,
   gestureState,
   cursor,
   currentPinchSample,
@@ -135,8 +135,8 @@ export function CalibrationPanel({
       <div id={contentId} className="calibration-content" hidden={!isExpanded}>
           <dl className="calibration-diagnostics">
             <div>
-              <dt>捏合距离</dt>
-              <dd>{pinchDistance === null ? "—" : pinchDistance.toFixed(3)}</dd>
+              <dt>画面捏合比例</dt>
+              <dd>{pinchRatio === null ? "—" : pinchRatio.toFixed(3)}</dd>
             </div>
             <div>
               <dt>手势状态</dt>

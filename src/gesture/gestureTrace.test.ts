@@ -18,6 +18,9 @@ const ADAPTIVE_KEYS = [
   "blockingReason", "enterVotes", "requiredVotes", "frameIntervalMs", "inferenceMs",
   "effectiveFps",
 ] as const;
+const VIEW_KEYS = [
+  "screenPinchGap", "imageAspectRatio", "worldPalmScale", "palmFacingScore",
+] as const;
 
 const frameAt = (t: number): GestureTraceFrame => ({
   t,
@@ -33,6 +36,10 @@ const frameAt = (t: number): GestureTraceFrame => ({
     openPalmScore: 0.1,
     scrollPoseScore: 0,
     palmScale: 0.3,
+    screenPinchGap: 0.03,
+    imageAspectRatio: 16 / 9,
+    worldPalmScale: 0.12,
+    palmFacingScore: 0.18,
     imageDepthGap: 0.04,
     worldDepthGap: 0.05,
     approachVelocity: 1.2,
@@ -56,7 +63,7 @@ const frameAt = (t: number): GestureTraceFrame => ({
 });
 
 describe("GestureTraceBuffer", () => {
-  it("stores adaptive diagnostics in version 3 and copies them defensively", () => {
+  it("stores view-aware diagnostics in version 4 and copies them defensively", () => {
     const buffer = new GestureTraceBuffer();
     const input = {
       ...frameAt(10),
@@ -71,7 +78,13 @@ describe("GestureTraceBuffer", () => {
     buffer.push(input);
     input.worldLandmarks[0]!.x = 99;
 
-    expect(buffer.snapshot()).toMatchObject({ version: 3 });
+    expect(buffer.snapshot()).toMatchObject({ version: 4 });
+    expect(buffer.snapshot().frames[0]!.features).toMatchObject({
+      screenPinchGap: 0.03,
+      imageAspectRatio: 16 / 9,
+      worldPalmScale: 0.12,
+      palmFacingScore: 0.18,
+    });
     expect(buffer.snapshot().frames[0]!.worldLandmarks?.[0]!.x).toBe(0);
   });
 
@@ -114,6 +127,21 @@ describe("GestureTraceBuffer", () => {
     expect(() => buffer.push(invalid)).toThrow("finite");
   });
 
+  it("rejects impossible view-aware diagnostics", () => {
+    const buffer = new GestureTraceBuffer();
+    const negativeGap = frameAt(10);
+    negativeGap.features!.screenPinchGap = -0.01;
+    expect(() => buffer.push(negativeGap)).toThrow("non-negative");
+
+    const invalidAspectRatio = frameAt(10);
+    invalidAspectRatio.features!.imageAspectRatio = 0;
+    expect(() => buffer.push(invalidAspectRatio)).toThrow("positive");
+
+    const invalidFacing = frameAt(10);
+    invalidFacing.features!.palmFacingScore = 1.01;
+    expect(() => buffer.push(invalidFacing)).toThrow("between 0 and 1");
+  });
+
   it("serializes and parses only the allow-listed trace schema", () => {
     const buffer = new GestureTraceBuffer();
     buffer.push(frameAt(16));
@@ -139,10 +167,11 @@ describe("GestureTraceBuffer", () => {
       ...legacyFeatures
     } = features!;
     ADAPTIVE_KEYS.forEach((key) => delete (legacyFeatures as Record<string, unknown>)[key]);
+    VIEW_KEYS.forEach((key) => delete (legacyFeatures as Record<string, unknown>)[key]);
     const legacyFrame = { ...legacyFields, features: legacyFeatures };
     const parsed = parseGestureTrace(JSON.stringify({ version: 1, frames: [legacyFrame] }));
 
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(4);
     expect(parsed.frames[0]).toMatchObject({
       worldLandmarks: null,
       features: {
@@ -156,17 +185,36 @@ describe("GestureTraceBuffer", () => {
     const currentFrame = frameAt(16);
     const legacyFeatures = { ...currentFrame.features } as Record<string, unknown>;
     ADAPTIVE_KEYS.forEach((key) => delete legacyFeatures[key]);
+    VIEW_KEYS.forEach((key) => delete legacyFeatures[key]);
     const parsed = parseGestureTrace(JSON.stringify({
       version: 2,
       frames: [{ ...currentFrame, features: legacyFeatures }],
     }));
 
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(4);
     expect(parsed.frames[0]!.features).toMatchObject({
       pinchProbability: null,
       worldQuality: 0,
       qualityReasons: [],
       blockingReason: null,
+    });
+  });
+
+  it("migrates version 3 with safe view-diagnostic defaults", () => {
+    const currentFrame = frameAt(16);
+    const legacyFeatures = { ...currentFrame.features } as Record<string, unknown>;
+    VIEW_KEYS.forEach((key) => delete legacyFeatures[key]);
+    const parsed = parseGestureTrace(JSON.stringify({
+      version: 3,
+      frames: [{ ...currentFrame, features: legacyFeatures }],
+    }));
+
+    expect(parsed.version).toBe(4);
+    expect(parsed.frames[0]!.features).toMatchObject({
+      screenPinchGap: null,
+      imageAspectRatio: 1,
+      worldPalmScale: null,
+      palmFacingScore: null,
     });
   });
 

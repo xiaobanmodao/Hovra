@@ -107,3 +107,28 @@ it("replays matched image and world landmarks from a version 2 trace", () => {
 
   expect(calls).toEqual([[21, 21, 16]]);
 });
+
+it("passes the recorded image aspect ratio to the processor", () => {
+  const trace: GestureTrace = {
+    version: 4,
+    frames: [{
+      t: 16,
+      landmarks: null,
+      worldLandmarks: null,
+      quality: 0,
+      features: null,
+      phase: "lost",
+      candidate: null,
+      confirmationProgress: 0,
+      lockedGesture: null,
+      events: [],
+    }],
+  };
+  const aspectRatios: number[] = [];
+
+  replayGestureTrace(trace, (_image, _world, _nowMs, imageAspectRatio) => {
+    aspectRatios.push(imageAspectRatio);
+  });
+
+  expect(aspectRatios).toEqual([1]);
+});

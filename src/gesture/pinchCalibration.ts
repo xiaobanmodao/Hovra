@@ -1,6 +1,6 @@
 import { DEFAULT_PINCH_BOUNDARIES, type PinchBoundaries } from "./config";
 
-export const PINCH_CALIBRATION_STORAGE_KEY = "gesture-control.pinch-calibration.v1";
+export const PINCH_CALIBRATION_STORAGE_KEY = "gesture-control.pinch-calibration.v2";
 export const PINCH_CALIBRATION_REQUIRED_GAP = 0.06;
 
 export type PinchCalibrationSample = {
@@ -16,7 +16,7 @@ export type CalibrationSamples = {
 };
 
 export type PinchCalibrationProfile = {
-  version: 1;
+  version: 2;
   createdAt: string;
   boundaries: PinchBoundaries;
   baselineNoise: number;
@@ -76,7 +76,7 @@ export function fitPinchCalibration(samples: CalibrationSamples): PinchCalibrati
   validateBoundarySeparation(boundaries);
 
   return {
-    version: 1,
+    version: 2,
     createdAt: new Date().toISOString(),
     boundaries,
     baselineNoise: quantile(samples.baselineNoise, 0.9),
@@ -94,7 +94,7 @@ export function parsePinchCalibration(value: string | null): PinchCalibrationPro
   if (!isRecord(parsed) || !hasExactKeys(parsed, ["version", "createdAt", "boundaries", "baselineNoise"])) {
     return null;
   }
-  if (parsed.version !== 1 || typeof parsed.createdAt !== "string" || Number.isNaN(Date.parse(parsed.createdAt))) {
+  if (parsed.version !== 2 || typeof parsed.createdAt !== "string" || Number.isNaN(Date.parse(parsed.createdAt))) {
     return null;
   }
   if (!isFiniteNonNegative(parsed.baselineNoise) || !isRecord(parsed.boundaries) || !hasExactKeys(
@@ -112,7 +112,7 @@ export function parsePinchCalibration(value: string | null): PinchCalibrationPro
     return null;
   }
   return {
-    version: 1,
+    version: 2,
     createdAt: parsed.createdAt,
     boundaries: { ...typedBoundaries },
     baselineNoise: parsed.baselineNoise,

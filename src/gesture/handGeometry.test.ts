@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Landmark } from "./types";
-import { buildHandGeometry } from "./handGeometry";
+import { buildHandGeometry, buildImageHandGeometry } from "./handGeometry";
 
 const baseHand = (): Landmark[] => [
   { x: 0, y: 0.6, z: 0 },
@@ -71,5 +71,51 @@ describe("buildHandGeometry", () => {
     invalid[8].x = Number.NaN;
     expect(buildHandGeometry(invalid)).toBeNull();
     expect(buildHandGeometry(Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 })))).toBeNull();
+  });
+
+  it("keeps full three-dimensional distance for world landmarks", () => {
+    const hand = baseHand();
+    hand[4] = { x: 0.1, y: 0.1, z: -0.35 };
+    hand[8] = { x: 0.1, y: 0.1, z: 0.35 };
+
+    expect(buildHandGeometry(hand)!.pinchRatios.left).toBeGreaterThan(0.7);
+  });
+});
+
+describe("buildImageHandGeometry", () => {
+  it("uses two-dimensional fingertip distance while preserving source depth", () => {
+    const hand = baseHand();
+    hand[4] = { x: 0.1, y: 0.1, z: -0.35 };
+    hand[8] = { x: 0.1, y: 0.1, z: 0.35 };
+
+    const geometry = buildImageHandGeometry(hand, 16 / 9)!;
+
+    expect(geometry.pinchRatios.left).toBeCloseTo(0, 8);
+    expect(geometry.landmarks[4].z).toBe(0);
+    expect(geometry.sourceLandmarks[4].z).toBe(-0.35);
+    expect(geometry.sourceLandmarks[8].z).toBe(0.35);
+  });
+
+  it("protects scale with palm length when projected palm width collapses", () => {
+    const normal = buildImageHandGeometry(baseHand(), 1)!;
+    const side = baseHand();
+    const palmCenterX = side[9].x;
+    for (const index of [5, 9, 13, 17]) {
+      side[index] = { ...side[index], x: palmCenterX + (side[index].x - palmCenterX) * 0.2 };
+    }
+
+    const sideGeometry = buildImageHandGeometry(side, 1)!;
+
+    expect(sideGeometry.scale).toBeCloseTo(normal.scale, 8);
+  });
+
+  it("keeps the original normalized points for cursor mapping", () => {
+    const hand = baseHand();
+    hand[8] = { x: 0.73, y: 0.21, z: -0.1 };
+
+    const geometry = buildImageHandGeometry(hand, 16 / 9)!;
+
+    expect(geometry.sourceLandmarks[8]).toEqual({ x: 0.73, y: 0.21, z: -0.1 });
+    expect(geometry.landmarks[8].x).toBeCloseTo(0.73 * 16 / 9);
   });
 });

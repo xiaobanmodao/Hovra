@@ -28,6 +28,10 @@ export type GestureTraceFeatures = {
   openPalmScore: number;
   scrollPoseScore: number;
   palmScale: number;
+  screenPinchGap: number | null;
+  imageAspectRatio: number;
+  worldPalmScale: number | null;
+  palmFacingScore: number | null;
   imageDepthGap: number | null;
   worldDepthGap: number | null;
   approachVelocity: number | null;
@@ -57,10 +61,13 @@ export type GestureTraceFrame = {
   events: TraceGestureEvent[];
 };
 
-export type GestureTraceV3 = {
-  version: 3;
+export type GestureTraceV4 = {
+  version: 4;
   frames: GestureTraceFrame[];
 };
+
+type ViewFeatureKey =
+  | "screenPinchGap" | "imageAspectRatio" | "worldPalmScale" | "palmFacingScore";
 
 type AdaptiveFeatureKey =
   | "imageDepthGap" | "worldDepthGap" | "approachVelocity" | "contactPoseScore"
@@ -71,7 +78,14 @@ type AdaptiveFeatureKey =
 export type LegacyGestureTraceV2 = {
   version: 2;
   frames: Array<Omit<GestureTraceFrame, "features"> & {
-    features: Omit<GestureTraceFeatures, AdaptiveFeatureKey> | null;
+    features: Omit<GestureTraceFeatures, AdaptiveFeatureKey | ViewFeatureKey> | null;
+  }>;
+};
+
+export type LegacyGestureTraceV3 = {
+  version: 3;
+  frames: Array<Omit<GestureTraceFrame, "features"> & {
+    features: Omit<GestureTraceFeatures, ViewFeatureKey> | null;
   }>;
 };
 
@@ -89,7 +103,7 @@ export type LegacyGestureTrace = {
   frames: LegacyGestureTraceFrame[];
 };
 
-export type GestureTrace = GestureTraceV3 | LegacyGestureTraceV2 | LegacyGestureTrace;
+export type GestureTrace = GestureTraceV4 | LegacyGestureTraceV3 | LegacyGestureTraceV2 | LegacyGestureTrace;
 
 const MAX_TRACE_BYTES = 2 * 1024 * 1024;
 const MAX_TRACE_FRAMES = 600;
@@ -141,6 +155,10 @@ const ADAPTIVE_FEATURE_KEYS = [
   "effectiveFps",
 ] as const;
 const V3_FEATURE_KEYS = [...FEATURE_KEYS, ...ADAPTIVE_FEATURE_KEYS] as const;
+const VIEW_FEATURE_KEYS = [
+  "screenPinchGap", "imageAspectRatio", "worldPalmScale", "palmFacingScore",
+] as const;
+const V4_FEATURE_KEYS = [...V3_FEATURE_KEYS, ...VIEW_FEATURE_KEYS] as const;
 const PHASES = new Set<TraceGesturePhase>([
   "neutral", "candidate", "active", "dragging", "releasing", "cooldown", "lost",
 ]);
@@ -168,7 +186,7 @@ export class GestureTraceBuffer {
   }
 
   push(frame: GestureTraceFrame): void {
-    const copy = validateAndCopyFrame(frame, 3);
+    const copy = validateAndCopyFrame(frame, 4);
     const newest = this.frames.at(-1);
     if (newest && copy.t < newest.t) {
       throw new TypeError("Gesture trace timestamps must be monotonic");
@@ -183,10 +201,10 @@ export class GestureTraceBuffer {
     }
   }
 
-  snapshot(): GestureTraceV3 {
+  snapshot(): GestureTraceV4 {
     return {
-      version: 3,
-      frames: this.frames.map((frame) => validateAndCopyFrame(frame, 3)),
+      version: 4,
+      frames: this.frames.map((frame) => validateAndCopyFrame(frame, 4)),
     };
   }
 
@@ -195,7 +213,7 @@ export class GestureTraceBuffer {
   }
 }
 
-export function parseGestureTrace(json: string): GestureTraceV3 {
+export function parseGestureTrace(json: string): GestureTraceV4 {
   if (typeof json !== "string" || new TextEncoder().encode(json).byteLength > MAX_TRACE_BYTES) {
     throw new TypeError("Gesture trace must not exceed 2 MiB");
   }
@@ -210,8 +228,8 @@ export function parseGestureTrace(json: string): GestureTraceV3 {
     throw new TypeError("Gesture trace must be an object");
   }
   assertOnlyKeys(value, ["version", "frames"]);
-  if ((value.version !== 1 && value.version !== 2 && value.version !== 3) || !Array.isArray(value.frames)) {
-    throw new TypeError("Gesture trace requires version 1, 2, or 3 and frames");
+  if ((value.version !== 1 && value.version !== 2 && value.version !== 3 && value.version !== 4) || !Array.isArray(value.frames)) {
+    throw new TypeError("Gesture trace requires version 1, 2, 3, or 4 and frames");
   }
   if (value.frames.length > MAX_TRACE_FRAMES) {
     throw new TypeError("Gesture trace must contain at most 600 frames");
@@ -224,10 +242,10 @@ export function parseGestureTrace(json: string): GestureTraceV3 {
       throw new TypeError("Gesture trace timestamps must be monotonic");
     }
   }
-  return { version: 3, frames };
+  return { version: 4, frames };
 }
 
-function validateAndCopyFrame(value: unknown, version: 1 | 2 | 3): GestureTraceFrame {
+function validateAndCopyFrame(value: unknown, version: 1 | 2 | 3 | 4): GestureTraceFrame {
   if (!isRecord(value)) {
     throw new TypeError("Gesture trace frame must be an object");
   }
@@ -281,7 +299,7 @@ function validateLandmarks(value: unknown): Landmark[] | null {
   });
 }
 
-function validateFeatures(value: unknown, version: 1 | 2 | 3): GestureTraceFeatures | null {
+function validateFeatures(value: unknown, version: 1 | 2 | 3 | 4): GestureTraceFeatures | null {
   if (value === null) {
     return null;
   }
@@ -291,7 +309,12 @@ function validateFeatures(value: unknown, version: 1 | 2 | 3): GestureTraceFeatu
   const numericKeys = version === 1
     ? LEGACY_FEATURE_KEYS
     : FEATURE_KEYS.filter((key) => key !== "worldLeftPinchRatio" && key !== "pinchDepthReliable");
-  assertOnlyKeys(value, version === 1 ? LEGACY_FEATURE_KEYS : version === 2 ? FEATURE_KEYS : V3_FEATURE_KEYS);
+  assertOnlyKeys(
+    value,
+    version === 1
+      ? LEGACY_FEATURE_KEYS
+      : version === 2 ? FEATURE_KEYS : version === 3 ? V3_FEATURE_KEYS : V4_FEATURE_KEYS,
+  );
   for (const key of numericKeys) {
     assertFinite(value[key]);
   }
@@ -301,7 +324,7 @@ function validateFeatures(value: unknown, version: 1 | 2 | 3): GestureTraceFeatu
       throw new TypeError("Gesture trace pinch depth reliability must be boolean");
     }
   }
-  if (version === 3) {
+  if (version >= 3) {
     for (const key of [
       "imageDepthGap", "worldDepthGap", "approachVelocity", "contactPoseScore",
       "pinchProbability", "frameIntervalMs", "inferenceMs", "effectiveFps",
@@ -330,6 +353,15 @@ function validateFeatures(value: unknown, version: 1 | 2 | 3): GestureTraceFeatu
       throw new TypeError("Gesture trace required votes must be positive");
     }
   }
+  if (version === 4) {
+    assertNullableNonNegative(value.screenPinchGap);
+    assertNullableNonNegative(value.worldPalmScale);
+    assertNullableUnitInterval(value.palmFacingScore);
+    assertFinite(value.imageAspectRatio);
+    if ((value.imageAspectRatio as number) <= 0) {
+      throw new TypeError("Gesture trace image aspect ratio must be positive");
+    }
+  }
   return {
     leftPinchRatio: value.leftPinchRatio as number,
     worldLeftPinchRatio: version === 1 ? null : value.worldLeftPinchRatio as number | null,
@@ -339,20 +371,24 @@ function validateFeatures(value: unknown, version: 1 | 2 | 3): GestureTraceFeatu
     openPalmScore: value.openPalmScore as number,
     scrollPoseScore: value.scrollPoseScore as number,
     palmScale: value.palmScale as number,
-    imageDepthGap: version === 3 ? value.imageDepthGap as number | null : null,
-    worldDepthGap: version === 3 ? value.worldDepthGap as number | null : null,
-    approachVelocity: version === 3 ? value.approachVelocity as number | null : null,
-    contactPoseScore: version === 3 ? value.contactPoseScore as number | null : null,
-    worldQuality: version === 3 ? value.worldQuality as number : 0,
-    qualityReasons: version === 3 ? [...value.qualityReasons as PinchQualityReason[]] : [],
-    pinchProbability: version === 3 ? value.pinchProbability as number | null : null,
-    safetyGatePassed: version === 3 ? value.safetyGatePassed as boolean : false,
-    blockingReason: version === 3 ? value.blockingReason as PinchBlockingReason | null : null,
-    enterVotes: version === 3 ? value.enterVotes as number : 0,
-    requiredVotes: version === 3 ? value.requiredVotes as number : 2,
-    frameIntervalMs: version === 3 ? value.frameIntervalMs as number | null : null,
-    inferenceMs: version === 3 ? value.inferenceMs as number | null : null,
-    effectiveFps: version === 3 ? value.effectiveFps as number | null : null,
+    screenPinchGap: version === 4 ? value.screenPinchGap as number | null : null,
+    imageAspectRatio: version === 4 ? value.imageAspectRatio as number : 1,
+    worldPalmScale: version === 4 ? value.worldPalmScale as number | null : null,
+    palmFacingScore: version === 4 ? value.palmFacingScore as number | null : null,
+    imageDepthGap: version >= 3 ? value.imageDepthGap as number | null : null,
+    worldDepthGap: version >= 3 ? value.worldDepthGap as number | null : null,
+    approachVelocity: version >= 3 ? value.approachVelocity as number | null : null,
+    contactPoseScore: version >= 3 ? value.contactPoseScore as number | null : null,
+    worldQuality: version >= 3 ? value.worldQuality as number : 0,
+    qualityReasons: version >= 3 ? [...value.qualityReasons as PinchQualityReason[]] : [],
+    pinchProbability: version >= 3 ? value.pinchProbability as number | null : null,
+    safetyGatePassed: version >= 3 ? value.safetyGatePassed as boolean : false,
+    blockingReason: version >= 3 ? value.blockingReason as PinchBlockingReason | null : null,
+    enterVotes: version >= 3 ? value.enterVotes as number : 0,
+    requiredVotes: version >= 3 ? value.requiredVotes as number : 2,
+    frameIntervalMs: version >= 3 ? value.frameIntervalMs as number | null : null,
+    inferenceMs: version >= 3 ? value.inferenceMs as number | null : null,
+    effectiveFps: version >= 3 ? value.effectiveFps as number | null : null,
   };
 }
 
@@ -374,6 +410,19 @@ function assertFinite(value: unknown): asserts value is number {
 
 function assertNullableFinite(value: unknown): void {
   if (value !== null) assertFinite(value);
+}
+
+function assertNullableNonNegative(value: unknown): void {
+  if (value === null) return;
+  assertFinite(value);
+  if (value < 0) {
+    throw new TypeError("Gesture trace distance and scale values must be non-negative");
+  }
+}
+
+function assertNullableUnitInterval(value: unknown): void {
+  if (value === null) return;
+  assertUnitInterval(value);
 }
 
 function assertNonNegativeInteger(value: unknown): void {

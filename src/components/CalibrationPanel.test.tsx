@@ -16,7 +16,7 @@ import { CalibrationPanel } from "./CalibrationPanel";
 type HarnessProps = {
   initialSettings?: GestureSettings;
   onSettingsChange?: (next: GestureSettings) => void;
-  pinchDistance?: number | null;
+  pinchRatio?: number | null;
   gestureState?: GestureState;
   cursor?: Point | null;
   currentPinchSample?: PinchCalibrationSample | null;
@@ -28,7 +28,7 @@ type HarnessProps = {
 function CalibrationPanelHarness({
   initialSettings = { ...DEFAULT_GESTURE_SETTINGS },
   onSettingsChange = () => undefined,
-  pinchDistance = 0.041,
+  pinchRatio = 0.041,
   gestureState = "tracking",
   cursor = { x: 320, y: 240 },
   currentPinchSample = { imageRatio: 0.24, worldRatio: 0.24, depthGap: 0.08 },
@@ -47,7 +47,7 @@ function CalibrationPanelHarness({
     <CalibrationPanel
       settings={settings}
       onSettingsChange={handleSettingsChange}
-      pinchDistance={pinchDistance}
+      pinchRatio={pinchRatio}
       gestureState={gestureState}
       cursor={cursor}
       currentPinchSample={currentPinchSample}
@@ -62,7 +62,7 @@ describe("CalibrationPanel", () => {
   it("displays live diagnostics and the default calibration values", () => {
     render(<CalibrationPanelHarness />);
 
-    expect(screen.getByText("捏合距离")).toBeInTheDocument();
+    expect(screen.getByText("画面捏合比例")).toBeInTheDocument();
     expect(screen.getByText("0.041")).toBeInTheDocument();
     expect(screen.getByText("跟踪中")).toBeInTheDocument();
     expect(screen.getByText("320, 240")).toBeInTheDocument();
@@ -72,9 +72,9 @@ describe("CalibrationPanel", () => {
   });
 
   it("shows an em dash when pinch distance and cursor diagnostics are unavailable", () => {
-    render(<CalibrationPanelHarness pinchDistance={null} cursor={null} />);
+    render(<CalibrationPanelHarness pinchRatio={null} cursor={null} />);
 
-    expect(screen.getByText("捏合距离").nextElementSibling).toHaveTextContent("—");
+    expect(screen.getByText("画面捏合比例").nextElementSibling).toHaveTextContent("—");
     expect(screen.getByText("光标").nextElementSibling).toHaveTextContent("—");
   });
 
@@ -177,7 +177,7 @@ describe("CalibrationPanel", () => {
     const collapsedContent = document.getElementById(contentId as string);
     expect(collapsedContent).toBeInTheDocument();
     expect(collapsedContent).not.toBeVisible();
-    expect(screen.getByText("捏合距离")).not.toBeVisible();
+    expect(screen.getByText("画面捏合比例")).not.toBeVisible();
   });
 
   it("opens personal click calibration and can clear an active profile", () => {

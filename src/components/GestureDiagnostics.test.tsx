@@ -21,6 +21,10 @@ const output: GestureOutput = {
     timestampMs: 120,
     quality: 1,
     palmScale: 0.234,
+    screenPinchGap: 0.019,
+    imageAspectRatio: 16 / 9,
+    worldPalmScale: 0.112,
+    palmFacingScore: 0.18,
     leftPinchRatio: 0.21,
     worldLeftPinchRatio: 0.22,
     pinchDepthReliable: true,
@@ -48,6 +52,14 @@ describe("GestureDiagnostics", () => {
     expect(screen.getByText("左键")).toBeInTheDocument();
     expect(screen.getByText("3/4")).toBeInTheDocument();
     expect(screen.getByText("0.234")).toBeInTheDocument();
+    expect(screen.getByText("二维指尖间隙")).toBeInTheDocument();
+    expect(screen.getByText("0.019")).toBeInTheDocument();
+    expect(screen.getByText("画面宽高比")).toBeInTheDocument();
+    expect(screen.getByText("1.778")).toBeInTheDocument();
+    expect(screen.getByText("世界手掌尺度")).toBeInTheDocument();
+    expect(screen.getByText("0.112")).toBeInTheDocument();
+    expect(screen.getByText("手掌朝向")).toBeInTheDocument();
+    expect(screen.getByText("侧向（0.180）")).toBeInTheDocument();
     expect(screen.getByText("0.210 / 0.610 / 0.720")).toBeInTheDocument();
     expect(screen.getByText("世界捏合比例")).toBeInTheDocument();
     expect(screen.getByText("0.220")).toBeInTheDocument();

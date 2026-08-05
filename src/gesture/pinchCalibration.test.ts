@@ -29,7 +29,7 @@ describe("pinch calibration", () => {
 
     const profile = fitPinchCalibration({ positives, negatives, baselineNoise: [0.01, 0.02, 0.03] });
 
-    expect(profile.version).toBe(1);
+    expect(profile.version).toBe(2);
     expect(profile.boundaries.imageContact).toBeGreaterThan(0.27);
     expect(profile.boundaries.imageContact).toBeLessThan(profile.boundaries.imageSeparate - 0.06);
     expect(profile.boundaries.worldContact).toBeLessThan(profile.boundaries.worldSeparate - 0.06);
@@ -95,7 +95,7 @@ describe("pinch calibration", () => {
 
   it("strictly parses a stored profile and ignores malformed local data", () => {
     const valid = {
-      version: 1,
+      version: 2,
       createdAt: "2026-08-04T12:00:00.000Z",
       boundaries: {
         imageContact: 0.3,
@@ -109,6 +109,7 @@ describe("pinch calibration", () => {
     };
 
     expect(parsePinchCalibration(JSON.stringify(valid))).toEqual(valid);
+    expect(parsePinchCalibration(JSON.stringify({ ...valid, version: 1 }))).toBeNull();
     expect(parsePinchCalibration(null)).toBeNull();
     expect(parsePinchCalibration("not-json")).toBeNull();
     expect(parsePinchCalibration(JSON.stringify({ ...valid, extra: true }))).toBeNull();
@@ -116,6 +117,6 @@ describe("pinch calibration", () => {
       ...valid,
       boundaries: { ...valid.boundaries, imageSeparate: 0.2 },
     }))).toBeNull();
-    expect(PINCH_CALIBRATION_STORAGE_KEY).toBe("gesture-control.pinch-calibration.v1");
+    expect(PINCH_CALIBRATION_STORAGE_KEY).toBe("gesture-control.pinch-calibration.v2");
   });
 });

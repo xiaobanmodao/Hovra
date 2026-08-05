@@ -16,6 +16,12 @@ type GestureDiagnosticsProps = {
 const numberOrDash = (value: number | null, precision = 3): string =>
   value === null ? "—" : value.toFixed(precision);
 
+const palmFacingLabel = (score: number | null): string => {
+  if (score === null) return "—";
+  const label = score >= 0.72 ? "正面" : score >= 0.38 ? "斜向" : "侧向";
+  return `${label}（${score.toFixed(3)}）`;
+};
+
 export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsProps) {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const diagnostics = output.diagnostics;
@@ -35,7 +41,7 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
     <section className="recognition-diagnostics" aria-labelledby="recognition-diagnostics-title">
       <div className="recognition-diagnostics-heading">
         <div>
-          <p className="eyebrow">识别引擎 V3</p>
+          <p className="eyebrow">识别引擎 V4</p>
           <h2 id="recognition-diagnostics-title">手势诊断</h2>
         </div>
         {onSaveTrace && (
@@ -50,6 +56,10 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
         <div><dt>锁定动作</dt><dd>{gestureKindLabel(output.lockedGesture)}</dd></div>
         <div><dt>确认进度</dt><dd>{progressQuarter}/4</dd></div>
         <div><dt>手掌尺度</dt><dd>{numberOrDash(diagnostics.palmScale)}</dd></div>
+        <div><dt>二维指尖间隙</dt><dd>{numberOrDash(diagnostics.screenPinchGap)}</dd></div>
+        <div><dt>画面宽高比</dt><dd>{numberOrDash(diagnostics.imageAspectRatio)}</dd></div>
+        <div><dt>世界手掌尺度</dt><dd>{numberOrDash(diagnostics.worldPalmScale)}</dd></div>
+        <div><dt>手掌朝向</dt><dd>{palmFacingLabel(diagnostics.palmFacingScore)}</dd></div>
         <div>
           <dt>捏合比例（左 / 右 / 双）</dt>
           <dd>{[diagnostics.leftPinchRatio, diagnostics.rightPinchRatio, diagnostics.doublePinchRatio]

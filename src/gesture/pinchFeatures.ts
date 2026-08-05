@@ -74,6 +74,12 @@ export class PinchFeatureExtractor {
 }
 
 function fingertipDepthGap(geometry: HandGeometry): number {
+  if (geometry.space === "image") {
+    const sourceGap = Math.abs(
+      geometry.sourceLandmarks[THUMB_TIP]!.z - geometry.sourceLandmarks[INDEX_FINGER_TIP]!.z,
+    );
+    return sourceGap * geometry.imageAspectRatio / geometry.scale;
+  }
   return Math.abs(
     geometry.localLandmarks[THUMB_TIP]!.z - geometry.localLandmarks[INDEX_FINGER_TIP]!.z,
   );

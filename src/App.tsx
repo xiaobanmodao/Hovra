@@ -16,7 +16,6 @@ import {
   type PinchCalibrationSample,
 } from "./gesture/pinchCalibration";
 import { gestureStateLabel } from "./i18n/zh-CN";
-import { thumbIndexDistance } from "./gesture/landmarkMetrics";
 import {
   type GestureOutput,
   type GestureSettings,
@@ -41,6 +40,10 @@ const INITIAL_OUTPUT: GestureOutput = {
     timestampMs: 0,
     quality: 0,
     palmScale: null,
+    screenPinchGap: null,
+    imageAspectRatio: 1,
+    worldPalmScale: null,
+    palmFacingScore: null,
     leftPinchRatio: null,
     worldLeftPinchRatio: null,
     pinchDepthReliable: false,
@@ -109,7 +112,6 @@ function App() {
   const [cursor, setCursor] = useState<Point | null>(null);
   const [systemCursor, setSystemCursor] = useState<Point | null>(null);
   const [systemControlEnabled, setSystemControlEnabled] = useState(false);
-  const pinchDistance = useMemo(() => thumbIndexDistance(landmarks), [landmarks]);
   const currentPinchSample = useMemo<PinchCalibrationSample | null>(() => {
     const imageRatio = output.diagnostics.leftPinchRatio;
     const worldRatio = output.diagnostics.worldLeftPinchRatio;
@@ -345,7 +347,16 @@ function App() {
           const inferenceMs = Math.max(0, performance.now() - inferenceStartedAt);
           const nextLandmarks = detectedHand?.landmarks ?? null;
           const nextWorldLandmarks = detectedHand?.worldLandmarks ?? null;
-          const nextOutput = engine.update(nextLandmarks, nowMs, nextWorldLandmarks, inferenceMs);
+          const imageAspectRatio = video.videoHeight > 0
+            ? video.videoWidth / video.videoHeight
+            : 1;
+          const nextOutput = engine.update(
+            nextLandmarks,
+            nowMs,
+            nextWorldLandmarks,
+            inferenceMs,
+            imageAspectRatio,
+          );
 
           setLandmarks(nextLandmarks);
           setOutput(nextOutput);
@@ -427,7 +438,7 @@ function App() {
       <CalibrationPanel
         settings={settings}
         onSettingsChange={handleSettingsChange}
-        pinchDistance={pinchDistance}
+        pinchRatio={output.diagnostics.leftPinchRatio}
         gestureState={output.state}
         cursor={cursor}
         currentPinchSample={currentPinchSample}

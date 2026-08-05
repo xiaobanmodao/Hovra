@@ -66,6 +66,25 @@ describe("GestureEngine 简化模式", () => {
     expect(engine.update(makeGestureHand("tracking"), 48, worldSeparated).click).toBe(false);
   });
 
+  it("separates screen overlap from image depth and keeps cursor coordinates unwarped", () => {
+    const engine = new GestureEngine();
+    const image = makeGestureHand("left");
+    image[4] = { ...image[4]!, x: 0.72, y: 0.24, z: -0.35 };
+    image[8] = { ...image[8]!, x: 0.72, y: 0.24, z: 0.35 };
+    const world = makeGestureHand("left");
+
+    const output = engine.update(image, 0, world, 4, 16 / 9);
+
+    expect(output.diagnostics.leftPinchRatio).toBeCloseTo(0, 8);
+    expect(output.diagnostics.screenPinchGap).toBeCloseTo(0, 8);
+    expect(output.diagnostics.pinchImageDepthGap).toBeGreaterThan(0.7);
+    expect(output.diagnostics.imageAspectRatio).toBeCloseTo(16 / 9);
+    expect(output.diagnostics.worldPalmScale).toBeGreaterThan(0);
+    expect(output.diagnostics.palmFacingScore).toBeCloseTo(1);
+    expect(output.cursor?.x).toBeCloseTo(0.72);
+    expect(output.cursor?.y).toBeCloseTo(0.24);
+  });
+
   it("keeps a real pinch candidate through one noisy world-distance frame", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");

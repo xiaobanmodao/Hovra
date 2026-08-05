@@ -34,7 +34,7 @@ beforeEach(() => {
 
 it("loads and clears a valid local pinch calibration profile", () => {
   localStorage.setItem(PINCH_CALIBRATION_STORAGE_KEY, JSON.stringify({
-    version: 1,
+    version: 2,
     createdAt: "2026-08-04T12:00:00.000Z",
     boundaries: {
       imageContact: 0.3,

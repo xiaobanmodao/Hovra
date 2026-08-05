@@ -7,6 +7,10 @@ const features = (overrides: Partial<GestureFeatures> = {}): GestureFeatures => 
   const leftPinchRatio = overrides.leftPinchRatio ?? 0.8;
   return {
     palmScale: 0.3,
+    screenPinchGap: 0.2,
+    imageAspectRatio: 1,
+    worldPalmScale: 0.3,
+    palmFacingScore: 1,
     leftPinchRatio,
     worldLeftPinchRatio: overrides.worldLeftPinchRatio ?? leftPinchRatio,
     pinchDepthReliable: overrides.pinchDepthReliable ?? true,

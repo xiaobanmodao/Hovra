@@ -7,6 +7,7 @@ export function replayGestureTrace<T>(
     landmarks: Landmark[] | null,
     worldLandmarks: Landmark[] | null,
     nowMs: number,
+    imageAspectRatio: number,
   ) => T,
 ): T[] {
   const validated = parseGestureTrace(JSON.stringify(trace));
@@ -14,5 +15,6 @@ export function replayGestureTrace<T>(
     frame.landmarks,
     frame.worldLandmarks,
     frame.t,
+    frame.features?.imageAspectRatio ?? 1,
   ));
 }

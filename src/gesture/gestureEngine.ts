@@ -7,8 +7,8 @@ import {
 import { GestureClassifier } from "./gestureClassifier";
 import { extractGestureFeatures, type GestureFeatures } from "./gestureFeatures";
 import { GestureStabilizer, type GestureStabilizerOutput } from "./gestureStabilizer";
-import { GestureTraceBuffer, type GestureTraceV3, type TraceGestureEvent } from "./gestureTrace";
-import { buildHandGeometry, type HandGeometry } from "./handGeometry";
+import { GestureTraceBuffer, type GestureTraceV4, type TraceGestureEvent } from "./gestureTrace";
+import { buildHandGeometry, buildImageHandGeometry, type HandGeometry } from "./handGeometry";
 import { PinchFeatureExtractor, type PinchFrameFeatures } from "./pinchFeatures";
 import {
   PinchProbabilityEstimator,
@@ -67,10 +67,11 @@ export class GestureEngine {
     nowMs: number,
     worldLandmarks: Landmark[] | null = null,
     inferenceMs: number | null = null,
+    imageAspectRatio = 1,
   ): GestureOutput {
     const filtered = this.filter.update(landmarks, nowMs);
-    const cursorGeometry = buildHandGeometry(filtered);
-    const actionGeometry = buildHandGeometry(landmarks);
+    const cursorGeometry = buildImageHandGeometry(filtered, imageAspectRatio);
+    const actionGeometry = buildImageHandGeometry(landmarks, imageAspectRatio);
     const worldGeometry = buildHandGeometry(worldLandmarks);
     const features = actionGeometry
       ? extractGestureFeatures(actionGeometry, worldGeometry)
@@ -84,7 +85,7 @@ export class GestureEngine {
       : this.updateMissingPinch(nowMs);
 
     if (cursorGeometry) {
-      this.lastCursor = cursorGeometry.landmarks[INDEX_FINGER_TIP] ?? this.lastCursor;
+      this.lastCursor = cursorGeometry.sourceLandmarks[INDEX_FINGER_TIP] ?? this.lastCursor;
     }
 
     const openPalmLocked = stabilized.lockedGesture === "open-palm";
@@ -103,7 +104,7 @@ export class GestureEngine {
     return output;
   }
 
-  getTrace(): GestureTraceV3 {
+  getTrace(): GestureTraceV4 {
     return this.trace.snapshot();
   }
 
@@ -218,6 +219,10 @@ export class GestureEngine {
         openPalmScore: features.openPalmScore,
         scrollPoseScore: features.scrollPoseScore,
         palmScale: features.palmScale,
+        screenPinchGap: features.screenPinchGap,
+        imageAspectRatio: features.imageAspectRatio,
+        worldPalmScale: features.worldPalmScale,
+        palmFacingScore: features.palmFacingScore,
         imageDepthGap: pinch.features?.imageDepthGap ?? null,
         worldDepthGap: pinch.features?.worldDepthGap ?? null,
         approachVelocity: pinch.features?.approachVelocity ?? null,
@@ -252,6 +257,10 @@ function diagnosticsFor(
     timestampMs,
     quality: features ? 1 : 0,
     palmScale: features?.palmScale ?? null,
+    screenPinchGap: features?.screenPinchGap ?? null,
+    imageAspectRatio: features?.imageAspectRatio ?? 1,
+    worldPalmScale: features?.worldPalmScale ?? null,
+    palmFacingScore: features?.palmFacingScore ?? null,
     leftPinchRatio: features?.leftPinchRatio ?? null,
     worldLeftPinchRatio: features?.worldLeftPinchRatio ?? null,
     pinchDepthReliable: features?.pinchDepthReliable ?? false,

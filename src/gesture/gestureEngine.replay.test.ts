@@ -11,22 +11,28 @@ describe("GestureEngine replay", () => {
     const original = new GestureEngine();
     const left = makeGestureHand("left");
     const tracking = makeGestureHand("tracking");
-    original.update(left, 0, left);
-    original.update(left, 16, left);
-    original.update(left, 32, left);
-    original.update(left, 48, left);
-    original.update(tracking, 64, tracking);
-    original.update(tracking, 80, tracking);
+    original.update(left, 0, left, null, 16 / 9);
+    original.update(left, 16, left, null, 16 / 9);
+    original.update(left, 32, left, null, 16 / 9);
+    original.update(left, 48, left, null, 16 / 9);
+    original.update(tracking, 64, tracking, null, 16 / 9);
+    original.update(tracking, 80, tracking, null, 16 / 9);
     const trace = original.getTrace();
+    expect(trace.frames.every((frame) => frame.features?.imageAspectRatio === 16 / 9)).toBe(true);
 
     const replay = new GestureEngine();
+    const replayedAspectRatios: number[] = [];
     const outputs = replayGestureTrace(
       trace,
-      (landmarks, worldLandmarks, nowMs) => replay.update(landmarks, nowMs, worldLandmarks),
+      (landmarks, worldLandmarks, nowMs, imageAspectRatio) => {
+        replayedAspectRatios.push(imageAspectRatio);
+        return replay.update(landmarks, nowMs, worldLandmarks, null, imageAspectRatio);
+      },
     );
     const events = outputs.filter((output) => output.click);
 
     expect(events).toHaveLength(1);
+    expect(replayedAspectRatios.every((ratio) => ratio === 16 / 9)).toBe(true);
     expect(outputs.some((output) => output.rightClick || output.doubleClick || output.scrollY !== 0)).toBe(false);
   });
 });

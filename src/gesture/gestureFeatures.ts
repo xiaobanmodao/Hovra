@@ -16,6 +16,7 @@ import {
   RING_FINGER_MCP,
   RING_FINGER_PIP,
   RING_FINGER_TIP,
+  THUMB_TIP,
   WRIST,
   type Landmark,
 } from "./types";
@@ -32,7 +33,11 @@ export type FingerExtension = {
 
 export type GestureFeatures = {
   leftPinchRatio: number;
+  screenPinchGap: number;
+  imageAspectRatio: number;
   worldLeftPinchRatio: number | null;
+  worldPalmScale: number | null;
+  palmFacingScore: number | null;
   pinchDepthReliable: boolean;
   rightPinchRatio: number;
   doublePinchRatio: number;
@@ -74,7 +79,14 @@ export function extractGestureFeatures(
 
   return {
     leftPinchRatio: geometry.pinchRatios.left,
+    screenPinchGap: landmarkDistance(
+      geometry.landmarks[THUMB_TIP],
+      geometry.landmarks[INDEX_FINGER_TIP],
+    ),
+    imageAspectRatio: geometry.imageAspectRatio,
     worldLeftPinchRatio: worldGeometry?.pinchRatios.left ?? null,
+    worldPalmScale: worldGeometry?.scale ?? null,
+    palmFacingScore: worldGeometry ? Math.abs(worldGeometry.zAxis.z) : null,
     pinchDepthReliable: worldGeometry !== null,
     rightPinchRatio: geometry.pinchRatios.right,
     doublePinchRatio: geometry.pinchRatios.double,

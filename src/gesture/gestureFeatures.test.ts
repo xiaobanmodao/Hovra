@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Landmark } from "./types";
-import { buildHandGeometry } from "./handGeometry";
+import { buildHandGeometry, buildImageHandGeometry } from "./handGeometry";
 import { extractGestureFeatures } from "./gestureFeatures";
 import { makeGestureHand } from "./fixtures/stable-gesture-sequences";
 
@@ -82,5 +82,17 @@ describe("extractGestureFeatures", () => {
 
     expect(features.pinchDepthReliable).toBe(false);
     expect(features.worldLeftPinchRatio).toBeNull();
+  });
+
+  it("reports screen, scale, aspect-ratio, and palm-facing diagnostics", () => {
+    const imageGeometry = buildImageHandGeometry(makeGestureHand("left"), 16 / 9)!;
+    const worldGeometry = buildHandGeometry(makeGestureHand("left"))!;
+
+    const features = extractGestureFeatures(imageGeometry, worldGeometry);
+
+    expect(features.screenPinchGap).toBeGreaterThanOrEqual(0);
+    expect(features.imageAspectRatio).toBeCloseTo(16 / 9);
+    expect(features.worldPalmScale).toBe(worldGeometry.scale);
+    expect(features.palmFacingScore).toBeCloseTo(1);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildHandGeometry } from "./handGeometry";
+import { buildHandGeometry, buildImageHandGeometry } from "./handGeometry";
 import { makeGestureHand } from "./fixtures/stable-gesture-sequences";
 import { PinchFeatureExtractor } from "./pinchFeatures";
 
@@ -35,6 +35,18 @@ describe("PinchFeatureExtractor", () => {
     expect(features.imageRatio).toBeLessThan(0.1);
     expect(features.worldRatio).toBeGreaterThan(1);
     expect(features.worldDepthGap).toBeGreaterThan(1);
+  });
+
+  it("keeps source image depth as a separate feature from screen overlap", () => {
+    const extractor = new PinchFeatureExtractor();
+    const hand = makeGestureHand("left");
+    hand[4] = { ...hand[4]!, x: 0.4, y: 0.3, z: -0.35 };
+    hand[8] = { ...hand[8]!, x: 0.4, y: 0.3, z: 0.35 };
+
+    const features = extractor.update(buildImageHandGeometry(hand, 16 / 9)!, null, 16);
+
+    expect(features.imageRatio).toBeCloseTo(0, 8);
+    expect(features.imageDepthGap).toBeGreaterThan(0.7);
   });
 
   it("reports positive approach velocity only for fresh decreasing distances", () => {

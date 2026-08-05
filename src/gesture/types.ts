@@ -50,6 +50,10 @@ export type GestureDiagnosticsSnapshot = {
   timestampMs: number;
   quality: number;
   palmScale: number | null;
+  screenPinchGap: number | null;
+  imageAspectRatio: number;
+  worldPalmScale: number | null;
+  palmFacingScore: number | null;
   leftPinchRatio: number | null;
   worldLeftPinchRatio: number | null;
   pinchDepthReliable: boolean;
