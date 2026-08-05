@@ -54,7 +54,7 @@ const pinchQualityReasons: Record<PinchQualityReason, string> = {
 const pinchBlockingReasons: Record<PinchBlockingReason, string> = {
   none: "无",
   image: "画面指尖距离过大",
-  depth: "空间深度证据不一致",
+  depth: "指尖在画面中重合，但纵深仍分离",
   pose: "手指姿态不像真实接触",
   approach: "尚未观察到靠近过程",
   vision: "原生手部模型判定指尖尚未接触",

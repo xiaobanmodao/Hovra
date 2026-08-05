@@ -5,7 +5,6 @@ import type { GestureDesktopApi } from "./electron.d";
 import { makeGestureHand } from "./gesture/fixtures/stable-gesture-sequences";
 import type { Landmark } from "./gesture/types";
 import type { DetectedHand } from "./vision/handLandmarker";
-import { PINCH_CALIBRATION_STORAGE_KEY } from "./gesture/pinchCalibration";
 
 const vision = vi.hoisted(() => ({
   close: vi.fn(),
@@ -32,26 +31,11 @@ beforeEach(() => {
   } as unknown as CanvasRenderingContext2D);
 });
 
-it("loads and clears a valid local pinch calibration profile", () => {
-  localStorage.setItem(PINCH_CALIBRATION_STORAGE_KEY, JSON.stringify({
-    version: 2,
-    createdAt: "2026-08-04T12:00:00.000Z",
-    boundaries: {
-      imageContact: 0.3,
-      imageSeparate: 0.5,
-      worldContact: 0.3,
-      worldSeparate: 0.55,
-      depthContact: 0.15,
-      depthSeparate: 0.35,
-    },
-    baselineNoise: 0.02,
-  }));
-
+it("不再显示会干扰稳定内核的个人点击校准", () => {
   render(<App />);
 
-  expect(screen.getByText("个人点击参数已启用")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "清除个人点击参数" }));
-  expect(localStorage.getItem(PINCH_CALIBRATION_STORAGE_KEY)).toBeNull();
+  expect(screen.queryByRole("button", { name: "开始个人点击校准" })).not.toBeInTheDocument();
+  expect(screen.queryByText("个人点击参数已启用")).not.toBeInTheDocument();
 });
 
 afterEach(() => {
@@ -76,9 +60,7 @@ const desktopApi = (): GestureDesktopApi => ({
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),
   releaseAndPause: vi.fn().mockResolvedValue(undefined),
-  detectAppleHand: vi.fn().mockResolvedValue(null),
   saveGestureTrace: vi.fn().mockResolvedValue("saved"),
-  saveHandSample: vi.fn().mockResolvedValue("saved"),
   openAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
   onSafetyPause: vi.fn(() => vi.fn()),
 });
@@ -142,67 +124,63 @@ it("moves the desktop pointer from a tracking hand", async () => {
   ));
 });
 
-it("sends a bounded camera frame to the native Apple Vision model", async () => {
-  const { bridge, runFrame, video } = await renderDesktopApp();
+it("实时帧只走同步 MediaPipe，不再编码或发送 Apple Vision 图像", async () => {
+  const { runFrame, video } = await renderDesktopApp();
   Object.defineProperty(video, "videoWidth", { configurable: true, value: 1280 });
   Object.defineProperty(video, "videoHeight", { configurable: true, value: 720 });
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
     drawImage: vi.fn(),
   } as unknown as CanvasRenderingContext2D);
-  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => {
+  const toBlob = vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => {
     callback(new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" }));
   });
   await act(async () => Promise.resolve());
 
   runFrame(100);
 
-  await waitFor(() => expect(bridge.detectAppleHand).toHaveBeenCalledWith(
-    expect.any(Uint8Array),
-    100,
-  ));
+  expect(vision.detectFirstHand).toHaveBeenCalled();
+  expect(toBlob).not.toHaveBeenCalled();
 });
 
-it("dispatches one left click after a stable world-space pinch", async () => {
+it("第二个真实接触帧立即点击一次且系统控制保持开启", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
   runFrame(16, handAt("left"));
   runFrame(32, handAt("left"));
-  runFrame(48, handAt("left"));
-  runFrame(64, handAt("left"));
-  runFrame(80, handAt("tracking"));
-  runFrame(96, handAt("tracking"));
 
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
+  expect(screen.getByText("已启用")).toBeInTheDocument();
+  runFrame(48, handAt("left"));
+  runFrame(64, handAt("tracking"));
+  runFrame(80, handAt("tracking", 0.55, 0.4));
+  await waitFor(() => expect(bridge.move).toHaveBeenCalled());
+  expect(bridge.click).toHaveBeenCalledOnce();
   expect(bridge.rightClick).not.toHaveBeenCalled();
   expect(bridge.doubleClick).not.toHaveBeenCalled();
   expect(bridge.scroll).not.toHaveBeenCalled();
   expect(bridge.mouseDown).not.toHaveBeenCalled();
 });
 
-it("does not click when fingertips overlap only in the camera image", async () => {
+it("指尖只在画面重合但同帧纵深分离时不点击", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
   const imageOverlap = handAt("left");
-  const worldSeparated = handAt("left");
-  worldSeparated[8] = { ...worldSeparated[4]!, z: 0.3 };
+  imageOverlap[4] = { ...imageOverlap[4]!, z: -0.12 };
+  imageOverlap[8] = { ...imageOverlap[8]!, z: 0.12 };
 
-  runFrame(16, imageOverlap, worldSeparated);
-  runFrame(32, imageOverlap, worldSeparated);
+  runFrame(16, imageOverlap, handAt("left"));
+  runFrame(32, imageOverlap, handAt("left"));
   runFrame(48, handAt("tracking"), handAt("tracking"));
   runFrame(64, handAt("tracking"), handAt("tracking"));
 
   expect(bridge.click).not.toHaveBeenCalled();
 });
 
-it("uses the stricter multi-signal path when world depth is unavailable", async () => {
+it("世界坐标缺失或错误都不再阻断同帧真实接触", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
-  runFrame(16, handAt("tracking", 0.55, 0.4), null);
-  runFrame(32, handAt("left"), null);
-  runFrame(48, handAt("left"), null);
-  runFrame(64, handAt("left"), null);
-  runFrame(80, handAt("left"), null);
-  runFrame(96, handAt("tracking"), null);
-  runFrame(112, handAt("tracking"), null);
+  const misleadingWorld = handAt("left");
+  misleadingWorld[8] = { ...misleadingWorld[4]!, z: 0.7 };
+  runFrame(16, handAt("left"), misleadingWorld);
+  runFrame(32, handAt("left"), misleadingWorld);
 
-  await waitFor(() => expect(bridge.move).toHaveBeenCalled());
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
 });
 
@@ -221,8 +199,8 @@ it("stops desktop pointer movement after an open palm is confirmed", async () =>
   runFrame(16, handAt("tracking"));
   await waitFor(() => expect(bridge.move).toHaveBeenCalled());
   runFrame(32, handAt("open-palm"));
-  const movementsBeforeStop = vi.mocked(bridge.move).mock.calls.length;
   runFrame(48, handAt("open-palm"));
+  const movementsBeforeStop = vi.mocked(bridge.move).mock.calls.length;
   runFrame(64, handAt("open-palm"));
 
   expect(vi.mocked(bridge.move).mock.calls).toHaveLength(movementsBeforeStop);

@@ -19,6 +19,6 @@ describe("gestureThresholdsForSensitivity", () => {
 
   it("uses the responsive preset by default", () => {
     expect(DEFAULT_GESTURE_SETTINGS.gestureSensitivity).toBe(0.5);
-    expect(DEFAULT_GESTURE_SETTINGS.cursorSmoothingFactor).toBe(0.2);
+    expect(DEFAULT_GESTURE_SETTINGS.cursorSmoothingFactor).toBe(0.4);
   });
 });

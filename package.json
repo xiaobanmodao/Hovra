@@ -6,8 +6,8 @@
   "main": ".vite/build/main.js",
   "scripts": {
     "dev": "vite",
-    "electron:dev": "sh scripts/build-cursor-visibility-helper.sh && sh scripts/build-apple-vision-helper.sh && electron-forge start",
-    "electron:make": "sh scripts/build-cursor-visibility-helper.sh && sh scripts/build-apple-vision-helper.sh && electron-forge make && sh scripts/verify-packaged-macos-app.sh",
+    "electron:dev": "sh scripts/build-cursor-visibility-helper.sh && electron-forge start",
+    "electron:make": "sh scripts/build-cursor-visibility-helper.sh && electron-forge make && sh scripts/verify-packaged-macos-app.sh",
     "electron:typecheck": "tsc --noEmit -p tsconfig.electron.json",
     "build": "tsc -b && vite build",
     "test": "vitest run"

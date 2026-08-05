@@ -11,4 +11,8 @@ describe("macOS package identity", () => {
       },
     });
   });
+
+  it("packages only the cursor helper and excludes the retired hand-pose helper", () => {
+    expect(config.packagerConfig?.extraResource).toEqual(["native/cursor-visibility.node"]);
+  });
 });

@@ -23,10 +23,10 @@ const output: GestureOutput = {
     palmScale: 0.234,
     screenPinchGap: 0.019,
     imageAspectRatio: 16 / 9,
-    worldPalmScale: 0.112,
-    palmFacingScore: 0.18,
+    worldPalmScale: null,
+    palmFacingScore: null,
     leftPinchRatio: 0.21,
-    worldLeftPinchRatio: 0.22,
+    worldLeftPinchRatio: null,
     pinchDepthReliable: true,
     rightPinchRatio: 0.61,
     doublePinchRatio: 0.72,
@@ -36,9 +36,9 @@ const output: GestureOutput = {
     pinchImageDepthGap: 0.07,
     pinchWorldQuality: 0.76,
     pinchQualityReasons: ["ratio-jitter"],
-    pinchBlockingReason: "approach",
-    pinchEnterVotes: 2,
-    pinchRequiredVotes: 3,
+    pinchBlockingReason: "depth",
+    pinchEnterVotes: 1,
+    pinchRequiredVotes: 2,
     effectiveFps: 58.4,
     inferenceMs: 9.2,
     pinchModelMode: "mediapipe",
@@ -47,62 +47,51 @@ const output: GestureOutput = {
     visionAgeMs: null,
     visionInferenceMs: null,
     modelAgreement: null,
+    pinchScreenRatio: 0.18,
+    pinchSpatialRatio: 0.21,
+    pinchEnterRatio: 0.33,
+    pinchExitRatio: 0.5,
   },
 };
 
 describe("GestureDiagnostics", () => {
-  it("renders candidate, lock, progress, normalized ratios, scale, score, and quality", () => {
+  it("只展示与稳定内核实时判定一致的中文诊断", () => {
     render(<GestureDiagnostics output={output} />);
 
+    expect(screen.getByText("识别引擎：稳定内核")).toBeInTheDocument();
     expect(screen.getByText("候选确认")).toBeInTheDocument();
     expect(screen.getByText("左键")).toBeInTheDocument();
-    expect(screen.getByText("3/4")).toBeInTheDocument();
+    expect(screen.getByText("75%" )).toBeInTheDocument();
     expect(screen.getByText("0.234")).toBeInTheDocument();
-    expect(screen.getByText("二维指尖间隙")).toBeInTheDocument();
-    expect(screen.getByText("0.019")).toBeInTheDocument();
-    expect(screen.getByText("画面宽高比")).toBeInTheDocument();
-    expect(screen.getByText("1.778")).toBeInTheDocument();
-    expect(screen.getByText("世界手掌尺度")).toBeInTheDocument();
-    expect(screen.getByText("0.112")).toBeInTheDocument();
-    expect(screen.getByText("手掌朝向")).toBeInTheDocument();
-    expect(screen.getByText("侧向（0.180）")).toBeInTheDocument();
-    expect(screen.getByText("0.210 / 0.610 / 0.720")).toBeInTheDocument();
-    expect(screen.getByText("世界捏合比例")).toBeInTheDocument();
-    expect(screen.getByText("0.220")).toBeInTheDocument();
-    expect(screen.getByText("深度验证")).toBeInTheDocument();
-    expect(screen.getByText("可靠")).toBeInTheDocument();
-    expect(screen.getByText("0.430")).toBeInTheDocument();
-    expect(screen.getByText("100%")).toBeInTheDocument();
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-    expect(screen.getByText("接触概率")).toBeInTheDocument();
-    expect(screen.getByText("81%")) .toBeInTheDocument();
-    expect(screen.getByText("世界坐标质量")).toBeInTheDocument();
-    expect(screen.getByText("76%")) .toBeInTheDocument();
-    expect(screen.getByText("投票")).toBeInTheDocument();
-    expect(screen.getByText("2/3")).toBeInTheDocument();
-    expect(screen.getByText("比例抖动")).toBeInTheDocument();
-    expect(screen.getByText("尚未观察到靠近过程")).toBeInTheDocument();
+    expect(screen.getByText("二维捏合比例")).toBeInTheDocument();
+    expect(screen.getByText("0.180")).toBeInTheDocument();
+    expect(screen.getByText("纵深捏合比例")).toBeInTheDocument();
+    expect(screen.getByText("0.070")).toBeInTheDocument();
+    expect(screen.getByText("空间捏合比例")).toBeInTheDocument();
+    expect(screen.getByText("0.210")).toBeInTheDocument();
+    expect(screen.getByText("接触阈值")).toBeInTheDocument();
+    expect(screen.getByText("0.330")).toBeInTheDocument();
+    expect(screen.getByText("释放阈值")).toBeInTheDocument();
+    expect(screen.getByText("0.500")).toBeInTheDocument();
+    expect(screen.getByText("连续接触确认")).toBeInTheDocument();
+    expect(screen.getByText("1/2")).toBeInTheDocument();
+    expect(screen.getByText("指尖在画面中重合，但纵深仍分离")).toBeInTheDocument();
     expect(screen.getByText("58.4 帧/秒")).toBeInTheDocument();
     expect(screen.getByText("9.2 毫秒")).toBeInTheDocument();
+    expect(screen.queryByText("Apple Vision")).not.toBeInTheDocument();
+    expect(screen.queryByText("世界坐标质量")).not.toBeInTheDocument();
   });
 
   it("offers explicit local export only when a desktop callback is provided", async () => {
     const onSaveTrace = vi.fn().mockResolvedValue("saved");
-    const onSaveHandSample = vi.fn().mockResolvedValue("saved");
     const { rerender } = render(<GestureDiagnostics output={output} />);
     expect(screen.queryByRole("button", { name: "保存诊断记录" })).not.toBeInTheDocument();
 
-    rerender(<GestureDiagnostics
-      output={output}
-      onSaveTrace={onSaveTrace}
-      onSaveHandSample={onSaveHandSample}
-    />);
+    rerender(<GestureDiagnostics output={output} onSaveTrace={onSaveTrace} />);
     fireEvent.click(screen.getByRole("button", { name: "保存诊断记录" }));
 
     expect(onSaveTrace).toHaveBeenCalledOnce();
     expect(await screen.findByText("诊断记录已保存到本机")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "保存当前手部样本（仅本机）" }));
-    expect(onSaveHandSample).toHaveBeenCalledOnce();
-    expect(await screen.findByText("当前手部样本已保存到本机")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存当前手部样本（仅本机）" })).not.toBeInTheDocument();
   });
 });

@@ -18,5 +18,4 @@ trap 'rm -rf "$verify_dir"' EXIT INT TERM
 ditto -x -k "$archive_path" "$verify_dir"
 app_path="$verify_dir/手势控制.app"
 codesign --verify --deep --strict "$app_path"
-test -x "$app_path/Contents/Resources/hand-pose-helper"
 test -f "$app_path/Contents/Resources/cursor-visibility.node"

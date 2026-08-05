@@ -1,74 +1,47 @@
-import { AdaptiveLandmarkFilter } from "./adaptiveLandmarkFilter";
+import { DEFAULT_GESTURE_SETTINGS } from "./config";
 import {
-  DEFAULT_GESTURE_SETTINGS,
-  DEFAULT_PINCH_BOUNDARIES,
-  type PinchBoundaries,
-} from "./config";
-import { GestureClassifier } from "./gestureClassifier";
+  GestureTraceBuffer,
+  type GestureTraceV5,
+  type TraceGestureEvent,
+} from "./gestureTrace";
 import {
-  DualModelPinchFusion,
-  extractSecondaryPinchEvidence,
-  type PinchFusionOutput,
-} from "./dualModelPinchFusion";
-import { extractGestureFeatures, type GestureFeatures } from "./gestureFeatures";
-import { GestureStabilizer, type GestureStabilizerOutput } from "./gestureStabilizer";
-import { GestureTraceBuffer, type GestureTraceV5, type TraceGestureEvent } from "./gestureTrace";
-import { buildHandGeometry, buildImageHandGeometry, type HandGeometry } from "./handGeometry";
-import { PinchFeatureExtractor, type PinchFrameFeatures } from "./pinchFeatures";
+  measureStableHand,
+  type StableHandMetrics,
+} from "./stableHandMetrics";
 import {
-  PinchProbabilityEstimator,
-  type PinchProbabilityResult,
-} from "./pinchProbability";
-import { PinchQualityEstimator, type PinchQuality } from "./pinchQuality";
-import {
-  PinchTemporalRecognizer,
-  type PinchTemporalOutput,
-} from "./pinchTemporalRecognizer";
-import {
-  INDEX_FINGER_TIP,
-  type GestureDiagnosticsSnapshot,
-  type GestureKind,
-  type GestureOutput,
-  type GestureSettings,
-  type GestureState,
-  type Landmark,
+  StablePinchRecognizer,
+  type StablePinchOutput,
+} from "./stablePinchRecognizer";
+import type {
+  GestureDiagnosticsSnapshot,
+  GestureKind,
+  GestureOutput,
+  GesturePhase,
+  GestureSettings,
+  GestureState,
+  Landmark,
 } from "./types";
-import type { AppleVisionObservation } from "../vision/appleVisionTypes";
 
-type PinchFrameDecision = {
-  temporal: PinchTemporalOutput;
-  features: PinchFrameFeatures | null;
-  quality: PinchQuality | null;
-  probability: PinchProbabilityResult | null;
-  fusion: PinchFusionOutput | null;
-};
+const OPEN_PALM_ENTER_FRAMES = 3;
+const OPEN_PALM_EXIT_FRAMES = 2;
 
 export class GestureEngine {
   private readonly settings: GestureSettings;
-  private readonly filter = new AdaptiveLandmarkFilter();
-  private readonly classifier: GestureClassifier;
-  private readonly stabilizer = new GestureStabilizer();
-  private readonly pinchFeatureExtractor = new PinchFeatureExtractor();
-  private readonly pinchQualityEstimator = new PinchQualityEstimator();
-  private readonly pinchProbabilityEstimator: PinchProbabilityEstimator;
-  private readonly dualModelPinchFusion: DualModelPinchFusion;
-  private readonly pinchTemporalRecognizer = new PinchTemporalRecognizer();
+  private readonly pinch = new StablePinchRecognizer();
   private readonly trace = new GestureTraceBuffer();
-  private lastCursor: Landmark | null = null;
+  private openPalmEnterFrames = 0;
+  private openPalmExitFrames = 0;
+  private openPalmPaused = false;
+  private lastUpdateMs: number | null = null;
+  private lastFrameIntervalMs: number | null = null;
   private traceEpochMs: number | null = null;
   private lastTraceTimestamp = 0;
 
   constructor(
     settings: GestureSettings = DEFAULT_GESTURE_SETTINGS,
-    pinchBoundaries: PinchBoundaries = DEFAULT_PINCH_BOUNDARIES,
+    _legacyPinchBoundaries?: unknown,
   ) {
     this.settings = { ...settings };
-    this.classifier = new GestureClassifier(settings.gestureSensitivity);
-    this.pinchProbabilityEstimator = new PinchProbabilityEstimator(
-      pinchBoundaries,
-      settings.gestureSensitivity,
-    );
-    this.dualModelPinchFusion = new DualModelPinchFusion(pinchBoundaries);
   }
 
   update(
@@ -77,46 +50,22 @@ export class GestureEngine {
     worldLandmarks: Landmark[] | null = null,
     inferenceMs: number | null = null,
     imageAspectRatio = 1,
-    appleVisionObservation: AppleVisionObservation | null = null,
+    _legacySecondaryObservation: unknown = null,
   ): GestureOutput {
-    const filtered = this.filter.update(landmarks, nowMs);
-    const cursorGeometry = buildImageHandGeometry(filtered, imageAspectRatio);
-    const actionGeometry = buildImageHandGeometry(landmarks, imageAspectRatio);
-    const worldGeometry = buildHandGeometry(worldLandmarks);
-    const features = actionGeometry
-      ? extractGestureFeatures(actionGeometry, worldGeometry)
-      : null;
-    const openPalmCandidate = features
-      ? this.classifier.classify(features, this.stabilizer.lockedGesture)
-      : null;
-    const stabilized = this.stabilizer.update(openPalmCandidate, nowMs, features !== null);
-    const pinch = actionGeometry
-      ? this.updatePinch(
-        actionGeometry,
-        worldGeometry,
-        nowMs,
-        features?.palmFacingScore ?? 1,
-        extractSecondaryPinchEvidence(appleVisionObservation, nowMs, imageAspectRatio),
-      )
-      : this.updateMissingPinch(nowMs);
-
-    if (cursorGeometry) {
-      this.lastCursor = cursorGeometry.sourceLandmarks[INDEX_FINGER_TIP] ?? this.lastCursor;
+    const monotonic = Number.isFinite(nowMs)
+      && (this.lastUpdateMs === null || nowMs >= this.lastUpdateMs);
+    if (monotonic && this.lastUpdateMs !== null && nowMs > this.lastUpdateMs) {
+      this.lastFrameIntervalMs = nowMs - this.lastUpdateMs;
     }
+    if (Number.isFinite(nowMs)) this.lastUpdateMs = nowMs;
 
-    const openPalmLocked = stabilized.lockedGesture === "open-palm";
-    const state = this.deriveState(stabilized, pinch.temporal, features !== null);
-    const output = this.output(
-      state,
-      features === null ? null : this.lastCursor,
-      stabilized,
-      features,
-      nowMs,
-      inferenceMs,
-      pinch,
-      { click: pinch.temporal.clicked && !openPalmLocked },
-    );
-    this.recordTrace(landmarks, worldLandmarks, output, features, pinch, nowMs, inferenceMs);
+    const metrics = monotonic
+      ? measureStableHand(landmarks, imageAspectRatio, this.settings.gestureSensitivity)
+      : null;
+    const output = metrics
+      ? this.updateValidHand(metrics, nowMs, inferenceMs, imageAspectRatio)
+      : this.updateMissingHand(nowMs, inferenceMs, imageAspectRatio);
+    this.recordTrace(landmarks, worldLandmarks, metrics, output, nowMs, inferenceMs, imageAspectRatio);
     return output;
   }
 
@@ -128,153 +77,228 @@ export class GestureEngine {
     return this.trace.serialize();
   }
 
-  private updatePinch(
-    imageGeometry: HandGeometry,
-    worldGeometry: HandGeometry | null,
-    nowMs: number,
-    palmFacingScore: number,
-    secondaryEvidence: ReturnType<typeof extractSecondaryPinchEvidence>,
-  ): PinchFrameDecision {
-    const pinchFeatures = this.pinchFeatureExtractor.update(imageGeometry, worldGeometry, nowMs);
-    const quality = this.pinchQualityEstimator.update(pinchFeatures, worldGeometry);
-    const baseProbability = this.pinchProbabilityEstimator.update(pinchFeatures, quality);
-    const fusion = this.dualModelPinchFusion.update(
-      baseProbability,
-      pinchFeatures,
-      palmFacingScore,
-      secondaryEvidence,
-    );
-    return {
-      temporal: this.pinchTemporalRecognizer.update(
-        fusion.probability,
-        nowMs,
-        fusion.strictVoting ? fusion.voteEligible : quality.usableForVoting,
-        fusion.strictVoting,
-      ),
-      features: pinchFeatures,
-      quality,
-      probability: fusion.probability,
-      fusion,
-    };
-  }
-
-  private updateMissingPinch(nowMs: number): PinchFrameDecision {
-    this.pinchFeatureExtractor.reset();
-    this.pinchQualityEstimator.reset();
-    this.pinchProbabilityEstimator.reset();
-    this.dualModelPinchFusion.reset();
-    return {
-      temporal: this.pinchTemporalRecognizer.update(null, nowMs, false),
-      features: null,
-      quality: null,
-      probability: null,
-      fusion: null,
-    };
-  }
-
-  private deriveState(
-    stabilized: GestureStabilizerOutput,
-    pinchTemporal: PinchTemporalOutput,
-    inputValid: boolean,
-  ): GestureState {
-    if (stabilized.lockedGesture === "open-palm") return "paused";
-    if (
-      pinchTemporal.phase === "candidate"
-      || pinchTemporal.phase === "active"
-      || pinchTemporal.phase === "releasing"
-    ) {
-      return "left-pinching";
-    }
-    return inputValid ? "tracking" : "lost";
-  }
-
-  private output(
-    state: GestureState,
-    cursor: Landmark | null,
-    stabilized: GestureStabilizerOutput,
-    features: GestureFeatures | null,
+  private updateValidHand(
+    metrics: StableHandMetrics,
     nowMs: number,
     inferenceMs: number | null,
-    pinch: PinchFrameDecision,
-    events: Partial<GestureOutput>,
+    imageAspectRatio: number,
   ): GestureOutput {
-    return {
+    this.updateOpenPalm(metrics.openPalmCandidate);
+
+    if (this.openPalmPaused) {
+      this.pinch.reset();
+      return this.output({
+        state: "paused",
+        cursor: metrics.cursor,
+        click: false,
+        phase: "active",
+        candidate: null,
+        lockedGesture: "open-palm",
+        confirmationProgress: 1,
+        diagnostics: this.diagnostics(metrics, null, nowMs, inferenceMs, imageAspectRatio),
+      });
+    }
+
+    const pinch = this.pinch.update({
+      contact: metrics.pinchContact,
+      separated: metrics.pinchSeparated,
+      blockingReason: metrics.pinchBlockingReason,
+    }, nowMs);
+    const openPalmCandidate = this.openPalmEnterFrames > 0;
+    const state: GestureState = pinch.phase === "candidate"
+      || pinch.phase === "active"
+      || pinch.phase === "releasing"
+      ? "left-pinching" : "tracking";
+    const phase: GesturePhase = openPalmCandidate ? "candidate" : pinch.phase;
+    const candidate: GestureKind | null = openPalmCandidate
+      ? "open-palm"
+      : pinch.phase === "candidate" ? "left" : null;
+    const confirmationProgress = openPalmCandidate
+      ? this.openPalmEnterFrames / OPEN_PALM_ENTER_FRAMES
+      : pinch.phase === "candidate"
+        ? pinch.contactFrames / pinch.requiredContactFrames
+        : pinch.active ? 1 : 0;
+
+    return this.output({
       state,
-      cursor,
+      cursor: metrics.cursor,
+      click: pinch.clicked && !openPalmCandidate,
+      phase,
+      candidate,
+      lockedGesture: pinch.active ? "left" : null,
+      confirmationProgress,
+      diagnostics: this.diagnostics(metrics, pinch, nowMs, inferenceMs, imageAspectRatio),
+    });
+  }
+
+  private updateMissingHand(
+    nowMs: number,
+    inferenceMs: number | null,
+    imageAspectRatio: number,
+  ): GestureOutput {
+    const pinch = this.pinch.update(null, nowMs);
+    this.openPalmEnterFrames = 0;
+    this.openPalmExitFrames = 0;
+    this.openPalmPaused = false;
+    return this.output({
+      state: "lost",
+      cursor: null,
       click: false,
+      phase: "lost",
+      candidate: null,
+      lockedGesture: null,
+      confirmationProgress: 0,
+      diagnostics: this.diagnostics(null, pinch, nowMs, inferenceMs, imageAspectRatio),
+    });
+  }
+
+  private updateOpenPalm(candidate: boolean): void {
+    if (this.openPalmPaused) {
+      if (candidate) {
+        this.openPalmExitFrames = 0;
+        return;
+      }
+      this.openPalmExitFrames += 1;
+      if (this.openPalmExitFrames >= OPEN_PALM_EXIT_FRAMES) {
+        this.openPalmPaused = false;
+        this.openPalmEnterFrames = 0;
+        this.openPalmExitFrames = 0;
+      }
+      return;
+    }
+
+    this.openPalmExitFrames = 0;
+    this.openPalmEnterFrames = candidate ? this.openPalmEnterFrames + 1 : 0;
+    if (this.openPalmEnterFrames >= OPEN_PALM_ENTER_FRAMES) {
+      this.openPalmPaused = true;
+      this.openPalmEnterFrames = OPEN_PALM_ENTER_FRAMES;
+      this.pinch.reset();
+    }
+  }
+
+  private diagnostics(
+    metrics: StableHandMetrics | null,
+    pinch: StablePinchOutput | null,
+    nowMs: number,
+    inferenceMs: number | null,
+    imageAspectRatio: number,
+  ): GestureDiagnosticsSnapshot {
+    const pinchProbability = metrics ? closeness(
+      metrics.spatialPinchRatio,
+      metrics.pinchEnterRatio,
+      metrics.pinchExitRatio,
+    ) : null;
+    return {
+      timestampMs: Number.isFinite(nowMs) ? nowMs : 0,
+      quality: metrics ? 1 : 0,
+      palmScale: metrics?.palmScale ?? null,
+      screenPinchGap: metrics?.screenPinchGap ?? null,
+      imageAspectRatio: sanitizeAspectRatio(imageAspectRatio),
+      worldPalmScale: null,
+      palmFacingScore: null,
+      leftPinchRatio: metrics?.spatialPinchRatio ?? null,
+      worldLeftPinchRatio: null,
+      pinchDepthReliable: metrics?.depthReliable ?? false,
+      rightPinchRatio: null,
+      doublePinchRatio: null,
+      openPalmScore: metrics?.openPalmScore ?? null,
+      scrollPoseScore: null,
+      pinchProbability,
+      pinchImageDepthGap: metrics?.depthPinchRatio ?? null,
+      pinchWorldQuality: 0,
+      pinchQualityReasons: [],
+      pinchBlockingReason: metrics?.pinchBlockingReason ?? null,
+      pinchEnterVotes: pinch?.contactFrames ?? 0,
+      pinchRequiredVotes: pinch?.requiredContactFrames ?? 2,
+      effectiveFps: this.lastFrameIntervalMs && this.lastFrameIntervalMs > 0
+        ? 1_000 / this.lastFrameIntervalMs : null,
+      inferenceMs: inferenceMs !== null && Number.isFinite(inferenceMs) ? Math.max(0, inferenceMs) : null,
+      pinchModelMode: "mediapipe",
+      visionPinchRatio: null,
+      visionConfidence: null,
+      visionAgeMs: null,
+      visionInferenceMs: null,
+      modelAgreement: null,
+      pinchScreenRatio: metrics?.screenPinchRatio ?? null,
+      pinchSpatialRatio: metrics?.spatialPinchRatio ?? null,
+      pinchEnterRatio: metrics?.pinchEnterRatio ?? null,
+      pinchExitRatio: metrics?.pinchExitRatio ?? null,
+    };
+  }
+
+  private output(input: {
+    state: GestureState;
+    cursor: Landmark | null;
+    click: boolean;
+    phase: GesturePhase;
+    candidate: GestureKind | null;
+    lockedGesture: GestureKind | null;
+    confirmationProgress: number;
+    diagnostics: GestureDiagnosticsSnapshot;
+  }): GestureOutput {
+    return {
+      ...input,
       rightClick: false,
       doubleClick: false,
       scrollY: 0,
       dragStart: false,
       dragEnd: false,
-      phase: stabilized.lockedGesture === "open-palm" ? stabilized.phase : pinch.temporal.phase,
-      candidate: stabilized.lockedGesture === "open-palm"
-        ? stabilized.candidate
-        : pinch.temporal.phase === "candidate" ? "left" : null,
-      lockedGesture: stabilized.lockedGesture === "open-palm"
-        ? "open-palm"
-        : pinch.temporal.phase === "active" || pinch.temporal.phase === "releasing" ? "left" : null,
-      confirmationProgress: stabilized.lockedGesture === "open-palm"
-        ? stabilized.confirmationProgress
-        : pinch.temporal.confirmationProgress,
-      diagnostics: diagnosticsFor(features, pinch, nowMs, inferenceMs),
-      ...events,
     };
   }
 
   private recordTrace(
     landmarks: Landmark[] | null,
     worldLandmarks: Landmark[] | null,
+    metrics: StableHandMetrics | null,
     output: GestureOutput,
-    features: GestureFeatures | null,
-    pinch: PinchFrameDecision,
     nowMs: number,
     inferenceMs: number | null,
+    imageAspectRatio: number,
   ): void {
-    if (this.traceEpochMs === null || nowMs < this.traceEpochMs) this.traceEpochMs = nowMs;
-    const relativeTimestamp = Math.max(this.lastTraceTimestamp, nowMs - this.traceEpochMs);
+    const safeNow = Number.isFinite(nowMs) ? nowMs : this.lastTraceTimestamp;
+    if (this.traceEpochMs === null || safeNow < this.traceEpochMs) this.traceEpochMs = safeNow;
+    const relativeTimestamp = Math.max(this.lastTraceTimestamp, safeNow - this.traceEpochMs);
     this.lastTraceTimestamp = relativeTimestamp;
-    const events: TraceGestureEvent[] = [];
-    if (output.click) events.push("click");
+    const events: TraceGestureEvent[] = output.click ? ["click"] : [];
 
     this.trace.push({
       t: relativeTimestamp,
       landmarks,
       worldLandmarks,
-      quality: features ? 1 : 0,
-      features: features ? {
-        leftPinchRatio: features.leftPinchRatio,
-        worldLeftPinchRatio: features.worldLeftPinchRatio,
-        pinchDepthReliable: features.pinchDepthReliable,
-        rightPinchRatio: features.rightPinchRatio,
-        doublePinchRatio: features.doublePinchRatio,
-        openPalmScore: features.openPalmScore,
-        scrollPoseScore: features.scrollPoseScore,
-        palmScale: features.palmScale,
-        screenPinchGap: features.screenPinchGap,
-        imageAspectRatio: features.imageAspectRatio,
-        worldPalmScale: features.worldPalmScale,
-        palmFacingScore: features.palmFacingScore,
-        imageDepthGap: pinch.features?.imageDepthGap ?? null,
-        worldDepthGap: pinch.features?.worldDepthGap ?? null,
-        approachVelocity: pinch.features?.approachVelocity ?? null,
-        contactPoseScore: pinch.features?.contactPoseScore ?? null,
-        worldQuality: pinch.quality?.score ?? 0,
-        qualityReasons: pinch.quality?.reasons ?? [],
-        pinchProbability: pinch.probability?.probability ?? null,
-        safetyGatePassed: pinch.probability?.safetyGatePassed ?? false,
-        blockingReason: pinch.probability?.blockingReason ?? null,
-        enterVotes: pinch.temporal.enterVotes,
-        requiredVotes: pinch.temporal.requiredVotes,
-        frameIntervalMs: pinch.features?.frameIntervalMs ?? null,
-        inferenceMs,
-        effectiveFps: effectiveFpsFor(pinch.features?.frameIntervalMs ?? null),
-        modelMode: pinch.fusion?.mode ?? "mediapipe",
-        visionPinchRatio: pinch.fusion?.evidence?.ratio ?? null,
-        visionConfidence: pinch.fusion?.evidence?.confidence ?? null,
-        visionAgeMs: pinch.fusion?.evidence?.ageMs ?? null,
-        visionInferenceMs: pinch.fusion?.evidence?.inferenceMs ?? null,
-        modelsAgree: pinch.fusion?.modelsAgree ?? null,
+      quality: metrics ? 1 : 0,
+      features: metrics ? {
+        leftPinchRatio: metrics.spatialPinchRatio,
+        worldLeftPinchRatio: null,
+        pinchDepthReliable: metrics.depthReliable,
+        rightPinchRatio: 1,
+        doublePinchRatio: 1,
+        openPalmScore: metrics.openPalmScore,
+        scrollPoseScore: 0,
+        palmScale: metrics.palmScale,
+        screenPinchGap: metrics.screenPinchGap,
+        imageAspectRatio: sanitizeAspectRatio(imageAspectRatio),
+        worldPalmScale: null,
+        palmFacingScore: null,
+        imageDepthGap: metrics.depthPinchRatio,
+        worldDepthGap: null,
+        approachVelocity: null,
+        contactPoseScore: null,
+        worldQuality: 0,
+        qualityReasons: [],
+        pinchProbability: output.diagnostics.pinchProbability,
+        safetyGatePassed: metrics.pinchContact,
+        blockingReason: metrics.pinchBlockingReason,
+        enterVotes: output.diagnostics.pinchEnterVotes,
+        requiredVotes: output.diagnostics.pinchRequiredVotes,
+        frameIntervalMs: this.lastFrameIntervalMs,
+        inferenceMs: output.diagnostics.inferenceMs,
+        effectiveFps: output.diagnostics.effectiveFps,
+        modelMode: "mediapipe",
+        visionPinchRatio: null,
+        visionConfidence: null,
+        visionAgeMs: null,
+        visionInferenceMs: null,
+        modelsAgree: null,
       } : null,
       phase: output.phase,
       candidate: output.candidate,
@@ -285,47 +309,10 @@ export class GestureEngine {
   }
 }
 
-function diagnosticsFor(
-  features: GestureFeatures | null,
-  pinch: PinchFrameDecision,
-  timestampMs: number,
-  inferenceMs: number | null,
-): GestureDiagnosticsSnapshot {
-  return {
-    timestampMs,
-    quality: features ? 1 : 0,
-    palmScale: features?.palmScale ?? null,
-    screenPinchGap: features?.screenPinchGap ?? null,
-    imageAspectRatio: features?.imageAspectRatio ?? 1,
-    worldPalmScale: features?.worldPalmScale ?? null,
-    palmFacingScore: features?.palmFacingScore ?? null,
-    leftPinchRatio: features?.leftPinchRatio ?? null,
-    worldLeftPinchRatio: features?.worldLeftPinchRatio ?? null,
-    pinchDepthReliable: features?.pinchDepthReliable ?? false,
-    rightPinchRatio: features?.rightPinchRatio ?? null,
-    doublePinchRatio: features?.doublePinchRatio ?? null,
-    openPalmScore: features?.openPalmScore ?? null,
-    scrollPoseScore: features?.scrollPoseScore ?? null,
-    pinchProbability: pinch.probability?.probability ?? null,
-    pinchImageDepthGap: pinch.features?.imageDepthGap ?? null,
-    pinchWorldQuality: pinch.quality?.score ?? 0,
-    pinchQualityReasons: pinch.quality?.reasons ?? [],
-    pinchBlockingReason: pinch.probability?.blockingReason ?? null,
-    pinchEnterVotes: pinch.temporal.enterVotes,
-    pinchRequiredVotes: pinch.temporal.requiredVotes,
-    effectiveFps: effectiveFpsFor(pinch.features?.frameIntervalMs ?? null),
-    inferenceMs: inferenceMs !== null && Number.isFinite(inferenceMs) ? Math.max(0, inferenceMs) : null,
-    pinchModelMode: pinch.fusion?.mode ?? "mediapipe",
-    visionPinchRatio: pinch.fusion?.evidence?.ratio ?? null,
-    visionConfidence: pinch.fusion?.evidence?.confidence ?? null,
-    visionAgeMs: pinch.fusion?.evidence?.ageMs ?? null,
-    visionInferenceMs: pinch.fusion?.evidence?.inferenceMs ?? null,
-    modelAgreement: pinch.fusion?.modelsAgree ?? null,
-  };
+function closeness(value: number, contact: number, separate: number): number {
+  return Math.min(1, Math.max(0, (separate - value) / Math.max(1e-6, separate - contact)));
 }
 
-function effectiveFpsFor(frameIntervalMs: number | null): number | null {
-  return frameIntervalMs !== null && frameIntervalMs > 0 && frameIntervalMs <= 1_000
-    ? 1_000 / frameIntervalMs
-    : null;
+function sanitizeAspectRatio(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.min(3, Math.max(0.5, value)) : 1;
 }

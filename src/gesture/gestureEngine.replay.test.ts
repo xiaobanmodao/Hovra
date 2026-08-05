@@ -69,7 +69,7 @@ const genuinePinch = (options: { scale?: number; rotation?: number } = {}): Repl
   ];
 };
 
-describe("adaptive pinch replay matrix", () => {
+describe("stable pinch replay matrix", () => {
   it.each([
     ["正面", { scale: 0.3, rotation: 0 }],
     ["斜向", { scale: 0.42, rotation: Math.PI / 3 }],
@@ -117,12 +117,12 @@ describe("adaptive pinch replay matrix", () => {
     expect(runSequence(frames).outputs.filter((output) => output.click)).toHaveLength(1);
   });
 
-  it("never clicks for reliable depth separation, fist, or open palm", () => {
+  it("never clicks for same-frame depth separation, fist, or open palm", () => {
     const imageOverlap = makeGestureHand("left");
-    const worldSeparated = makeGestureHand("left");
-    worldSeparated[8] = { ...worldSeparated[4]!, z: 0.3 };
+    imageOverlap[4] = { ...imageOverlap[4]!, z: -0.12 };
+    imageOverlap[8] = { ...imageOverlap[8]!, z: 0.12 };
     const gestures = [
-      { image: imageOverlap, world: worldSeparated },
+      { image: imageOverlap, world: makeGestureHand("left") },
       { image: makeGestureHand("fist"), world: makeGestureHand("fist") },
       { image: makeGestureHand("open-palm"), world: makeGestureHand("open-palm") },
     ];

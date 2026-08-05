@@ -41,7 +41,7 @@ export type CalibrationControlMetadata = {
 export const DEFAULT_GESTURE_SETTINGS: Readonly<GestureSettings> = {
   gestureSensitivity: 0.5,
   openPalmMinTipDistance: 0.18,
-  cursorSmoothingFactor: 0.2,
+  cursorSmoothingFactor: 0.4,
   cursorOffsetX: 0,
   cursorOffsetY: 0,
   cameraStaleFrameMs: 500,
@@ -50,8 +50,8 @@ export const DEFAULT_GESTURE_SETTINGS: Readonly<GestureSettings> = {
 export const CALIBRATION_CONTROL_METADATA: readonly CalibrationControlMetadata[] = [
   {
     key: "gestureSensitivity",
-    label: "手势灵敏度",
-    accessibleLabel: "手势灵敏度",
+    label: "点击灵敏度",
+    accessibleLabel: "点击灵敏度",
     min: 0,
     max: 1,
     step: 0.05,

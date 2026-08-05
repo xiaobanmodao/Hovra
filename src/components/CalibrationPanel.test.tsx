@@ -7,10 +7,6 @@ import {
 } from "../gesture/config";
 import type { GestureSettings, GestureState } from "../gesture/types";
 import type { Point } from "../cursor/cursorController";
-import type {
-  PinchCalibrationProfile,
-  PinchCalibrationSample,
-} from "../gesture/pinchCalibration";
 import { CalibrationPanel } from "./CalibrationPanel";
 
 type HarnessProps = {
@@ -19,10 +15,6 @@ type HarnessProps = {
   pinchRatio?: number | null;
   gestureState?: GestureState;
   cursor?: Point | null;
-  currentPinchSample?: PinchCalibrationSample | null;
-  hasPinchCalibration?: boolean;
-  onPinchCalibrationComplete?: (profile: PinchCalibrationProfile) => void;
-  onClearPinchCalibration?: () => void;
 };
 
 function CalibrationPanelHarness({
@@ -31,10 +23,6 @@ function CalibrationPanelHarness({
   pinchRatio = 0.041,
   gestureState = "tracking",
   cursor = { x: 320, y: 240 },
-  currentPinchSample = { imageRatio: 0.24, worldRatio: 0.24, depthGap: 0.08 },
-  hasPinchCalibration = false,
-  onPinchCalibrationComplete = vi.fn(),
-  onClearPinchCalibration = vi.fn(),
 }: HarnessProps) {
   const [settings, setSettings] = useState(initialSettings);
 
@@ -50,10 +38,6 @@ function CalibrationPanelHarness({
       pinchRatio={pinchRatio}
       gestureState={gestureState}
       cursor={cursor}
-      currentPinchSample={currentPinchSample}
-      hasPinchCalibration={hasPinchCalibration}
-      onPinchCalibrationComplete={onPinchCalibrationComplete}
-      onClearPinchCalibration={onClearPinchCalibration}
     />
   );
 }
@@ -62,19 +46,19 @@ describe("CalibrationPanel", () => {
   it("displays live diagnostics and the default calibration values", () => {
     render(<CalibrationPanelHarness />);
 
-    expect(screen.getByText("画面捏合比例")).toBeInTheDocument();
+    expect(screen.getByText("空间捏合比例")).toBeInTheDocument();
     expect(screen.getByText("0.041")).toBeInTheDocument();
     expect(screen.getByText("跟踪中")).toBeInTheDocument();
     expect(screen.getByText("320, 240")).toBeInTheDocument();
     expect(screen.getByText("0.50")).toBeInTheDocument();
-    expect(screen.getByText("0.20")).toBeInTheDocument();
+    expect(screen.getByText("0.40")).toBeInTheDocument();
     expect(screen.queryByText("350 毫秒")).not.toBeInTheDocument();
   });
 
   it("shows an em dash when pinch distance and cursor diagnostics are unavailable", () => {
     render(<CalibrationPanelHarness pinchRatio={null} cursor={null} />);
 
-    expect(screen.getByText("画面捏合比例").nextElementSibling).toHaveTextContent("—");
+    expect(screen.getByText("空间捏合比例").nextElementSibling).toHaveTextContent("—");
     expect(screen.getByText("光标").nextElementSibling).toHaveTextContent("—");
   });
 
@@ -82,7 +66,7 @@ describe("CalibrationPanel", () => {
     const onSettingsChange = vi.fn();
     render(<CalibrationPanelHarness onSettingsChange={onSettingsChange} />);
 
-    const increment = screen.getByRole("button", { name: "调高手势灵敏度" });
+    const increment = screen.getByRole("button", { name: "调高点击灵敏度" });
     for (let click = 0; click < 20; click += 1) {
       fireEvent.click(increment);
     }
@@ -150,7 +134,7 @@ describe("CalibrationPanel", () => {
     const onSettingsChange = vi.fn();
     render(<CalibrationPanelHarness onSettingsChange={onSettingsChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "调高手势灵敏度" }));
+    fireEvent.click(screen.getByRole("button", { name: "调高点击灵敏度" }));
     expect(onSettingsChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ gestureSensitivity: 0.55 }),
     );
@@ -165,39 +149,25 @@ describe("CalibrationPanel", () => {
   it("hides panel content when collapsed while leaving the toggle available", () => {
     render(<CalibrationPanelHarness />);
 
-    const toggle = screen.getByRole("button", { name: "收起校准面板" });
+    const toggle = screen.getByRole("button", { name: "收起控制参数面板" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     const contentId = toggle.getAttribute("aria-controls");
     expect(contentId).not.toBeNull();
 
     fireEvent.click(toggle);
 
-    const collapsedToggle = screen.getByRole("button", { name: "展开校准面板" });
+    const collapsedToggle = screen.getByRole("button", { name: "展开控制参数面板" });
     expect(collapsedToggle).toHaveAttribute("aria-expanded", "false");
     const collapsedContent = document.getElementById(contentId as string);
     expect(collapsedContent).toBeInTheDocument();
     expect(collapsedContent).not.toBeVisible();
-    expect(screen.getByText("画面捏合比例")).not.toBeVisible();
+    expect(screen.getByText("空间捏合比例")).not.toBeVisible();
   });
 
-  it("opens personal click calibration and can clear an active profile", () => {
-    const onClearPinchCalibration = vi.fn();
-    const { rerender } = render(
-      <CalibrationPanelHarness onClearPinchCalibration={onClearPinchCalibration} />,
-    );
+  it("does not expose the removed personal calibration workflow", () => {
+    render(<CalibrationPanelHarness />);
 
-    fireEvent.click(screen.getByRole("button", { name: "开始个人点击校准" }));
-    expect(screen.getByRole("heading", { name: "个人点击校准" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "取消校准" }));
-
-    rerender(
-      <CalibrationPanelHarness
-        hasPinchCalibration
-        onClearPinchCalibration={onClearPinchCalibration}
-      />,
-    );
-    expect(screen.getByText("个人点击参数已启用")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "清除个人点击参数" }));
-    expect(onClearPinchCalibration).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "开始个人点击校准" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "个人点击校准" })).not.toBeInTheDocument();
   });
 });

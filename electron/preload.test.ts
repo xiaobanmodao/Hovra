@@ -32,9 +32,7 @@ type ExposedApi = Record<string, unknown> & {
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
   releaseAndPause(): Promise<void>;
-  detectAppleHand(jpeg: Uint8Array, capturedAtMs: number): Promise<unknown>;
   saveGestureTrace(json: string): Promise<"saved" | "cancelled">;
-  saveHandSample(json: string): Promise<"saved" | "cancelled">;
   openAccessibilitySettings(): Promise<void>;
   onSafetyPause(listener: () => void): () => void;
 };
@@ -62,7 +60,6 @@ describe("gestureDesktop preload bridge", () => {
     expect(Object.keys(api).sort()).toEqual([
       "activate",
       "click",
-      "detectAppleHand",
       "doubleClick",
       "drag",
       "getPermissionStatus",
@@ -74,7 +71,6 @@ describe("gestureDesktop preload bridge", () => {
       "releaseAndPause",
       "rightClick",
       "saveGestureTrace",
-      "saveHandSample",
       "scroll",
     ]);
     expect(api).not.toHaveProperty("ipcRenderer");
@@ -101,9 +97,7 @@ describe("gestureDesktop preload bridge", () => {
     await api.mouseDown();
     await api.mouseUp();
     await api.releaseAndPause();
-    await api.detectAppleHand(new Uint8Array([1, 2, 3]), 120);
     await api.saveGestureTrace(JSON.stringify({ version: 5, frames: [] }));
-    await api.saveHandSample(JSON.stringify({ version: 1 }));
     await api.openAccessibilitySettings();
 
     expect(electronMocks.invoke.mock.calls).toEqual([
@@ -119,9 +113,7 @@ describe("gestureDesktop preload bridge", () => {
       ["gesture:mouse-down"],
       ["gesture:mouse-up"],
       ["gesture:release-and-pause"],
-      ["gesture:detect-apple-hand", { jpeg: new Uint8Array([1, 2, 3]), capturedAtMs: 120 }],
       ["gesture:save-trace", JSON.stringify({ version: 5, frames: [] })],
-      ["gesture:save-hand-sample", JSON.stringify({ version: 1 })],
       ["gesture:open-accessibility-settings"],
     ]);
   });
@@ -187,14 +179,4 @@ describe("gestureDesktop preload bridge", () => {
     expect(electronMocks.invoke).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid Apple Vision frames before IPC", async () => {
-    const api = getExposedApi();
-
-    await expect(api.detectAppleHand(new Uint8Array(), 0)).rejects.toThrow("JPEG");
-    await expect(api.detectAppleHand(new Uint8Array(400 * 1024 + 1), 0))
-      .rejects.toThrow("400 KiB");
-    await expect(api.detectAppleHand(new Uint8Array([1]), Number.NaN))
-      .rejects.toThrow("timestamp");
-    expect(electronMocks.invoke).not.toHaveBeenCalled();
-  });
 });

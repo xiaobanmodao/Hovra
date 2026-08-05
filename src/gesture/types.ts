@@ -76,6 +76,14 @@ export type GestureDiagnosticsSnapshot = {
   visionAgeMs: number | null;
   visionInferenceMs: number | null;
   modelAgreement: boolean | null;
+  /** 同帧、宽高比修正后的二维拇指—食指距离与掌部尺度之比。 */
+  pinchScreenRatio?: number | null;
+  /** 同帧 MediaPipe 归一化三维指尖距离与掌部尺度之比。 */
+  pinchSpatialRatio?: number | null;
+  /** 稳定内核进入接触状态的严格阈值。 */
+  pinchEnterRatio?: number | null;
+  /** 稳定内核重新武装点击的释放阈值。 */
+  pinchExitRatio?: number | null;
 };
 
 export type GestureSettings = {

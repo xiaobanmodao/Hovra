@@ -16,12 +16,7 @@ export interface GestureDesktopApi {
   mouseDown(): Promise<void>;
   mouseUp(): Promise<void>;
   releaseAndPause(): Promise<void>;
-  detectAppleHand(
-    jpeg: Uint8Array,
-    capturedAtMs: number,
-  ): Promise<import("./vision/appleVisionTypes").AppleVisionObservation | null>;
   saveGestureTrace(json: string): Promise<"saved" | "cancelled">;
-  saveHandSample(json: string): Promise<"saved" | "cancelled">;
   openAccessibilitySettings(): Promise<void>;
   onSafetyPause(listener: () => void): () => void;
 }

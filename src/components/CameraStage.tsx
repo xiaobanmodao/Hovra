@@ -4,7 +4,6 @@ import type { Landmark } from "../gesture/types";
 type CameraStageProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
   landmarks: Landmark[] | null;
-  secondaryLandmarks?: Landmark[] | null;
   onCameraReady: () => void;
   onCameraError: (message: string) => void;
   onCameraRetry: () => void;
@@ -33,7 +32,6 @@ const cameraErrorMessage = (error: unknown): string => {
 export function CameraStage({
   videoRef,
   landmarks,
-  secondaryLandmarks = null,
   onCameraReady,
   onCameraError,
   onCameraRetry,
@@ -122,14 +120,14 @@ export function CameraStage({
     setRetryAttempt((attempt) => attempt + 1);
   };
 
-  const drawOverlay = useCallback((points: Landmark[] | null, secondaryPoints: Landmark[] | null) => {
+  const drawOverlay = useCallback((points: Landmark[] | null) => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) {
       return;
     }
 
-    if (!points && !secondaryPoints && !hasDrawnLandmarksRef.current) {
+    if (!points && !hasDrawnLandmarksRef.current) {
       return;
     }
 
@@ -146,20 +144,19 @@ export function CameraStage({
     }
 
     context.clearRect(0, 0, width, height);
-    if (!points && !secondaryPoints) {
+    if (!points) {
       hasDrawnLandmarksRef.current = false;
       return;
     }
 
     hasDrawnLandmarksRef.current = true;
 
-    if (points) drawHand(context, points, width, height, "rgba(91, 214, 255, 0.72)", "#ffffff", 3, 5);
-    if (secondaryPoints) drawHand(context, secondaryPoints, width, height, "rgba(255, 174, 66, 0.96)", "#ffd08a", 4, 4);
+    drawHand(context, points, width, height, "rgba(91, 214, 255, 0.72)", "#ffffff", 3, 5);
   }, [videoRef]);
 
   useEffect(() => {
-    drawOverlay(landmarks, secondaryLandmarks);
-  }, [drawOverlay, landmarks, secondaryLandmarks]);
+    drawOverlay(landmarks);
+  }, [drawOverlay, landmarks]);
 
   return (
     <section className="camera-panel" aria-labelledby="camera-title">
@@ -180,7 +177,6 @@ export function CameraStage({
           aria-label="镜像摄像头预览"
         />
         <canvas ref={canvasRef} aria-hidden="true" />
-        {secondaryLandmarks && <div className="model-overlay-label">蓝色：MediaPipe　橙色：Apple Vision</div>}
         <div className="camera-reticle" aria-hidden="true" />
         {cameraError && (
           <div className="camera-error" role="alert">
