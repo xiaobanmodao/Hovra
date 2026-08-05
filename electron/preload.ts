@@ -15,6 +15,8 @@ const channels = {
   openAccessibilitySettings: "gesture:open-accessibility-settings",
   safetyPause: "gesture:safety-pause",
   saveTrace: "gesture:save-trace",
+  saveHandSample: "gesture:save-hand-sample",
+  detectAppleHand: "gesture:detect-apple-hand",
 } as const;
 
 type PermissionStatus = "granted" | "denied";
@@ -76,6 +78,18 @@ const gestureDesktop = {
   mouseUp: (): Promise<void> => ipcRenderer.invoke(channels.mouseUp),
   releaseAndPause: (): Promise<void> =>
     ipcRenderer.invoke(channels.releaseAndPause),
+  detectAppleHand: (jpeg: Uint8Array, capturedAtMs: number) => {
+    if (!(jpeg instanceof Uint8Array) || jpeg.byteLength === 0) {
+      return Promise.reject(new TypeError("Apple Vision requires non-empty JPEG data"));
+    }
+    if (jpeg.byteLength > 400 * 1024) {
+      return Promise.reject(new TypeError("Apple Vision JPEG must not exceed 400 KiB"));
+    }
+    if (!Number.isFinite(capturedAtMs) || capturedAtMs < 0) {
+      return Promise.reject(new TypeError("Apple Vision capture timestamp must be finite and non-negative"));
+    }
+    return ipcRenderer.invoke(channels.detectAppleHand, { jpeg, capturedAtMs });
+  },
   saveGestureTrace: (json: string): Promise<"saved" | "cancelled"> => {
     if (typeof json !== "string" || new TextEncoder().encode(json).byteLength > 2 * 1024 * 1024) {
       return Promise.reject(new TypeError("Gesture trace must not exceed 2 MiB"));
@@ -89,12 +103,28 @@ const gestureDesktop = {
     if (
       typeof value !== "object"
       || value === null
-      || (value as { version?: unknown }).version !== 1
+      || !Number.isInteger((value as { version?: unknown }).version)
+      || ((value as { version: number }).version < 1 || (value as { version: number }).version > 5)
       || !Array.isArray((value as { frames?: unknown }).frames)
     ) {
-      return Promise.reject(new TypeError("Gesture trace must use version 1"));
+      return Promise.reject(new TypeError("Gesture trace must use version 1 to 5"));
     }
     return ipcRenderer.invoke(channels.saveTrace, json);
+  },
+  saveHandSample: (json: string): Promise<"saved" | "cancelled"> => {
+    if (typeof json !== "string" || new TextEncoder().encode(json).byteLength > 1024 * 1024) {
+      return Promise.reject(new TypeError("Hand sample must not exceed 1 MiB"));
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(json);
+    } catch {
+      return Promise.reject(new TypeError("Hand sample must be valid JSON"));
+    }
+    if (typeof value !== "object" || value === null || (value as { version?: unknown }).version !== 1) {
+      return Promise.reject(new TypeError("Hand sample must use version 1"));
+    }
+    return ipcRenderer.invoke(channels.saveHandSample, json);
   },
   openAccessibilitySettings: (): Promise<void> =>
     ipcRenderer.invoke(channels.openAccessibilitySettings),

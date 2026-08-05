@@ -2,6 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import { GestureEngine } from "./gestureEngine";
 import { makeGestureHand } from "./fixtures/stable-gesture-sequences";
+import type { AppleVisionObservation } from "../vision/appleVisionTypes";
+
+const visionObservation = (
+  gesture: "tracking" | "left",
+  capturedAtMs: number,
+): AppleVisionObservation => ({
+  landmarks: makeGestureHand(gesture),
+  confidences: Array.from({ length: 21 }, () => 0.95),
+  capturedAtMs,
+  inferenceMs: 11,
+});
+
+const sideViewWorld = (gesture: "tracking" | "left") => makeGestureHand(gesture).map((point) => ({
+  x: point.x,
+  y: 0.5,
+  z: point.y,
+}));
 
 describe("GestureEngine 简化模式", () => {
   it("confirms a stable left pinch and clicks once after release", () => {
@@ -136,6 +153,46 @@ describe("GestureEngine 简化模式", () => {
     for (let at = 0; at <= 96; at += 16) {
       expect(engine.update(left, at, null).lockedGesture).toBeNull();
     }
+  });
+
+  it("recognizes a side-view pinch from three distinct Apple Vision contact frames", () => {
+    const engine = new GestureEngine();
+    const misleadingImage = makeGestureHand("tracking");
+
+    engine.update(misleadingImage, 0, sideViewWorld("tracking"), 5, 1, visionObservation("tracking", 0));
+    const firstContact = engine.update(
+      misleadingImage,
+      80,
+      sideViewWorld("tracking"),
+      5,
+      1,
+      visionObservation("left", 80),
+    );
+    expect(firstContact).toMatchObject({
+      phase: "candidate",
+      diagnostics: {
+        pinchModelMode: "dual",
+        pinchRequiredVotes: 3,
+      },
+    });
+    engine.update(misleadingImage, 160, sideViewWorld("tracking"), 5, 1, visionObservation("left", 160));
+    const active = engine.update(
+      misleadingImage,
+      240,
+      sideViewWorld("tracking"),
+      5,
+      1,
+      visionObservation("left", 240),
+    );
+
+    expect(active).toMatchObject({
+      lockedGesture: "left",
+      diagnostics: {
+        pinchModelMode: "dual",
+        visionConfidence: 0.95,
+        modelAgreement: false,
+      },
+    });
   });
 
   it("tolerates one missing world frame during a real locked pinch", () => {

@@ -14,15 +14,25 @@ export type DetectedHand = {
 
 export const createHandLandmarker = async (): Promise<HandLandmarker> => {
   const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE_URL);
-
-  return HandLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath: HAND_LANDMARKER_MODEL_URL },
+  const options = {
     runningMode: "VIDEO",
     numHands: 1,
     minHandDetectionConfidence: 0.35,
     minHandPresenceConfidence: 0.35,
     minTrackingConfidence: 0.35,
-  });
+  } as const;
+
+  try {
+    return await HandLandmarker.createFromOptions(vision, {
+      ...options,
+      baseOptions: { modelAssetPath: HAND_LANDMARKER_MODEL_URL, delegate: "GPU" },
+    });
+  } catch {
+    return HandLandmarker.createFromOptions(vision, {
+      ...options,
+      baseOptions: { modelAssetPath: HAND_LANDMARKER_MODEL_URL },
+    });
+  }
 };
 
 export const detectFirstHand = (

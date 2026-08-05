@@ -5,7 +5,7 @@ import {
 import type { PinchFrameFeatures } from "./pinchFeatures";
 import type { PinchQuality } from "./pinchQuality";
 
-export type PinchBlockingReason = "none" | "image" | "depth" | "pose" | "approach";
+export type PinchBlockingReason = "none" | "image" | "depth" | "pose" | "approach" | "vision";
 
 export type PinchProbabilityResult = {
   probability: number;

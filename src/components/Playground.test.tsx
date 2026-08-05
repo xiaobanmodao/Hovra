@@ -41,6 +41,12 @@ const idle: GestureOutput = {
     pinchRequiredVotes: 2,
     effectiveFps: null,
     inferenceMs: null,
+    pinchModelMode: "mediapipe",
+    visionPinchRatio: null,
+    visionConfidence: null,
+    visionAgeMs: null,
+    visionInferenceMs: null,
+    modelAgreement: null,
   },
 };
 

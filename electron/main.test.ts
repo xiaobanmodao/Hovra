@@ -36,6 +36,9 @@ const mainMocks = vi.hoisted(() => ({
   setName: vi.fn(),
   whenReady: vi.fn().mockResolvedValue(undefined),
   saveGestureTrace: vi.fn().mockResolvedValue("saved"),
+  saveHandSample: vi.fn().mockResolvedValue("saved"),
+  appleVisionDetect: vi.fn().mockResolvedValue({ landmarks: [], confidences: [] }),
+  appleVisionDispose: vi.fn(),
   isTrustedAccessibilityClient: vi.fn().mockReturnValue(true),
   mouse: {
     move: vi.fn().mockResolvedValue(undefined),
@@ -176,6 +179,15 @@ vi.mock("./mouseController", async (importOriginal) => {
 vi.mock("./systemMouseAdapter", () => ({ systemMouse: mainMocks.mouse }));
 vi.mock("./gestureTraceExporter", () => ({
   saveGestureTrace: mainMocks.saveGestureTrace,
+}));
+vi.mock("./handSampleExporter", () => ({
+  saveHandSample: mainMocks.saveHandSample,
+}));
+vi.mock("./appleVisionClient", () => ({
+  AppleVisionClient: class {
+    detect = mainMocks.appleVisionDetect;
+    dispose = mainMocks.appleVisionDispose;
+  },
 }));
 
 async function bootMain(devServerUrl: string | undefined) {
@@ -592,6 +604,42 @@ describe("main IPC trust boundary", () => {
 
     await expect(handler?.({ sender: window.webContents, senderFrame: topFrame }, json)).resolves.toBe("saved");
     expect(mainMocks.saveGestureTrace).toHaveBeenCalledWith(json);
+  });
+
+  it("runs Apple Vision only for a trusted top-level renderer and bounded payload", async () => {
+    const window = await bootMain("http://localhost:5173");
+    const topFrame: { url: string; top?: unknown } = {
+      url: "http://localhost:5173/index.html",
+    };
+    topFrame.top = topFrame;
+    const handler = mainMocks.ipcHandlers.get("gesture:detect-apple-hand");
+    const payload = { jpeg: new Uint8Array([1, 2, 3]), capturedAtMs: 120 };
+
+    await expect(handler?.({ sender: {}, senderFrame: topFrame }, payload)).resolves.toBeNull();
+    expect(mainMocks.appleVisionDetect).not.toHaveBeenCalled();
+
+    await expect(handler?.({ sender: window.webContents, senderFrame: topFrame }, payload))
+      .resolves.toEqual({ landmarks: [], confidences: [] });
+    expect(mainMocks.appleVisionDetect).toHaveBeenCalledWith(payload.jpeg, 120);
+
+    await expect(handler?.(
+      { sender: window.webContents, senderFrame: topFrame },
+      { jpeg: new Uint8Array(400 * 1024 + 1), capturedAtMs: 120 },
+    )).resolves.toBeNull();
+    expect(mainMocks.appleVisionDetect).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves a hand sample only for the trusted top-level renderer", async () => {
+    const window = await bootMain("http://localhost:5173");
+    const topFrame: { url: string; top?: unknown } = { url: "http://localhost:5173/index.html" };
+    topFrame.top = topFrame;
+    const handler = mainMocks.ipcHandlers.get("gesture:save-hand-sample");
+    const json = JSON.stringify({ version: 1 });
+
+    await expect(handler?.({ sender: {}, senderFrame: topFrame }, json)).resolves.toBe("cancelled");
+    expect(mainMocks.saveHandSample).not.toHaveBeenCalled();
+    await expect(handler?.({ sender: window.webContents, senderFrame: topFrame }, json)).resolves.toBe("saved");
+    expect(mainMocks.saveHandSample).toHaveBeenCalledWith(json);
   });
 });
 

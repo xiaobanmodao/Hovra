@@ -57,6 +57,7 @@ const pinchBlockingReasons: Record<PinchBlockingReason, string> = {
   depth: "空间深度证据不一致",
   pose: "手指姿态不像真实接触",
   approach: "尚未观察到靠近过程",
+  vision: "原生手部模型判定指尖尚未接触",
 };
 
 export function pinchQualityReasonLabel(reason: PinchQualityReason): string {

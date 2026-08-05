@@ -4,6 +4,7 @@ import type { Landmark } from "../gesture/types";
 type CameraStageProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
   landmarks: Landmark[] | null;
+  secondaryLandmarks?: Landmark[] | null;
   onCameraReady: () => void;
   onCameraError: (message: string) => void;
   onCameraRetry: () => void;
@@ -32,6 +33,7 @@ const cameraErrorMessage = (error: unknown): string => {
 export function CameraStage({
   videoRef,
   landmarks,
+  secondaryLandmarks = null,
   onCameraReady,
   onCameraError,
   onCameraRetry,
@@ -120,14 +122,14 @@ export function CameraStage({
     setRetryAttempt((attempt) => attempt + 1);
   };
 
-  const drawOverlay = useCallback((points: Landmark[] | null) => {
+  const drawOverlay = useCallback((points: Landmark[] | null, secondaryPoints: Landmark[] | null) => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) {
       return;
     }
 
-    if (!points && !hasDrawnLandmarksRef.current) {
+    if (!points && !secondaryPoints && !hasDrawnLandmarksRef.current) {
       return;
     }
 
@@ -144,40 +146,20 @@ export function CameraStage({
     }
 
     context.clearRect(0, 0, width, height);
-    if (!points) {
+    if (!points && !secondaryPoints) {
       hasDrawnLandmarksRef.current = false;
       return;
     }
 
     hasDrawnLandmarksRef.current = true;
 
-    context.lineCap = "round";
-    context.lineWidth = 3;
-    context.strokeStyle = "rgba(91, 214, 255, 0.82)";
-    for (const [fromIndex, toIndex] of HAND_CONNECTIONS) {
-      const from = points[fromIndex];
-      const to = points[toIndex];
-      if (!from || !to) {
-        continue;
-      }
-
-      context.beginPath();
-      context.moveTo(from.x * width, from.y * height);
-      context.lineTo(to.x * width, to.y * height);
-      context.stroke();
-    }
-
-    context.fillStyle = "#ffffff";
-    for (const point of points) {
-      context.beginPath();
-      context.arc(point.x * width, point.y * height, 5, 0, Math.PI * 2);
-      context.fill();
-    }
+    if (points) drawHand(context, points, width, height, "rgba(91, 214, 255, 0.72)", "#ffffff", 3, 5);
+    if (secondaryPoints) drawHand(context, secondaryPoints, width, height, "rgba(255, 174, 66, 0.96)", "#ffd08a", 4, 4);
   }, [videoRef]);
 
   useEffect(() => {
-    drawOverlay(landmarks);
-  }, [drawOverlay, landmarks]);
+    drawOverlay(landmarks, secondaryLandmarks);
+  }, [drawOverlay, landmarks, secondaryLandmarks]);
 
   return (
     <section className="camera-panel" aria-labelledby="camera-title">
@@ -198,6 +180,7 @@ export function CameraStage({
           aria-label="镜像摄像头预览"
         />
         <canvas ref={canvasRef} aria-hidden="true" />
+        {secondaryLandmarks && <div className="model-overlay-label">蓝色：MediaPipe　橙色：Apple Vision</div>}
         <div className="camera-reticle" aria-hidden="true" />
         {cameraError && (
           <div className="camera-error" role="alert">
@@ -208,4 +191,34 @@ export function CameraStage({
       </div>
     </section>
   );
+}
+
+function drawHand(
+  context: CanvasRenderingContext2D,
+  points: Landmark[],
+  width: number,
+  height: number,
+  strokeStyle: string,
+  fillStyle: string,
+  lineWidth: number,
+  radius: number,
+): void {
+  context.lineCap = "round";
+  context.lineWidth = lineWidth;
+  context.strokeStyle = strokeStyle;
+  for (const [fromIndex, toIndex] of HAND_CONNECTIONS) {
+    const from = points[fromIndex];
+    const to = points[toIndex];
+    if (!from || !to) continue;
+    context.beginPath();
+    context.moveTo(from.x * width, from.y * height);
+    context.lineTo(to.x * width, to.y * height);
+    context.stroke();
+  }
+  context.fillStyle = fillStyle;
+  for (const point of points) {
+    context.beginPath();
+    context.arc(point.x * width, point.y * height, radius, 0, Math.PI * 2);
+    context.fill();
+  }
 }

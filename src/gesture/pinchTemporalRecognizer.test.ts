@@ -47,6 +47,34 @@ describe("PinchTemporalRecognizer", () => {
     });
   });
 
+  it("requires three agreeing observations in a five-observation dual-model window", () => {
+    const recognizer = new PinchTemporalRecognizer();
+
+    expect(recognizer.update(result(0.9), 0, true, true)).toMatchObject({
+      phase: "candidate",
+      enterVotes: 1,
+      requiredVotes: 3,
+    });
+    expect(recognizer.update(result(0.9), 80, true, true).phase).toBe("candidate");
+    expect(recognizer.update(result(0.9), 160, true, true)).toMatchObject({
+      phase: "active",
+      activated: true,
+      enterVotes: 3,
+      requiredVotes: 3,
+    });
+  });
+
+  it("does not count a duplicated dual-model observation", () => {
+    const recognizer = new PinchTemporalRecognizer();
+
+    recognizer.update(result(0.9), 0, true, true);
+    expect(recognizer.update(result(0.9), 16, false, true)).toMatchObject({
+      phase: "candidate",
+      enterVotes: 1,
+      requiredVotes: 3,
+    });
+  });
+
   it("ignores stale frames instead of counting them as votes", () => {
     const recognizer = new PinchTemporalRecognizer();
 

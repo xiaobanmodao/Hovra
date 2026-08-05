@@ -260,6 +260,13 @@ h2 {
   font-weight: 800;
 }
 
+.diagnostic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .recognition-diagnostics dl {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -771,6 +778,20 @@ h2 {
 }
 
 .camera-media canvas {
+  pointer-events: none;
+}
+
+.model-overlay-label {
+  position: absolute;
+  z-index: 1;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.45rem;
+  color: #f7fbff;
+  background: rgba(3, 9, 19, 0.72);
+  font-size: 0.68rem;
   pointer-events: none;
 }
 

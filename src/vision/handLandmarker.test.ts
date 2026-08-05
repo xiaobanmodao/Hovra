@@ -27,8 +27,28 @@ it("creates a video-mode landmarker that detects one hand", async () => {
     minHandDetectionConfidence: 0.35,
     minHandPresenceConfidence: 0.35,
     minTrackingConfidence: 0.35,
-    baseOptions: expect.objectContaining({ modelAssetPath: expect.any(String) }),
+    baseOptions: expect.objectContaining({
+      modelAssetPath: expect.any(String),
+      delegate: "GPU",
+    }),
   }));
+});
+
+it("falls back to CPU when the GPU delegate cannot initialize", async () => {
+  const wasmFileset = { wasmLoaderPath: "loader", wasmBinaryPath: "binary" };
+  const landmarker = { detectForVideo: vi.fn() };
+  mediaPipe.forVisionTasks.mockResolvedValue(wasmFileset);
+  mediaPipe.createFromOptions
+    .mockRejectedValueOnce(new Error("WebGL unavailable"))
+    .mockResolvedValueOnce(landmarker);
+
+  await expect(createHandLandmarker()).resolves.toBe(landmarker);
+  expect(mediaPipe.createFromOptions).toHaveBeenLastCalledWith(
+    wasmFileset,
+    expect.objectContaining({
+      baseOptions: expect.not.objectContaining({ delegate: "GPU" }),
+    }),
+  );
 });
 
 it("returns matched image and world landmarks for only the first detected hand", () => {

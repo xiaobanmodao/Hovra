@@ -11,10 +11,11 @@ import {
 type GestureDiagnosticsProps = {
   output: GestureOutput;
   onSaveTrace?: () => Promise<"saved" | "cancelled">;
+  onSaveHandSample?: () => Promise<"saved" | "cancelled" | "unavailable">;
 };
 
-const numberOrDash = (value: number | null, precision = 3): string =>
-  value === null ? "—" : value.toFixed(precision);
+const numberOrDash = (value: number | null | undefined, precision = 3): string =>
+  value == null ? "—" : value.toFixed(precision);
 
 const palmFacingLabel = (score: number | null): string => {
   if (score === null) return "—";
@@ -22,7 +23,7 @@ const palmFacingLabel = (score: number | null): string => {
   return `${label}（${score.toFixed(3)}）`;
 };
 
-export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsProps) {
+export function GestureDiagnostics({ output, onSaveTrace, onSaveHandSample }: GestureDiagnosticsProps) {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const diagnostics = output.diagnostics;
   const progressQuarter = Math.min(4, Math.max(0, Math.round(output.confirmationProgress * 4)));
@@ -37,17 +38,34 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
     }
   };
 
+  const saveHandSample = async () => {
+    setSaveStatus(null);
+    try {
+      const result = await onSaveHandSample?.();
+      setSaveStatus(
+        result === "saved"
+          ? "当前手部样本已保存到本机"
+          : result === "unavailable" ? "暂无可保存的手部样本" : "已取消保存",
+      );
+    } catch {
+      setSaveStatus("手部样本保存失败");
+    }
+  };
+
   return (
     <section className="recognition-diagnostics" aria-labelledby="recognition-diagnostics-title">
       <div className="recognition-diagnostics-heading">
         <div>
-          <p className="eyebrow">识别引擎 V4</p>
+          <p className="eyebrow">识别引擎 V5</p>
           <h2 id="recognition-diagnostics-title">手势诊断</h2>
         </div>
         {onSaveTrace && (
-          <button type="button" onClick={() => void saveTrace()}>
-            保存诊断记录
-          </button>
+          <div className="diagnostic-actions">
+            <button type="button" onClick={() => void saveTrace()}>保存诊断记录</button>
+            {onSaveHandSample && (
+              <button type="button" onClick={() => void saveHandSample()}>保存当前手部样本（仅本机）</button>
+            )}
+          </div>
         )}
       </div>
       <dl>
@@ -66,6 +84,20 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
             .map((value) => numberOrDash(value)).join(" / ")}</dd>
         </div>
         <div><dt>世界捏合比例</dt><dd>{numberOrDash(diagnostics.worldLeftPinchRatio)}</dd></div>
+        <div><dt>判定模型</dt><dd>{diagnostics.pinchModelMode === "dual" ? "双模型融合" : "MediaPipe"}</dd></div>
+        <div><dt>原生模型捏合比例</dt><dd>{numberOrDash(diagnostics.visionPinchRatio)}</dd></div>
+        <div><dt>原生模型置信度</dt><dd>{diagnostics.visionConfidence == null
+          ? "—"
+          : `${Math.round(diagnostics.visionConfidence * 100)}%`}</dd></div>
+        <div><dt>原生结果年龄</dt><dd>{diagnostics.visionAgeMs == null
+          ? "—"
+          : `${diagnostics.visionAgeMs.toFixed(0)} 毫秒`}</dd></div>
+        <div><dt>原生推理耗时</dt><dd>{diagnostics.visionInferenceMs == null
+          ? "—"
+          : `${diagnostics.visionInferenceMs.toFixed(1)} 毫秒`}</dd></div>
+        <div><dt>模型一致性</dt><dd>{diagnostics.modelAgreement == null
+          ? "—"
+          : diagnostics.modelAgreement ? "一致" : "不一致（已采用安全判定）"}</dd></div>
         <div><dt>深度验证</dt><dd>{diagnostics.pinchDepthReliable ? "可靠" : "不可用"}</dd></div>
         <div><dt>滚动评分</dt><dd>{numberOrDash(diagnostics.scrollPoseScore)}</dd></div>
         <div><dt>质量</dt><dd>{Math.round(diagnostics.quality * 100)}%</dd></div>

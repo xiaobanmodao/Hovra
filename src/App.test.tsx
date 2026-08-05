@@ -76,7 +76,9 @@ const desktopApi = (): GestureDesktopApi => ({
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),
   releaseAndPause: vi.fn().mockResolvedValue(undefined),
+  detectAppleHand: vi.fn().mockResolvedValue(null),
   saveGestureTrace: vi.fn().mockResolvedValue("saved"),
+  saveHandSample: vi.fn().mockResolvedValue("saved"),
   openAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
   onSafetyPause: vi.fn(() => vi.fn()),
 });
@@ -137,6 +139,26 @@ it("moves the desktop pointer from a tracking hand", async () => {
 
   await waitFor(() => expect(bridge.move).toHaveBeenCalledWith(
     expect.any(Number), expect.any(Number), "tracking",
+  ));
+});
+
+it("sends a bounded camera frame to the native Apple Vision model", async () => {
+  const { bridge, runFrame, video } = await renderDesktopApp();
+  Object.defineProperty(video, "videoWidth", { configurable: true, value: 1280 });
+  Object.defineProperty(video, "videoHeight", { configurable: true, value: 720 });
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage: vi.fn(),
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => {
+    callback(new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" }));
+  });
+  await act(async () => Promise.resolve());
+
+  runFrame(100);
+
+  await waitFor(() => expect(bridge.detectAppleHand).toHaveBeenCalledWith(
+    expect.any(Uint8Array),
+    100,
   ));
 });
 

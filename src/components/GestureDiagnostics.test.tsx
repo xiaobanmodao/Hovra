@@ -41,6 +41,12 @@ const output: GestureOutput = {
     pinchRequiredVotes: 3,
     effectiveFps: 58.4,
     inferenceMs: 9.2,
+    pinchModelMode: "mediapipe",
+    visionPinchRatio: null,
+    visionConfidence: null,
+    visionAgeMs: null,
+    visionInferenceMs: null,
+    modelAgreement: null,
   },
 };
 
@@ -67,7 +73,7 @@ describe("GestureDiagnostics", () => {
     expect(screen.getByText("可靠")).toBeInTheDocument();
     expect(screen.getByText("0.430")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.getByText("接触概率")).toBeInTheDocument();
     expect(screen.getByText("81%")) .toBeInTheDocument();
     expect(screen.getByText("世界坐标质量")).toBeInTheDocument();
@@ -82,13 +88,21 @@ describe("GestureDiagnostics", () => {
 
   it("offers explicit local export only when a desktop callback is provided", async () => {
     const onSaveTrace = vi.fn().mockResolvedValue("saved");
+    const onSaveHandSample = vi.fn().mockResolvedValue("saved");
     const { rerender } = render(<GestureDiagnostics output={output} />);
     expect(screen.queryByRole("button", { name: "保存诊断记录" })).not.toBeInTheDocument();
 
-    rerender(<GestureDiagnostics output={output} onSaveTrace={onSaveTrace} />);
+    rerender(<GestureDiagnostics
+      output={output}
+      onSaveTrace={onSaveTrace}
+      onSaveHandSample={onSaveHandSample}
+    />);
     fireEvent.click(screen.getByRole("button", { name: "保存诊断记录" }));
 
     expect(onSaveTrace).toHaveBeenCalledOnce();
     expect(await screen.findByText("诊断记录已保存到本机")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存当前手部样本（仅本机）" }));
+    expect(onSaveHandSample).toHaveBeenCalledOnce();
+    expect(await screen.findByText("当前手部样本已保存到本机")).toBeInTheDocument();
   });
 });

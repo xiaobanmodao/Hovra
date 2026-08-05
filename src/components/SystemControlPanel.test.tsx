@@ -17,7 +17,9 @@ const desktopApi = (
   mouseDown: vi.fn().mockResolvedValue(undefined),
   mouseUp: vi.fn().mockResolvedValue(undefined),
   releaseAndPause: vi.fn().mockResolvedValue(undefined),
+  detectAppleHand: vi.fn().mockResolvedValue(null),
   saveGestureTrace: vi.fn().mockResolvedValue("saved"),
+  saveHandSample: vi.fn().mockResolvedValue("saved"),
   openAccessibilitySettings: vi.fn().mockResolvedValue(undefined),
   onSafetyPause: vi.fn(() => vi.fn()),
 });

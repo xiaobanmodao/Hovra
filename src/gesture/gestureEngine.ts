@@ -5,9 +5,14 @@ import {
   type PinchBoundaries,
 } from "./config";
 import { GestureClassifier } from "./gestureClassifier";
+import {
+  DualModelPinchFusion,
+  extractSecondaryPinchEvidence,
+  type PinchFusionOutput,
+} from "./dualModelPinchFusion";
 import { extractGestureFeatures, type GestureFeatures } from "./gestureFeatures";
 import { GestureStabilizer, type GestureStabilizerOutput } from "./gestureStabilizer";
-import { GestureTraceBuffer, type GestureTraceV4, type TraceGestureEvent } from "./gestureTrace";
+import { GestureTraceBuffer, type GestureTraceV5, type TraceGestureEvent } from "./gestureTrace";
 import { buildHandGeometry, buildImageHandGeometry, type HandGeometry } from "./handGeometry";
 import { PinchFeatureExtractor, type PinchFrameFeatures } from "./pinchFeatures";
 import {
@@ -28,12 +33,14 @@ import {
   type GestureState,
   type Landmark,
 } from "./types";
+import type { AppleVisionObservation } from "../vision/appleVisionTypes";
 
 type PinchFrameDecision = {
   temporal: PinchTemporalOutput;
   features: PinchFrameFeatures | null;
   quality: PinchQuality | null;
   probability: PinchProbabilityResult | null;
+  fusion: PinchFusionOutput | null;
 };
 
 export class GestureEngine {
@@ -44,6 +51,7 @@ export class GestureEngine {
   private readonly pinchFeatureExtractor = new PinchFeatureExtractor();
   private readonly pinchQualityEstimator = new PinchQualityEstimator();
   private readonly pinchProbabilityEstimator: PinchProbabilityEstimator;
+  private readonly dualModelPinchFusion: DualModelPinchFusion;
   private readonly pinchTemporalRecognizer = new PinchTemporalRecognizer();
   private readonly trace = new GestureTraceBuffer();
   private lastCursor: Landmark | null = null;
@@ -60,6 +68,7 @@ export class GestureEngine {
       pinchBoundaries,
       settings.gestureSensitivity,
     );
+    this.dualModelPinchFusion = new DualModelPinchFusion(pinchBoundaries);
   }
 
   update(
@@ -68,6 +77,7 @@ export class GestureEngine {
     worldLandmarks: Landmark[] | null = null,
     inferenceMs: number | null = null,
     imageAspectRatio = 1,
+    appleVisionObservation: AppleVisionObservation | null = null,
   ): GestureOutput {
     const filtered = this.filter.update(landmarks, nowMs);
     const cursorGeometry = buildImageHandGeometry(filtered, imageAspectRatio);
@@ -81,7 +91,13 @@ export class GestureEngine {
       : null;
     const stabilized = this.stabilizer.update(openPalmCandidate, nowMs, features !== null);
     const pinch = actionGeometry
-      ? this.updatePinch(actionGeometry, worldGeometry, nowMs)
+      ? this.updatePinch(
+        actionGeometry,
+        worldGeometry,
+        nowMs,
+        features?.palmFacingScore ?? 1,
+        extractSecondaryPinchEvidence(appleVisionObservation, nowMs, imageAspectRatio),
+      )
       : this.updateMissingPinch(nowMs);
 
     if (cursorGeometry) {
@@ -104,7 +120,7 @@ export class GestureEngine {
     return output;
   }
 
-  getTrace(): GestureTraceV4 {
+  getTrace(): GestureTraceV5 {
     return this.trace.snapshot();
   }
 
@@ -116,15 +132,29 @@ export class GestureEngine {
     imageGeometry: HandGeometry,
     worldGeometry: HandGeometry | null,
     nowMs: number,
+    palmFacingScore: number,
+    secondaryEvidence: ReturnType<typeof extractSecondaryPinchEvidence>,
   ): PinchFrameDecision {
     const pinchFeatures = this.pinchFeatureExtractor.update(imageGeometry, worldGeometry, nowMs);
     const quality = this.pinchQualityEstimator.update(pinchFeatures, worldGeometry);
-    const probability = this.pinchProbabilityEstimator.update(pinchFeatures, quality);
+    const baseProbability = this.pinchProbabilityEstimator.update(pinchFeatures, quality);
+    const fusion = this.dualModelPinchFusion.update(
+      baseProbability,
+      pinchFeatures,
+      palmFacingScore,
+      secondaryEvidence,
+    );
     return {
-      temporal: this.pinchTemporalRecognizer.update(probability, nowMs, quality.usableForVoting),
+      temporal: this.pinchTemporalRecognizer.update(
+        fusion.probability,
+        nowMs,
+        fusion.strictVoting ? fusion.voteEligible : quality.usableForVoting,
+        fusion.strictVoting,
+      ),
       features: pinchFeatures,
       quality,
-      probability,
+      probability: fusion.probability,
+      fusion,
     };
   }
 
@@ -132,11 +162,13 @@ export class GestureEngine {
     this.pinchFeatureExtractor.reset();
     this.pinchQualityEstimator.reset();
     this.pinchProbabilityEstimator.reset();
+    this.dualModelPinchFusion.reset();
     return {
       temporal: this.pinchTemporalRecognizer.update(null, nowMs, false),
       features: null,
       quality: null,
       probability: null,
+      fusion: null,
     };
   }
 
@@ -237,6 +269,12 @@ export class GestureEngine {
         frameIntervalMs: pinch.features?.frameIntervalMs ?? null,
         inferenceMs,
         effectiveFps: effectiveFpsFor(pinch.features?.frameIntervalMs ?? null),
+        modelMode: pinch.fusion?.mode ?? "mediapipe",
+        visionPinchRatio: pinch.fusion?.evidence?.ratio ?? null,
+        visionConfidence: pinch.fusion?.evidence?.confidence ?? null,
+        visionAgeMs: pinch.fusion?.evidence?.ageMs ?? null,
+        visionInferenceMs: pinch.fusion?.evidence?.inferenceMs ?? null,
+        modelsAgree: pinch.fusion?.modelsAgree ?? null,
       } : null,
       phase: output.phase,
       candidate: output.candidate,
@@ -277,6 +315,12 @@ function diagnosticsFor(
     pinchRequiredVotes: pinch.temporal.requiredVotes,
     effectiveFps: effectiveFpsFor(pinch.features?.frameIntervalMs ?? null),
     inferenceMs: inferenceMs !== null && Number.isFinite(inferenceMs) ? Math.max(0, inferenceMs) : null,
+    pinchModelMode: pinch.fusion?.mode ?? "mediapipe",
+    visionPinchRatio: pinch.fusion?.evidence?.ratio ?? null,
+    visionConfidence: pinch.fusion?.evidence?.confidence ?? null,
+    visionAgeMs: pinch.fusion?.evidence?.ageMs ?? null,
+    visionInferenceMs: pinch.fusion?.evidence?.inferenceMs ?? null,
+    modelAgreement: pinch.fusion?.modelsAgree ?? null,
   };
 }
 

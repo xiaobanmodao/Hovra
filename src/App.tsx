@@ -22,6 +22,13 @@ import {
   type Landmark,
 } from "./gesture/types";
 import { createHandLandmarker, detectFirstHand } from "./vision/handLandmarker";
+import { AppleVisionScheduler, captureAppleVisionFrame } from "./vision/appleVisionFrame";
+import type { AppleVisionObservation } from "./vision/appleVisionTypes";
+import {
+  encodeJpegBase64,
+  serializeHandSample,
+  type HandSample,
+} from "./vision/handSample";
 
 const INITIAL_OUTPUT: GestureOutput = {
   state: "lost",
@@ -60,6 +67,12 @@ const INITIAL_OUTPUT: GestureOutput = {
     pinchRequiredVotes: 2,
     effectiveFps: null,
     inferenceMs: null,
+    pinchModelMode: "mediapipe",
+    visionPinchRatio: null,
+    visionConfidence: null,
+    visionAgeMs: null,
+    visionInferenceMs: null,
+    modelAgreement: null,
   },
 };
 
@@ -93,6 +106,9 @@ function App() {
   const mountedRef = useRef(true);
   const lastDispatchedOutputRef = useRef<GestureOutput>(INITIAL_OUTPUT);
   const safetyGenerationRef = useRef(0);
+  const appleVisionObservationRef = useRef<AppleVisionObservation | null>(null);
+  const latestHandSampleRef = useRef<HandSample | null>(null);
+  const appleVisionSchedulerRef = useRef<AppleVisionScheduler | null>(null);
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_GESTURE_SETTINGS }));
   const [pinchCalibration, setPinchCalibration] = useState<PinchCalibrationProfile | null>(() => (
     parsePinchCalibration(window.localStorage.getItem(PINCH_CALIBRATION_STORAGE_KEY))
@@ -108,10 +124,17 @@ function App() {
   const [trackerStatus, setTrackerStatus] = useState("等待摄像头");
   const [landmarker, setLandmarker] = useState<HandLandmarker | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
+  const [appleVisionLandmarks, setAppleVisionLandmarks] = useState<Landmark[] | null>(null);
   const [output, setOutput] = useState<GestureOutput>(INITIAL_OUTPUT);
   const [cursor, setCursor] = useState<Point | null>(null);
   const [systemCursor, setSystemCursor] = useState<Point | null>(null);
   const [systemControlEnabled, setSystemControlEnabled] = useState(false);
+  if (appleVisionSchedulerRef.current === null) {
+    appleVisionSchedulerRef.current = new AppleVisionScheduler((observation) => {
+      appleVisionObservationRef.current = observation;
+      setAppleVisionLandmarks(observation.landmarks);
+    });
+  }
   const currentPinchSample = useMemo<PinchCalibrationSample | null>(() => {
     const imageRatio = output.diagnostics.leftPinchRatio;
     const worldRatio = output.diagnostics.worldLeftPinchRatio;
@@ -132,6 +155,7 @@ function App() {
     setCameraStatus(message);
     setTrackerStatus("不可用");
     setLandmarks(null);
+    setAppleVisionLandmarks(null);
     setOutput(nextOutput);
   }, []);
 
@@ -140,6 +164,7 @@ function App() {
     setCameraStatus("正在请求摄像头权限");
     setTrackerStatus("等待摄像头");
     setLandmarks(null);
+    setAppleVisionLandmarks(null);
     setOutput(engineRef.current.update(null, performance.now()));
   }, []);
 
@@ -163,6 +188,11 @@ function App() {
   const handleSaveTrace = useCallback((): Promise<"saved" | "cancelled"> => {
     if (!desktopBridge) return Promise.resolve("cancelled");
     return desktopBridge.saveGestureTrace(engineRef.current.serializeTrace());
+  }, [desktopBridge]);
+
+  const handleSaveHandSample = useCallback((): Promise<"saved" | "cancelled" | "unavailable"> => {
+    if (!desktopBridge || !latestHandSampleRef.current) return Promise.resolve("unavailable");
+    return desktopBridge.saveHandSample(serializeHandSample(latestHandSampleRef.current));
   }, [desktopBridge]);
 
   const pauseSystemControl = useCallback((): Promise<void> => {
@@ -350,12 +380,41 @@ function App() {
           const imageAspectRatio = video.videoHeight > 0
             ? video.videoWidth / video.videoHeight
             : 1;
+          if (desktopBridge) {
+            appleVisionSchedulerRef.current?.schedule(nowMs, async () => {
+              const jpeg = await captureAppleVisionFrame(video);
+              const observation = await desktopBridge.detectAppleHand(jpeg, nowMs);
+              latestHandSampleRef.current = {
+                version: 1,
+                capturedAtMs: nowMs,
+                imageAspectRatio,
+                jpegBase64: encodeJpegBase64(jpeg),
+                mediaPipeLandmarks: nextLandmarks,
+                mediaPipeWorldLandmarks: nextWorldLandmarks,
+                appleVision: observation,
+                diagnostics: {
+                  palmFacingScore: nextOutput.diagnostics.palmFacingScore,
+                  mediaPipePinchRatio: nextOutput.diagnostics.leftPinchRatio,
+                  visionPinchRatio: nextOutput.diagnostics.visionPinchRatio,
+                  visionConfidence: nextOutput.diagnostics.visionConfidence,
+                  modelAgreement: nextOutput.diagnostics.modelAgreement,
+                  blockingReason: nextOutput.diagnostics.pinchBlockingReason,
+                },
+              };
+              if (!observation) {
+                appleVisionObservationRef.current = null;
+                setAppleVisionLandmarks(null);
+              }
+              return observation;
+            });
+          }
           const nextOutput = engine.update(
             nextLandmarks,
             nowMs,
             nextWorldLandmarks,
             inferenceMs,
             imageAspectRatio,
+            appleVisionObservationRef.current,
           );
 
           setLandmarks(nextLandmarks);
@@ -411,7 +470,7 @@ function App() {
       active = false;
       cancelAnimationFrame(animationFrame);
     };
-  }, [engine, landmarker, settings.cameraStaleFrameMs, settings.cursorOffsetX, settings.cursorOffsetY, settings.cursorSmoothingFactor]);
+  }, [desktopBridge, engine, landmarker, settings.cameraStaleFrameMs, settings.cursorOffsetX, settings.cursorOffsetY, settings.cursorSmoothingFactor]);
 
   return (
     <main className="app-shell">
@@ -450,12 +509,14 @@ function App() {
       <GestureDiagnostics
         output={output}
         onSaveTrace={desktopBridge ? handleSaveTrace : undefined}
+        onSaveHandSample={desktopBridge ? handleSaveHandSample : undefined}
       />
 
       <div className="gesture-workspace">
         <CameraStage
           videoRef={videoRef}
           landmarks={landmarks}
+          secondaryLandmarks={appleVisionLandmarks}
           onCameraReady={handleCameraReady}
           onCameraError={handleCameraError}
           onCameraRetry={handleCameraRetry}

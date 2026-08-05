@@ -6,7 +6,7 @@ import type { ForgeConfig } from "@electron-forge/shared-types";
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    extraResource: ["native/cursor-visibility.node"],
+    extraResource: ["native/cursor-visibility.node", "native/hand-pose-helper"],
     ignore: (file) =>
       Boolean(file) &&
       !file.startsWith("/.vite") &&

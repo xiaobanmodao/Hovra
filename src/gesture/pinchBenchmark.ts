@@ -1,4 +1,4 @@
-import type { GestureTraceV4 } from "./gestureTrace";
+import type { GestureTraceV5 } from "./gestureTrace";
 
 export type PinchBenchmarkLabel = "contact" | "separate" | "ignore";
 
@@ -13,7 +13,7 @@ export type PinchBenchmarkMetrics = {
 };
 
 export function benchmarkPinchTrace(
-  trace: GestureTraceV4,
+  trace: GestureTraceV5,
   labels: ReadonlyMap<number, PinchBenchmarkLabel>,
 ): PinchBenchmarkMetrics {
   let positives = 0;

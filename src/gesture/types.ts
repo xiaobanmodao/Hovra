@@ -70,6 +70,12 @@ export type GestureDiagnosticsSnapshot = {
   pinchRequiredVotes: number;
   effectiveFps: number | null;
   inferenceMs: number | null;
+  pinchModelMode: "mediapipe" | "dual";
+  visionPinchRatio: number | null;
+  visionConfidence: number | null;
+  visionAgeMs: number | null;
+  visionInferenceMs: number | null;
+  modelAgreement: boolean | null;
 };
 
 export type GestureSettings = {

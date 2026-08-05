@@ -21,6 +21,10 @@ const ADAPTIVE_KEYS = [
 const VIEW_KEYS = [
   "screenPinchGap", "imageAspectRatio", "worldPalmScale", "palmFacingScore",
 ] as const;
+const FUSION_KEYS = [
+  "modelMode", "visionPinchRatio", "visionConfidence", "visionAgeMs",
+  "visionInferenceMs", "modelsAgree",
+] as const;
 
 const frameAt = (t: number): GestureTraceFrame => ({
   t,
@@ -54,6 +58,12 @@ const frameAt = (t: number): GestureTraceFrame => ({
     frameIntervalMs: 16,
     inferenceMs: 8,
     effectiveFps: 62.5,
+    modelMode: "dual",
+    visionPinchRatio: 0.19,
+    visionConfidence: 0.93,
+    visionAgeMs: 42,
+    visionInferenceMs: 11,
+    modelsAgree: true,
   },
   phase: "neutral",
   candidate: null,
@@ -63,7 +73,7 @@ const frameAt = (t: number): GestureTraceFrame => ({
 });
 
 describe("GestureTraceBuffer", () => {
-  it("stores view-aware diagnostics in version 4 and copies them defensively", () => {
+  it("stores dual-model diagnostics in version 5 and copies them defensively", () => {
     const buffer = new GestureTraceBuffer();
     const input = {
       ...frameAt(10),
@@ -78,12 +88,16 @@ describe("GestureTraceBuffer", () => {
     buffer.push(input);
     input.worldLandmarks[0]!.x = 99;
 
-    expect(buffer.snapshot()).toMatchObject({ version: 4 });
+    expect(buffer.snapshot()).toMatchObject({ version: 5 });
     expect(buffer.snapshot().frames[0]!.features).toMatchObject({
       screenPinchGap: 0.03,
       imageAspectRatio: 16 / 9,
       worldPalmScale: 0.12,
       palmFacingScore: 0.18,
+      modelMode: "dual",
+      visionPinchRatio: 0.19,
+      visionConfidence: 0.93,
+      modelsAgree: true,
     });
     expect(buffer.snapshot().frames[0]!.worldLandmarks?.[0]!.x).toBe(0);
   });
@@ -168,10 +182,11 @@ describe("GestureTraceBuffer", () => {
     } = features!;
     ADAPTIVE_KEYS.forEach((key) => delete (legacyFeatures as Record<string, unknown>)[key]);
     VIEW_KEYS.forEach((key) => delete (legacyFeatures as Record<string, unknown>)[key]);
+    FUSION_KEYS.forEach((key) => delete (legacyFeatures as Record<string, unknown>)[key]);
     const legacyFrame = { ...legacyFields, features: legacyFeatures };
     const parsed = parseGestureTrace(JSON.stringify({ version: 1, frames: [legacyFrame] }));
 
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5);
     expect(parsed.frames[0]).toMatchObject({
       worldLandmarks: null,
       features: {
@@ -186,12 +201,13 @@ describe("GestureTraceBuffer", () => {
     const legacyFeatures = { ...currentFrame.features } as Record<string, unknown>;
     ADAPTIVE_KEYS.forEach((key) => delete legacyFeatures[key]);
     VIEW_KEYS.forEach((key) => delete legacyFeatures[key]);
+    FUSION_KEYS.forEach((key) => delete legacyFeatures[key]);
     const parsed = parseGestureTrace(JSON.stringify({
       version: 2,
       frames: [{ ...currentFrame, features: legacyFeatures }],
     }));
 
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5);
     expect(parsed.frames[0]!.features).toMatchObject({
       pinchProbability: null,
       worldQuality: 0,
@@ -204,17 +220,42 @@ describe("GestureTraceBuffer", () => {
     const currentFrame = frameAt(16);
     const legacyFeatures = { ...currentFrame.features } as Record<string, unknown>;
     VIEW_KEYS.forEach((key) => delete legacyFeatures[key]);
+    FUSION_KEYS.forEach((key) => delete legacyFeatures[key]);
     const parsed = parseGestureTrace(JSON.stringify({
       version: 3,
       frames: [{ ...currentFrame, features: legacyFeatures }],
     }));
 
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5);
     expect(parsed.frames[0]!.features).toMatchObject({
       screenPinchGap: null,
       imageAspectRatio: 1,
       worldPalmScale: null,
       palmFacingScore: null,
+    });
+  });
+
+  it("migrates version 4 without inventing Apple Vision evidence", () => {
+    const currentFrame = frameAt(16);
+    const legacyFeatures = { ...currentFrame.features } as Record<string, unknown>;
+    FUSION_KEYS.forEach((key) => delete legacyFeatures[key]);
+    const parsed = parseGestureTrace(JSON.stringify({
+      version: 4,
+      frames: [{ ...currentFrame, features: legacyFeatures }],
+    }));
+
+    expect(parsed).toMatchObject({
+      version: 5,
+      frames: [{
+        features: {
+          modelMode: "mediapipe",
+          visionPinchRatio: null,
+          visionConfidence: null,
+          visionAgeMs: null,
+          visionInferenceMs: null,
+          modelsAgree: null,
+        },
+      }],
     });
   });
 

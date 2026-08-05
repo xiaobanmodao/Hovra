@@ -18,7 +18,7 @@ export type PinchTemporalOutput = {
   requiredVotes: number;
 };
 
-type EnterVote = { entered: boolean; lowQuality: boolean };
+type EnterVote = { entered: boolean; mode: "normal" | "low-quality" | "dual" };
 
 export class PinchTemporalRecognizer {
   private phase: PinchTemporalPhase = "neutral";
@@ -32,6 +32,7 @@ export class PinchTemporalRecognizer {
     result: PinchProbabilityResult | null,
     nowMs: number,
     usableForVoting: boolean,
+    strictDualModelVoting = false,
   ): PinchTemporalOutput {
     if (!Number.isFinite(nowMs)) {
       this.reset();
@@ -56,13 +57,13 @@ export class PinchTemporalRecognizer {
     }
 
     if (!usableForVoting) {
-      const { enterVotes, requiredVotes } = this.currentVoteStats();
+      const { enterVotes, requiredVotes } = this.currentVoteStats(strictDualModelVoting);
       return this.output(this.phase, false, false, enterVotes, requiredVotes);
     }
     if (this.phase === "active" || this.phase === "releasing") {
       return this.updateActive(result, nowMs);
     }
-    return this.updateCandidate(result);
+    return this.updateCandidate(result, strictDualModelVoting);
   }
 
   reset(): void {
@@ -74,15 +75,16 @@ export class PinchTemporalRecognizer {
     this.lastTimestampMs = null;
   }
 
-  private updateCandidate(result: PinchProbabilityResult): PinchTemporalOutput {
+  private updateCandidate(result: PinchProbabilityResult, strictDualModelVoting: boolean): PinchTemporalOutput {
     const lowQuality = result.worldQuality < 0.6;
     this.enterWindow.push({
       entered: result.safetyGatePassed && result.probability >= result.entryThreshold,
-      lowQuality,
+      mode: strictDualModelVoting ? "dual" : lowQuality ? "low-quality" : "normal",
     });
-    const strictWindow = lowQuality || this.enterWindow.some((vote) => vote.lowQuality);
-    const windowSize = strictWindow ? 4 : 3;
-    const requiredVotes = strictWindow ? 3 : 2;
+    const dualWindow = strictDualModelVoting || this.enterWindow.some((vote) => vote.mode === "dual");
+    const lowQualityWindow = lowQuality || this.enterWindow.some((vote) => vote.mode === "low-quality");
+    const windowSize = dualWindow ? 5 : lowQualityWindow ? 4 : 3;
+    const requiredVotes = dualWindow || lowQualityWindow ? 3 : 2;
     while (this.enterWindow.length > windowSize) this.enterWindow.shift();
     const enterVotes = this.enterWindow.filter((vote) => vote.entered).length;
 
@@ -132,10 +134,11 @@ export class PinchTemporalRecognizer {
     return this.output("lost");
   }
 
-  private currentVoteStats(): { enterVotes: number; requiredVotes: number } {
+  private currentVoteStats(strictDualModelVoting = false): { enterVotes: number; requiredVotes: number } {
     return {
       enterVotes: this.enterWindow.filter((vote) => vote.entered).length,
-      requiredVotes: this.enterWindow.some((vote) => vote.lowQuality) ? 3 : 2,
+      requiredVotes: strictDualModelVoting
+        || this.enterWindow.some((vote) => vote.mode !== "normal") ? 3 : 2,
     };
   }
 

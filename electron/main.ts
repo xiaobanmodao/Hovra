@@ -11,6 +11,7 @@ import {
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
+import { spawn } from "node:child_process";
 
 import {
   createMouseController,
@@ -28,6 +29,8 @@ import {
   type NativeCursorVisibility,
 } from "./cursorVisibility";
 import { saveGestureTrace } from "./gestureTraceExporter";
+import { saveHandSample } from "./handSampleExporter";
+import { AppleVisionClient } from "./appleVisionClient";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -48,6 +51,7 @@ let cursorPulseSequence = 0;
 let activationFrame: WebFrameMain | undefined;
 let mouseController: MouseController | undefined;
 let cursorVisibility: CursorVisibilityController | undefined;
+let appleVisionClient: AppleVisionClient | undefined;
 let quitCleanupStarted = false;
 let quitCleanupComplete = false;
 
@@ -392,6 +396,7 @@ function canActivateRendererEvent(event: unknown): boolean {
 void app.whenReady().then(() => {
   configureChineseNativeInterface();
   cursorVisibility = createNativeCursorVisibility();
+  appleVisionClient = createAppleVisionClient();
   mouseController = createMouseController({
     permission: () =>
       process.platform === "darwin" &&
@@ -440,6 +445,16 @@ void app.whenReady().then(() => {
     if (!isTrustedRendererEvent(event)) return "cancelled";
     return saveGestureTrace(typeof json === "string" ? json : "");
   });
+  ipcMain.handle("gesture:save-hand-sample", async (event, json) => {
+    if (!isTrustedRendererEvent(event)) return "cancelled";
+    return saveHandSample(typeof json === "string" ? json : "");
+  });
+  ipcMain.handle("gesture:detect-apple-hand", async (event, payload) => {
+    if (!isTrustedRendererEvent(event) || !appleVisionClient || !isValidVisionPayload(payload)) {
+      return null;
+    }
+    return appleVisionClient.detect(payload.jpeg, payload.capturedAtMs);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -449,6 +464,7 @@ void app.whenReady().then(() => {
 });
 
 app.on("before-quit", (event) => {
+  appleVisionClient?.dispose();
   cursorVisibility?.show();
   cursorVisibility?.dispose();
   if (!mouseController || quitCleanupComplete) {
@@ -491,6 +507,29 @@ function createNativeCursorVisibility(): CursorVisibilityController | undefined 
     console.error("Failed to load native cursor visibility support", error);
     return undefined;
   }
+}
+
+function createAppleVisionClient(): AppleVisionClient | undefined {
+  if (process.platform !== "darwin") return undefined;
+  const helperPath = app.isPackaged
+    ? path.join(process.resourcesPath, "hand-pose-helper")
+    : path.join(__dirname, "../../native/hand-pose-helper");
+  return new AppleVisionClient({
+    spawn: () => spawn(helperPath, [], { stdio: ["pipe", "pipe", "ignore"] }),
+  });
+}
+
+function isValidVisionPayload(
+  value: unknown,
+): value is { jpeg: Uint8Array; capturedAtMs: number } {
+  if (typeof value !== "object" || value === null) return false;
+  const payload = value as { jpeg?: unknown; capturedAtMs?: unknown };
+  return payload.jpeg instanceof Uint8Array
+    && payload.jpeg.byteLength > 0
+    && payload.jpeg.byteLength <= 400 * 1024
+    && typeof payload.capturedAtMs === "number"
+    && Number.isFinite(payload.capturedAtMs)
+    && payload.capturedAtMs >= 0;
 }
 
 app.on("window-all-closed", () => {
