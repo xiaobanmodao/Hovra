@@ -5,6 +5,74 @@
   font-synthesis: none;
 }
 
+.stability-test-panel {
+  padding: 24px;
+  border: 1px solid rgba(123, 154, 255, 0.28);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(21, 29, 54, 0.96), rgba(12, 18, 35, 0.96));
+}
+
+.stability-test-heading,
+.stability-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stability-test-heading h2,
+.stability-running h3 { margin: 4px 0; }
+.stability-intro p { margin: 8px 0; color: var(--muted); }
+
+.stability-running {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) 1fr auto;
+  gap: 24px;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.stability-running img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 18px;
+  background: rgba(255,255,255,.05);
+}
+
+.stability-progress { color: #9eb6ff; font-weight: 700; }
+.stability-countdown { display: inline-block; margin: 8px 0; font-size: 1.5rem; }
+.stability-quality { padding: 10px 12px; border-radius: 12px; }
+.stability-quality.is-valid { background: rgba(80, 210, 150, .14); color: #86efbd; }
+.stability-quality.is-paused { background: rgba(255, 183, 77, .14); color: #ffd08a; }
+
+.stability-result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.stability-result-grid > div {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.05);
+}
+.stability-result-grid span { color: var(--muted); font-size: .88rem; }
+.stability-result-grid strong { font-size: 1.25rem; }
+.stability-recommendation { padding: 14px; border-radius: 14px; }
+.stability-recommendation.is-safe { background: rgba(80, 210, 150, .14); }
+.stability-recommendation.is-unsafe { background: rgba(255, 110, 110, .14); }
+
+@media (max-width: 760px) {
+  .stability-running { grid-template-columns: 1fr; }
+  .stability-running img { max-width: 260px; margin: 0 auto; }
+  .stability-result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 * {
   box-sizing: border-box;
 }
