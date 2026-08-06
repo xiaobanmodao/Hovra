@@ -1,6 +1,6 @@
 # Hovra
 
-基于普通摄像头的本机手势控制应用。当前只启用光标移动、拇指与食指捏合左键点击、张开手掌停止。识别全部在本机完成，不上传摄像头画面。
+基于普通摄像头的本机手势控制应用。当前启用光标移动、拇指与食指短捏合左键、保持食指捏合长按、拇指与中指短捏合右键，以及张开手掌停止。识别全部在本机完成，不上传摄像头画面。
 
 ## Commands
 
@@ -19,7 +19,7 @@
 npm run test:gesture-regression
 ```
 
-回归矩阵覆盖短捏合、长按、张掌停止、握拳、纵深分离和普通移动。失败表示动作发生了漏识别、重复、延迟超出允许时间窗或意外误触。轨迹只包含合成的 21 点手部关节点，不包含摄像头图片、视频、音频或个人信息。这两组回归测试也会由 `npm test` 和 GitHub CI 自动执行。
+回归矩阵覆盖左右键短捏合、长按、张掌停止、握拳、纵深分离、多指含糊和普通移动。失败表示动作发生了漏识别、重复、延迟超出允许时间窗或意外误触。轨迹只包含合成的 21 点手部关节点，不包含摄像头图片、视频、音频或个人信息。这两组回归测试也会由 `npm test` 和 GitHub CI 自动执行。
 
 ## Run locally
 
@@ -69,12 +69,13 @@ Gatekeeper system-wide; if macOS blocks the first launch, use Finder's normal
    or enable that exact packaged `.app`. Return to the app and confirm its status
    changes from **Permission required** to **Paused**.
 5. Click **Enable system control**, then verify a tracked index finger moves the
-   system pointer, two consecutive contact frames produce exactly one left click,
-   and an open palm stops movement.
+   system pointer, a thumb-index short pinch produces exactly one left click, a
+   thumb-middle short pinch produces exactly one right click, and an open palm
+   stops movement.
 6. Confirm clicking, opening the palm and temporarily removing the hand do not
    turn off the system-control switch. Only the user pause button or an application
-   lifecycle safety event may deactivate it. No disabled right-click, double-click,
-   drag, or scroll action may be emitted.
+   lifecycle safety event may deactivate it. No disabled double-click or scroll
+   action may be emitted.
 
 ## Manual verification checklist
 
@@ -84,6 +85,7 @@ After starting the demo locally, perform these acceptance checks:
 - [ ] Confirm the camera preview and keypoints are mirrored.
 - [ ] Move the index finger and observe the cursor move.
 - [ ] Perform a short pinch on the target and observe exactly one click.
+- [ ] Perform a thumb-middle short pinch on the target and observe exactly one right click.
 - [ ] Confirm the click target can be operated throughout the current viewport and remains visible after resizing.
 - [ ] Open the palm and confirm the cursor no longer moves.
 - [ ] Remove the hand and confirm the status changes to `lost`.

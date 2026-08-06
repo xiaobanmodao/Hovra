@@ -116,7 +116,7 @@ const renderDesktopApp = async (bridge = desktopApi()) => {
 it("renders the simplified interaction description", () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: "Hovra" })).toBeInTheDocument();
-  expect(screen.getByText("单手即可控制移动、左键点击、长按和张手停止。")).toBeInTheDocument();
+  expect(screen.getByText("单手即可控制移动、左键、右键、长按和张手停止。")).toBeInTheDocument();
 });
 
 it("moves the desktop pointer from a tracking hand", async () => {
@@ -178,6 +178,28 @@ it("稳定捏合后只在第二个释放帧点击一次且系统控制保持开�
   expect(bridge.doubleClick).not.toHaveBeenCalled();
   expect(bridge.scroll).not.toHaveBeenCalled();
   expect(bridge.mouseDown).not.toHaveBeenCalled();
+});
+
+it("右键短捏合先移动到锁定点再调用一次系统右键且保持控制开启", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  vi.mocked(bridge.move).mockClear();
+  runFrame(16, handAt("right"));
+  runFrame(32, handAt("right"));
+  runFrame(48, handAt("right"));
+
+  expect(bridge.rightClick).not.toHaveBeenCalled();
+  runFrame(64, handAt("tracking"));
+  runFrame(80, handAt("tracking"));
+
+  await waitFor(() => expect(bridge.rightClick).toHaveBeenCalledOnce());
+  expect(vi.mocked(bridge.move).mock.invocationCallOrder.at(-1))
+    .toBeLessThan(vi.mocked(bridge.rightClick).mock.invocationCallOrder[0]!);
+  expect(vi.mocked(bridge.move).mock.calls.map((call) => call[2])).toEqual(
+    expect.arrayContaining(["candidate-right", "right-pinching", "releasing-right"]),
+  );
+  expect(bridge.click).not.toHaveBeenCalled();
+  expect(bridge.mouseDown).not.toHaveBeenCalled();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
 });
 
 it("长按先移动到锁定点再按下，保持时拖动，释放时抬起", async () => {
@@ -247,7 +269,7 @@ it("世界坐标缺失或错误都不再阻断同帧真实接触", async () => {
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
 });
 
-it.each(["right", "double", "scroll"] as const)("does not dispatch the disabled %s action", async (gesture) => {
+it.each(["double", "scroll"] as const)("does not dispatch the disabled %s action", async (gesture) => {
   const { bridge, runFrame } = await renderDesktopApp();
   for (let at = 16; at <= 128; at += 16) runFrame(at, handAt(gesture));
 

@@ -101,11 +101,15 @@ const mapSystemPoint = (point: Landmark, settings: GestureSettings): Point => {
 };
 
 const desktopCursorState = (output: GestureOutput) => {
-  if (output.phase === "candidate" && output.candidate === "left") {
-    return "candidate-left" as const;
+  if (output.phase === "candidate") {
+    return output.candidate === "right"
+      ? "candidate-right" as const
+      : "candidate-left" as const;
   }
-  if (output.phase === "releasing" && output.lockedGesture === "left") {
-    return "releasing-left" as const;
+  if (output.phase === "releasing") {
+    return output.lockedGesture === "right"
+      ? "releasing-right" as const
+      : "releasing-left" as const;
   }
   return output.state === "lost" || output.state === "paused" ? "tracking" : output.state;
 };
@@ -380,6 +384,23 @@ function App() {
       });
       return;
     }
+    if (output.rightClick) {
+      const lockedCursor = output.clickCursor
+        ? mapSystemPoint(output.clickCursor, settings)
+        : systemCursor;
+      enqueueDesktopCommand(async () => {
+        if (lockedCursor) {
+          await desktopBridge.move(
+            lockedCursor.x,
+            lockedCursor.y,
+            desktopCursorState(output),
+            output.longPressProgress,
+          );
+        }
+        await desktopBridge.rightClick();
+      });
+      return;
+    }
     if (systemCursor) {
       enqueueDesktopCommand(() => desktopBridge.move(
         systemCursor.x,
@@ -530,7 +551,7 @@ function App() {
           <p className="eyebrow">本机实时交互</p>
           <h1>Hovra</h1>
         </div>
-        <p>单手即可控制移动、左键点击、长按和张手停止。</p>
+        <p>单手即可控制移动、左键、右键、长按和张手停止。</p>
       </header>
 
       <StatusPanel

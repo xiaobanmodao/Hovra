@@ -60,14 +60,15 @@ beforeEach(() => {
 });
 
 describe("Playground", () => {
-  it("shows only the movement, left-click, and open-palm stop instructions", () => {
+  it("显示移动、左右键、长按和张掌停止说明", () => {
     render(<Playground cursor={null} output={idle} />);
 
     expect(screen.getByText(/移动光标/)).toBeInTheDocument();
     expect(screen.getByText(/拇指 \+ 食指：左键点击/)).toBeInTheDocument();
+    expect(screen.getByText(/拇指 \+ 中指：右键/)).toBeInTheDocument();
     expect(screen.getByText(/保持捏合：长按/)).toBeInTheDocument();
     expect(screen.getByText(/张开手掌：停止/)).toBeInTheDocument();
-    expect(screen.queryByText(/右键次数/)).not.toBeInTheDocument();
+    expect(screen.getByText("右键次数：0")).toBeInTheDocument();
     expect(screen.queryByText(/双击次数/)).not.toBeInTheDocument();
     expect(screen.queryByText(/滚动：/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("draggable-card")).not.toBeInTheDocument();
@@ -94,5 +95,28 @@ describe("Playground", () => {
     rerender(<Playground cursor={{ x: 20, y: 20 }} output={{ ...idle, click: false }} />);
     rerender(<Playground cursor={{ x: 20, y: 20 }} output={{ ...idle, click: true }} />);
     expect(screen.getByText("点击次数：1")).toBeInTheDocument();
+  });
+
+  it("只在虚拟光标位于目标内时统计右键", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      bottom: 176,
+      height: 144,
+      left: 848,
+      right: 992,
+      top: 32,
+      width: 144,
+      x: 848,
+      y: 32,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    const { rerender } = render(
+      <Playground cursor={{ x: 900, y: 100 }} output={{ ...idle, rightClick: true }} />,
+    );
+    expect(screen.getByText("右键次数：1")).toBeInTheDocument();
+
+    rerender(<Playground cursor={{ x: 20, y: 20 }} output={{ ...idle, rightClick: false }} />);
+    rerender(<Playground cursor={{ x: 20, y: 20 }} output={{ ...idle, rightClick: true }} />);
+    expect(screen.getByText("右键次数：1")).toBeInTheDocument();
   });
 });
