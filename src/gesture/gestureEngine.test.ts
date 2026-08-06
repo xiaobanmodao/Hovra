@@ -4,6 +4,17 @@ import { makeGestureHand } from "./fixtures/stable-gesture-sequences";
 import { GestureEngine } from "./gestureEngine";
 
 describe("GestureEngine 稳定内核", () => {
+  it("在诊断和识别中使用个人捏合边界", () => {
+    const engine = new GestureEngine({
+      gestureSensitivity: 0.5, openPalmMinTipDistance: 0.18,
+      cursorSmoothingFactor: 0.4, cursorOffsetX: 0, cursorOffsetY: 0,
+      cameraStaleFrameMs: 500, pinchEnterRatio: 0.3, pinchExitRatio: 0.52,
+    });
+    expect(engine.update(makeGestureHand("tracking"), 0).diagnostics).toMatchObject({
+      pinchEnterRatio: 0.3,
+      pinchExitRatio: 0.52,
+    });
+  });
   it("在第二个连续接触帧立即点击一次", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");

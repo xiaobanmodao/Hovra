@@ -6,6 +6,7 @@ import {
 } from "./gestureTrace";
 import {
   measureStableHand,
+  resolveStablePinchThresholds,
   type StableHandMetrics,
 } from "./stableHandMetrics";
 import {
@@ -60,7 +61,12 @@ export class GestureEngine {
     if (Number.isFinite(nowMs)) this.lastUpdateMs = nowMs;
 
     const metrics = monotonic
-      ? measureStableHand(landmarks, imageAspectRatio, this.settings.gestureSensitivity)
+      ? measureStableHand(
+        landmarks,
+        imageAspectRatio,
+        this.settings.gestureSensitivity,
+        resolveStablePinchThresholds(this.settings),
+      )
       : null;
     const output = metrics
       ? this.updateValidHand(metrics, nowMs, inferenceMs, imageAspectRatio)

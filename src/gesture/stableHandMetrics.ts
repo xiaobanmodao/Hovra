@@ -19,6 +19,7 @@ import {
   THUMB_TIP,
   WRIST,
   type Landmark,
+  type GestureSettings,
 } from "./types";
 
 type MetricPoint = { x: number; y: number; z: number };
@@ -61,10 +62,25 @@ export function stablePinchThresholds(sensitivity: number): StablePinchThreshold
   };
 }
 
+export function resolveStablePinchThresholds(settings: GestureSettings): StablePinchThresholds {
+  const fallback = stablePinchThresholds(settings.gestureSensitivity);
+  const enter = settings.pinchEnterRatio;
+  const exit = settings.pinchExitRatio;
+  if (
+    enter === undefined || exit === undefined
+    || !Number.isFinite(enter) || !Number.isFinite(exit)
+    || enter < 0.2 || enter > 0.5
+    || exit < 0.32 || exit > 0.65
+    || exit - enter < 0.08
+  ) return fallback;
+  return { enterRatio: enter, exitRatio: exit };
+}
+
 export function measureStableHand(
   landmarks: Landmark[] | null,
   imageAspectRatio = 1,
   sensitivity = 0.5,
+  thresholdOverride?: StablePinchThresholds,
 ): StableHandMetrics | null {
   if (!isValidHand(landmarks)) return null;
 
@@ -88,7 +104,7 @@ export function measureStableHand(
   const screenPinchRatio = screenPinchGap / palmScale;
   const depthPinchRatio = depthPinchGap === null ? null : depthPinchGap / palmScale;
   const spatialPinchRatio = spatialPinchGap / palmScale;
-  const thresholds = stablePinchThresholds(sensitivity);
+  const thresholds = thresholdOverride ?? stablePinchThresholds(sensitivity);
   const pinchContact = depthReliable && spatialPinchRatio <= thresholds.enterRatio;
   const pinchSeparated = !depthReliable || spatialPinchRatio >= thresholds.exitRatio;
   const pinchBlockingReason: PinchBlockingReason = pinchContact

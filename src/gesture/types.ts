@@ -93,6 +93,8 @@ export type GestureSettings = {
   cursorOffsetX: number;
   cursorOffsetY: number;
   cameraStaleFrameMs: number;
+  pinchEnterRatio?: number;
+  pinchExitRatio?: number;
 };
 
 export const WRIST = 0;

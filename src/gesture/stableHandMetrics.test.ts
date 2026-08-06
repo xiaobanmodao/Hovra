@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import { makeGestureHand } from "./fixtures/stable-gesture-sequences";
 import {
   measureStableHand,
+  resolveStablePinchThresholds,
   stablePinchThresholds,
 } from "./stableHandMetrics";
+import { DEFAULT_GESTURE_SETTINGS } from "./config";
 
 describe("stable hand metrics", () => {
   it("keeps the original index-tip cursor coordinates", () => {
@@ -75,6 +77,19 @@ describe("stable hand metrics", () => {
     expect(normal.enterRatio).toBeLessThan(permissive.enterRatio);
     expect(strict.exitRatio).toBeGreaterThan(strict.enterRatio);
     expect(permissive.exitRatio).toBeLessThanOrEqual(0.58);
+  });
+
+  it("没有个人阈值时保持当前默认边界", () => {
+    expect(resolveStablePinchThresholds(DEFAULT_GESTURE_SETTINGS)).toEqual(stablePinchThresholds(0.5));
+  });
+
+  it("只接受安全且有迟滞的个人边界", () => {
+    expect(resolveStablePinchThresholds({
+      ...DEFAULT_GESTURE_SETTINGS, pinchEnterRatio: 0.3, pinchExitRatio: 0.5,
+    })).toEqual({ enterRatio: 0.3, exitRatio: 0.5 });
+    expect(resolveStablePinchThresholds({
+      ...DEFAULT_GESTURE_SETTINGS, pinchEnterRatio: 0.5, pinchExitRatio: 0.4,
+    })).toEqual(stablePinchThresholds(0.5));
   });
 
   it("rejects malformed landmark frames", () => {
