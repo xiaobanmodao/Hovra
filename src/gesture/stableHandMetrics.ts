@@ -39,12 +39,19 @@ export type StableHandMetrics = {
   screenPinchRatio: number;
   depthPinchRatio: number | null;
   spatialPinchRatio: number;
+  rightScreenPinchRatio: number;
+  rightDepthPinchRatio: number | null;
+  rightSpatialPinchRatio: number;
   pinchEnterRatio: number;
   pinchExitRatio: number;
   depthReliable: boolean;
+  rightDepthReliable: boolean;
   pinchContact: boolean;
   pinchSeparated: boolean;
   pinchBlockingReason: PinchBlockingReason;
+  rightPinchContact: boolean;
+  rightPinchSeparated: boolean;
+  rightPinchBlockingReason: PinchBlockingReason;
   openPalmCandidate: boolean;
   openPalmScore: number;
   fistCandidate: boolean;
@@ -95,9 +102,15 @@ export function measureStableHand(
 
   const thumb = points[THUMB_TIP]!;
   const index = points[INDEX_FINGER_TIP]!;
+  const middle = points[MIDDLE_FINGER_TIP]!;
+  const ring = points[RING_FINGER_TIP]!;
   const sourceThumb = landmarks[THUMB_TIP]!;
   const sourceIndex = landmarks[INDEX_FINGER_TIP]!;
+  const sourceMiddle = landmarks[MIDDLE_FINGER_TIP]!;
+  const sourceRing = landmarks[RING_FINGER_TIP]!;
   const depthReliable = Number.isFinite(sourceThumb.z) && Number.isFinite(sourceIndex.z);
+  const rightDepthReliable = Number.isFinite(sourceThumb.z) && Number.isFinite(sourceMiddle.z);
+  const ringDepthReliable = Number.isFinite(sourceThumb.z) && Number.isFinite(sourceRing.z);
   const screenPinchGap = distance2(thumb, index);
   const depthPinchGap = depthReliable ? Math.abs(thumb.z - index.z) : null;
   const spatialPinchGap = depthPinchGap === null
@@ -106,6 +119,23 @@ export function measureStableHand(
   const screenPinchRatio = screenPinchGap / palmScale;
   const depthPinchRatio = depthPinchGap === null ? null : depthPinchGap / palmScale;
   const spatialPinchRatio = spatialPinchGap / palmScale;
+  const rightScreenPinchGap = distance2(thumb, middle);
+  const rightDepthPinchGap = rightDepthReliable ? Math.abs(thumb.z - middle.z) : null;
+  const rightSpatialPinchGap = rightDepthPinchGap === null
+    ? rightScreenPinchGap
+    : Math.hypot(rightScreenPinchGap, rightDepthPinchGap);
+  const rightScreenPinchRatio = rightScreenPinchGap / palmScale;
+  const rightDepthPinchRatio = rightDepthPinchGap === null
+    ? null
+    : rightDepthPinchGap / palmScale;
+  const rightSpatialPinchRatio = rightSpatialPinchGap / palmScale;
+  const ringScreenPinchGap = distance2(thumb, ring);
+  const ringDepthPinchGap = ringDepthReliable ? Math.abs(thumb.z - ring.z) : null;
+  const ringSpatialPinchRatio = (
+    ringDepthPinchGap === null
+      ? ringScreenPinchGap
+      : Math.hypot(ringScreenPinchGap, ringDepthPinchGap)
+  ) / palmScale;
   const thresholds = thresholdOverride ?? stablePinchThresholds(sensitivity);
   const pinchContact = depthReliable && spatialPinchRatio <= thresholds.enterRatio;
   const pinchSeparated = !depthReliable || spatialPinchRatio >= thresholds.exitRatio;
@@ -114,6 +144,20 @@ export function measureStableHand(
     : !depthReliable || (
       screenPinchRatio <= thresholds.enterRatio
       && (depthPinchRatio ?? Number.POSITIVE_INFINITY) > thresholds.enterRatio
+    ) ? "depth" : "image";
+  const rightPinchContact = rightDepthReliable
+    && depthReliable
+    && ringDepthReliable
+    && rightSpatialPinchRatio <= thresholds.enterRatio
+    && spatialPinchRatio >= thresholds.exitRatio
+    && ringSpatialPinchRatio >= thresholds.exitRatio;
+  const rightPinchSeparated = !rightDepthReliable
+    || rightSpatialPinchRatio >= thresholds.exitRatio;
+  const rightPinchBlockingReason: PinchBlockingReason = rightPinchContact
+    ? "none"
+    : !rightDepthReliable || (
+      rightScreenPinchRatio <= thresholds.enterRatio
+      && (rightDepthPinchRatio ?? Number.POSITIVE_INFINITY) > thresholds.enterRatio
     ) ? "depth" : "image";
   const openPalm = measureOpenPalm(points, palmScale);
   const fistCandidate = measureFist(points, palmScale);
@@ -128,12 +172,19 @@ export function measureStableHand(
     screenPinchRatio,
     depthPinchRatio,
     spatialPinchRatio,
+    rightScreenPinchRatio,
+    rightDepthPinchRatio,
+    rightSpatialPinchRatio,
     pinchEnterRatio: thresholds.enterRatio,
     pinchExitRatio: thresholds.exitRatio,
     depthReliable,
+    rightDepthReliable,
     pinchContact,
     pinchSeparated,
     pinchBlockingReason,
+    rightPinchContact,
+    rightPinchSeparated,
+    rightPinchBlockingReason,
     openPalmCandidate: openPalm.candidate,
     openPalmScore: openPalm.score,
     fistCandidate,

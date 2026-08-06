@@ -31,6 +31,73 @@ describe("stable hand metrics", () => {
     },
   );
 
+  it.each([
+    [0.18, 0],
+    [0.3, Math.PI / 3],
+    [0.48, -Math.PI / 4],
+  ] as const)(
+    "在尺度 %s、旋转 %s 时只把拇指与中指的排他接触识别为右键",
+    (scale, rotation) => {
+      const metrics = measureStableHand(
+        makeGestureHand("right", { scale, rotation }),
+        16 / 9,
+        0.5,
+      )!;
+
+      expect(metrics).toMatchObject({
+        rightDepthReliable: true,
+        rightPinchContact: true,
+        rightPinchBlockingReason: "none",
+      });
+      expect(metrics.rightSpatialPinchRatio).toBeLessThanOrEqual(metrics.pinchEnterRatio);
+      expect(metrics.spatialPinchRatio).toBeGreaterThanOrEqual(metrics.pinchExitRatio);
+    },
+  );
+
+  it("右键投影重合但纵深分离时严格阻断", () => {
+    const hand = makeGestureHand("right");
+    hand[4] = { ...hand[4]!, z: -0.12 };
+    hand[12] = { ...hand[12]!, z: 0.12 };
+
+    const metrics = measureStableHand(hand, 16 / 9, 0.5)!;
+
+    expect(metrics.rightScreenPinchRatio).toBeLessThan(metrics.pinchEnterRatio);
+    expect(metrics.rightDepthPinchRatio).toBeGreaterThan(metrics.pinchEnterRatio);
+    expect(metrics).toMatchObject({
+      rightPinchContact: false,
+      rightPinchBlockingReason: "depth",
+    });
+  });
+
+  it("右键缺少中指纵深时不降级为二维接触", () => {
+    const hand = makeGestureHand("right");
+    hand[12] = { x: hand[12]!.x, y: hand[12]!.y };
+
+    expect(measureStableHand(hand, 16 / 9, 0.5)).toMatchObject({
+      rightDepthReliable: false,
+      rightPinchContact: false,
+      rightPinchBlockingReason: "depth",
+    });
+  });
+
+  it.each([8, 16] as const)(
+    "拇指同时靠近关节点 %s 时拒绝含糊右键",
+    (ambiguousTip) => {
+      const hand = makeGestureHand("right");
+      hand[ambiguousTip] = {
+        ...hand[4]!,
+        x: hand[4]!.x + 0.002,
+      };
+
+      expect(measureStableHand(hand, 16 / 9, 0.5)?.rightPinchContact).toBe(false);
+    },
+  );
+
+  it("左键接触不会同时成为右键接触", () => {
+    expect(measureStableHand(makeGestureHand("left"), 16 / 9, 0.5))
+      .toMatchObject({ pinchContact: true, rightPinchContact: false });
+  });
+
   it("blocks projected overlap when the normalized landmark depth is separated", () => {
     const hand = makeGestureHand("left");
     hand[4] = { ...hand[4]!, z: -0.12 };
