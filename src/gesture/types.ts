@@ -53,6 +53,9 @@ export type GestureOutput = {
 export type GestureDiagnosticsSnapshot = {
   timestampMs: number;
   quality: number;
+  trackingSource: import("./handTrackingStabilizer").TrackingSource;
+  trackingQuality: number;
+  rejectedLandmarkCount: number;
   palmScale: number | null;
   screenPinchGap: number | null;
   imageAspectRatio: number;

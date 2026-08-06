@@ -16,6 +16,12 @@ type GestureDiagnosticsProps = {
 const numberOrDash = (value: number | null | undefined, precision = 3): string =>
   value == null ? "—" : value.toFixed(precision);
 
+const trackingSourceLabel = {
+  observed: "实时观测",
+  predicted: "短时预测",
+  lost: "已丢失",
+} as const;
+
 export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsProps) {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const diagnostics = output.diagnostics;
@@ -48,6 +54,9 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
         <div><dt>候选动作</dt><dd>{gestureKindLabel(output.candidate)}</dd></div>
         <div><dt>锁定动作</dt><dd>{gestureKindLabel(output.lockedGesture)}</dd></div>
         <div><dt>确认进度</dt><dd>{Math.round(output.confirmationProgress * 100)}%</dd></div>
+        <div><dt>追踪来源</dt><dd>{trackingSourceLabel[diagnostics.trackingSource]}</dd></div>
+        <div><dt>追踪质量</dt><dd>{Math.round(diagnostics.trackingQuality * 100)}%</dd></div>
+        <div><dt>异常关节点</dt><dd>{diagnostics.rejectedLandmarkCount}</dd></div>
         <div><dt>手掌尺度</dt><dd>{numberOrDash(diagnostics.palmScale)}</dd></div>
         <div><dt>二维捏合比例</dt><dd>{numberOrDash(diagnostics.pinchScreenRatio)}</dd></div>
         <div><dt>纵深捏合比例</dt><dd>{numberOrDash(diagnostics.pinchImageDepthGap)}</dd></div>

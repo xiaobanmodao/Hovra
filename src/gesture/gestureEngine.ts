@@ -9,6 +9,10 @@ import {
   resolveStablePinchThresholds,
   type StableHandMetrics,
 } from "./stableHandMetrics";
+import {
+  HandTrackingStabilizer,
+  type StabilizedHandFrame,
+} from "./handTrackingStabilizer";
 import { OneEuroPointFilter } from "./oneEuroFilter";
 import {
   PinchClickStateMachine,
@@ -31,6 +35,7 @@ export class GestureEngine {
   private readonly settings: GestureSettings;
   private readonly pinch: PinchClickStateMachine;
   private readonly cursorFilter: OneEuroPointFilter;
+  private readonly handTracking = new HandTrackingStabilizer();
   private readonly trace = new GestureTraceBuffer();
   private openPalmEnterFrames = 0;
   private openPalmExitFrames = 0;
@@ -73,7 +78,14 @@ export class GestureEngine {
     }
     if (Number.isFinite(nowMs)) this.lastUpdateMs = nowMs;
 
-    const metrics = monotonic
+    const trackingFrame = this.handTracking.update(monotonic ? landmarks : null, nowMs);
+    const controlMetrics = measureStableHand(
+      trackingFrame.controlLandmarks,
+      imageAspectRatio,
+      this.settings.gestureSensitivity,
+      resolveStablePinchThresholds(this.settings),
+    );
+    const observedMetrics = trackingFrame.source === "observed" && trackingFrame.gestureSafe
       ? measureStableHand(
         landmarks,
         imageAspectRatio,
@@ -81,10 +93,24 @@ export class GestureEngine {
         resolveStablePinchThresholds(this.settings),
       )
       : null;
-    const output = metrics
-      ? this.updateValidHand(metrics, nowMs, inferenceMs, imageAspectRatio)
-      : this.updateMissingHand(nowMs, inferenceMs, imageAspectRatio);
-    this.recordTrace(landmarks, worldLandmarks, metrics, output, nowMs, inferenceMs, imageAspectRatio);
+    const metrics = observedMetrics && controlMetrics
+      ? { ...observedMetrics, cursor: controlMetrics.cursor }
+      : controlMetrics;
+    const output = metrics && trackingFrame.source === "observed" && trackingFrame.gestureSafe
+      ? this.updateValidHand(metrics, trackingFrame, nowMs, inferenceMs, imageAspectRatio)
+      : metrics && trackingFrame.source !== "lost"
+        ? this.updateUnsafeHand(metrics, trackingFrame, nowMs, inferenceMs, imageAspectRatio)
+        : this.updateMissingHand(trackingFrame, nowMs, inferenceMs, imageAspectRatio);
+    this.recordTrace(
+      landmarks,
+      worldLandmarks,
+      metrics,
+      trackingFrame,
+      output,
+      nowMs,
+      inferenceMs,
+      imageAspectRatio,
+    );
     return output;
   }
 
@@ -98,6 +124,7 @@ export class GestureEngine {
 
   private updateValidHand(
     metrics: StableHandMetrics,
+    trackingFrame: StabilizedHandFrame,
     nowMs: number,
     inferenceMs: number | null,
     imageAspectRatio: number,
@@ -129,7 +156,14 @@ export class GestureEngine {
         candidate: null,
         lockedGesture: "open-palm",
         confirmationProgress: 1,
-        diagnostics: this.diagnostics(metrics, pinch, nowMs, inferenceMs, imageAspectRatio),
+        diagnostics: this.diagnostics(
+          metrics,
+          pinch,
+          trackingFrame,
+          nowMs,
+          inferenceMs,
+          imageAspectRatio,
+        ),
       });
     }
     const openPalmCandidate = this.openPalmEnterFrames > 0;
@@ -161,11 +195,54 @@ export class GestureEngine {
       candidate,
       lockedGesture: pinch.active ? "left" : null,
       confirmationProgress,
-      diagnostics: this.diagnostics(metrics, pinch, nowMs, inferenceMs, imageAspectRatio),
+      diagnostics: this.diagnostics(
+        metrics,
+        pinch,
+        trackingFrame,
+        nowMs,
+        inferenceMs,
+        imageAspectRatio,
+      ),
+    });
+  }
+
+  private updateUnsafeHand(
+    metrics: StableHandMetrics,
+    trackingFrame: StabilizedHandFrame,
+    nowMs: number,
+    inferenceMs: number | null,
+    imageAspectRatio: number,
+  ): GestureOutput {
+    const filteredCursor = this.cursorFilter.filter(metrics.cursor, nowMs);
+    const pinch = this.pinch.update(null, nowMs);
+    const remainPaused = this.openPalmPaused;
+    this.openPalmEnterFrames = remainPaused ? OPEN_PALM_ENTER_FRAMES : 0;
+    this.openPalmExitFrames = 0;
+    return this.output({
+      state: remainPaused ? "paused" : "tracking",
+      cursor: filteredCursor,
+      click: false,
+      clickCursor: null,
+      dragStart: false,
+      dragEnd: pinch.holdEnded,
+      intentEvidence: null,
+      phase: remainPaused ? "active" : "neutral",
+      candidate: null,
+      lockedGesture: remainPaused ? "open-palm" : null,
+      confirmationProgress: remainPaused ? 1 : 0,
+      diagnostics: this.diagnostics(
+        metrics,
+        pinch,
+        trackingFrame,
+        nowMs,
+        inferenceMs,
+        imageAspectRatio,
+      ),
     });
   }
 
   private updateMissingHand(
+    trackingFrame: StabilizedHandFrame,
     nowMs: number,
     inferenceMs: number | null,
     imageAspectRatio: number,
@@ -187,7 +264,14 @@ export class GestureEngine {
       candidate: null,
       lockedGesture: null,
       confirmationProgress: 0,
-      diagnostics: this.diagnostics(null, pinch, nowMs, inferenceMs, imageAspectRatio),
+      diagnostics: this.diagnostics(
+        null,
+        pinch,
+        trackingFrame,
+        nowMs,
+        inferenceMs,
+        imageAspectRatio,
+      ),
     });
   }
 
@@ -218,6 +302,7 @@ export class GestureEngine {
   private diagnostics(
     metrics: StableHandMetrics | null,
     pinch: PinchClickOutput | null,
+    trackingFrame: StabilizedHandFrame,
     nowMs: number,
     inferenceMs: number | null,
     imageAspectRatio: number,
@@ -229,7 +314,10 @@ export class GestureEngine {
     ) : null;
     return {
       timestampMs: Number.isFinite(nowMs) ? nowMs : 0,
-      quality: metrics ? 1 : 0,
+      quality: trackingFrame.quality,
+      trackingSource: trackingFrame.source,
+      trackingQuality: trackingFrame.quality,
+      rejectedLandmarkCount: trackingFrame.rejectedIndices.length,
       palmScale: metrics?.palmScale ?? null,
       screenPinchGap: metrics?.screenPinchGap ?? null,
       imageAspectRatio: sanitizeAspectRatio(imageAspectRatio),
@@ -294,6 +382,7 @@ export class GestureEngine {
     landmarks: Landmark[] | null,
     worldLandmarks: Landmark[] | null,
     metrics: StableHandMetrics | null,
+    trackingFrame: StabilizedHandFrame,
     output: GestureOutput,
     nowMs: number,
     inferenceMs: number | null,
@@ -312,7 +401,7 @@ export class GestureEngine {
       t: relativeTimestamp,
       landmarks,
       worldLandmarks,
-      quality: metrics ? 1 : 0,
+      quality: trackingFrame.quality,
       features: metrics ? {
         leftPinchRatio: metrics.spatialPinchRatio,
         worldLeftPinchRatio: null,
@@ -333,7 +422,7 @@ export class GestureEngine {
         worldQuality: 0,
         qualityReasons: [],
         pinchProbability: output.diagnostics.pinchProbability,
-        safetyGatePassed: metrics.pinchContact,
+        safetyGatePassed: trackingFrame.gestureSafe && metrics.pinchContact,
         blockingReason: metrics.pinchBlockingReason,
         enterVotes: output.diagnostics.pinchEnterVotes,
         requiredVotes: output.diagnostics.pinchRequiredVotes,

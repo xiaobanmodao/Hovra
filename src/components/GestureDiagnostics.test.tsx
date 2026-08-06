@@ -20,6 +20,9 @@ const output: GestureOutput = {
   diagnostics: {
     timestampMs: 120,
     quality: 1,
+    trackingSource: "observed",
+    trackingQuality: 1,
+    rejectedLandmarkCount: 0,
     palmScale: 0.234,
     screenPinchGap: 0.019,
     imageAspectRatio: 16 / 9,
@@ -85,6 +88,21 @@ describe("GestureDiagnostics", () => {
     expect(screen.getByText("9.2 毫秒")).toBeInTheDocument();
     expect(screen.queryByText("Apple Vision")).not.toBeInTheDocument();
     expect(screen.queryByText("世界坐标质量")).not.toBeInTheDocument();
+  });
+
+  it("用中文显示追踪来源、质量和异常关节数", () => {
+    const predicted = {
+      ...output.diagnostics,
+      trackingSource: "predicted" as const,
+      trackingQuality: 0.15,
+      rejectedLandmarkCount: 2,
+    };
+
+    render(<GestureDiagnostics output={{ ...output, diagnostics: predicted }} />);
+
+    expect(screen.getByText("追踪来源").nextElementSibling).toHaveTextContent("短时预测");
+    expect(screen.getByText("追踪质量").nextElementSibling).toHaveTextContent("15%");
+    expect(screen.getByText("异常关节点").nextElementSibling).toHaveTextContent("2");
   });
 
   it("offers explicit local export only when a desktop callback is provided", async () => {

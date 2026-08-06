@@ -20,6 +20,9 @@ const idle: GestureOutput = {
   diagnostics: {
     timestampMs: 0,
     quality: 1,
+    trackingSource: "observed",
+    trackingQuality: 1,
+    rejectedLandmarkCount: 0,
     palmScale: null,
     screenPinchGap: null,
     imageAspectRatio: 1,

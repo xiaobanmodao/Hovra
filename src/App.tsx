@@ -46,6 +46,9 @@ const INITIAL_OUTPUT: GestureOutput = {
   diagnostics: {
     timestampMs: 0,
     quality: 0,
+    trackingSource: "lost",
+    trackingQuality: 0,
+    rejectedLandmarkCount: 0,
     palmScale: null,
     screenPinchGap: null,
     imageAspectRatio: 1,

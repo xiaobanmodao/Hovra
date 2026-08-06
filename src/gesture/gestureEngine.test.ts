@@ -105,7 +105,7 @@ describe("GestureEngine 稳定内核", () => {
     });
   });
 
-  it("长按期间丢手会立即输出安全抬起事件", () => {
+  it("短时丢点保留预测光标但立即结束长按且不产生其他事件", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");
     engine.update(makeGestureHand("tracking"), 0);
@@ -117,12 +117,40 @@ describe("GestureEngine 稳定内核", () => {
     expect(engine.update(left, 436).dragStart).toBe(true);
 
     expect(engine.update(null, 452)).toMatchObject({
-      state: "lost",
+      state: "tracking",
+      cursor: expect.any(Object),
       dragStart: false,
       dragEnd: true,
       click: false,
+      diagnostics: {
+        trackingSource: "predicted",
+        trackingQuality: 0.15,
+      },
     });
-    expect(engine.update(null, 468).dragEnd).toBe(false);
+    expect(engine.update(null, 468)).toMatchObject({ dragEnd: false, click: false });
+    expect(engine.update(null, 548)).toMatchObject({
+      state: "lost",
+      cursor: null,
+      diagnostics: { trackingSource: "lost" },
+    });
+  });
+
+  it("连续异常指尖重合只能移动光标，不能制造捏合或点击", () => {
+    const engine = new GestureEngine();
+    const tracking = makeGestureHand("tracking");
+    engine.update(tracking, 0);
+
+    for (const at of [16, 32, 48]) {
+      const broken = tracking.map((point) => ({ ...point }));
+      broken[8] = { ...broken[4]!, x: broken[4]!.x + 0.001 };
+      const output = engine.update(broken, at);
+
+      expect(output).toMatchObject({ click: false, dragStart: false });
+      expect(output.diagnostics).toMatchObject({
+        trackingSource: "observed",
+        rejectedLandmarkCount: 1,
+      });
+    }
   });
 
   it("忽略单帧指尖重合", () => {
@@ -202,6 +230,23 @@ describe("GestureEngine 稳定内核", () => {
     expect(engine.update(tracking, 64).state).toBe("tracking");
   });
 
+  it("张掌暂停后的短时丢点不会提前恢复系统控制", () => {
+    const engine = new GestureEngine();
+    const open = makeGestureHand("open-palm");
+    const tracking = makeGestureHand("tracking");
+    engine.update(open, 0);
+    engine.update(open, 16);
+    expect(engine.update(open, 32).state).toBe("paused");
+
+    expect(engine.update(null, 48)).toMatchObject({
+      state: "paused",
+      click: false,
+      diagnostics: { trackingSource: "predicted" },
+    });
+    expect(engine.update(tracking, 64).state).toBe("paused");
+    expect(engine.update(tracking, 80).state).toBe("tracking");
+  });
+
   it.each(["fist", "tracking", "right", "double", "scroll"] as const)(
     "%s 永远不会被误判为张掌暂停",
     (gesture) => {
@@ -250,9 +295,17 @@ describe("GestureEngine 稳定内核", () => {
   it("丢手和非法帧不会制造点击", () => {
     const engine = new GestureEngine();
     engine.update(makeGestureHand("left"), 0);
-    expect(engine.update(null, 16)).toMatchObject({ state: "lost", click: false });
+    expect(engine.update(null, 16)).toMatchObject({
+      state: "tracking",
+      click: false,
+      diagnostics: { trackingSource: "predicted" },
+    });
     expect(engine.update(makeGestureHand("left"), 32).click).toBe(false);
-    expect(engine.update(makeGestureHand("left"), 20).click).toBe(false);
+    expect(engine.update(makeGestureHand("left"), 20)).toMatchObject({
+      state: "lost",
+      click: false,
+      diagnostics: { trackingSource: "lost" },
+    });
   });
 
   it("记录不含图像数据且点击帧可回放", () => {
@@ -268,5 +321,20 @@ describe("GestureEngine 稳定内核", () => {
     expect(trace.frames.at(-1)?.events).toEqual(["click"]);
     expect(JSON.stringify(trace)).not.toContain("data:image");
     expect(JSON.stringify(trace)).not.toContain("imageData");
+  });
+
+  it("轨迹保留原始异常点但记录稳定层质量与安全门", () => {
+    const engine = new GestureEngine();
+    const tracking = makeGestureHand("tracking");
+    engine.update(tracking, 0);
+    const broken = tracking.map((point) => ({ ...point }));
+    broken[8] = { ...broken[4]!, x: broken[4]!.x + 0.001 };
+
+    engine.update(broken, 16);
+
+    const frame = engine.getTrace().frames.at(-1)!;
+    expect(frame.landmarks![8]).toEqual(broken[8]);
+    expect(frame.quality).toBeCloseTo(0.88);
+    expect(frame.features?.safetyGatePassed).toBe(false);
   });
 });

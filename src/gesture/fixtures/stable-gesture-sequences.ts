@@ -52,8 +52,19 @@ export function makeGestureHand(
     curlFinger(hand, 9, 10, 11, 12, 0.02);
     curlFinger(hand, 13, 14, 15, 16, 0.16);
     curlFinger(hand, 17, 18, 19, 20, 0.3);
-    const targetIndex = gesture === "left" ? 8 : gesture === "right" ? 12 : 16;
-    hand[targetIndex] = { x: hand[4]!.x + 0.025, y: hand[4]!.y, z: 0 };
+    const targetFinger = gesture === "left"
+      ? [5, 6, 7, 8] as const
+      : gesture === "right"
+        ? [9, 10, 11, 12] as const
+        : [13, 14, 15, 16] as const;
+    bendFingerToward(
+      hand,
+      targetFinger[0],
+      targetFinger[1],
+      targetFinger[2],
+      targetFinger[3],
+      { x: hand[4]!.x + 0.025, y: hand[4]!.y, z: 0 },
+    );
   }
 
   const scale = options.scale ?? 0.3;
@@ -104,9 +115,37 @@ function curlFinger(
   x: number,
 ): void {
   const base = hand[mcp]!;
-  hand[pip] = { x: base.x + 0.09, y: base.y + 0.02, z: 0 };
-  hand[dip] = { x: x + 0.08, y: base.y + 0.12, z: 0 };
+  hand[pip] = { x: base.x + 0.16, y: base.y + 0.02, z: 0 };
+  hand[dip] = { x: x + 0.16, y: base.y + 0.17, z: 0 };
   hand[tip] = { x, y: base.y + 0.18, z: 0 };
+}
+
+function bendFingerToward(
+  hand: Landmark[],
+  mcp: number,
+  pip: number,
+  dip: number,
+  tip: number,
+  target: Landmark,
+): void {
+  const base = hand[mcp]!;
+  const deltaX = target.x - base.x;
+  const deltaY = target.y - base.y;
+  const length = Math.max(1e-6, Math.hypot(deltaX, deltaY));
+  const normalX = -deltaY / length;
+  const normalY = deltaX / length;
+  const bend = 0.105;
+  hand[pip] = {
+    x: base.x + deltaX / 3 + normalX * bend,
+    y: base.y + deltaY / 3 + normalY * bend,
+    z: 0,
+  };
+  hand[dip] = {
+    x: base.x + deltaX * 2 / 3 - normalX * bend,
+    y: base.y + deltaY * 2 / 3 - normalY * bend,
+    z: 0,
+  };
+  hand[tip] = { ...target };
 }
 
 function transform(
