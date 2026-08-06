@@ -116,7 +116,7 @@ const renderDesktopApp = async (bridge = desktopApi()) => {
 it("renders the simplified interaction description", () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: "Hovra" })).toBeInTheDocument();
-  expect(screen.getByText("单手即可控制移动、左键、右键、长按和张手停止。")).toBeInTheDocument();
+  expect(screen.getByText("单手即可控制移动、左键、右键、长按、滚动和张手停止。")).toBeInTheDocument();
 });
 
 it("moves the desktop pointer from a tracking hand", async () => {
@@ -202,6 +202,40 @@ it("右键短捏合先移动到锁定点再调用一次系统右键且保持控�
   expect(screen.getByText("已启用")).toBeInTheDocument();
 });
 
+it("双指滚动从候选起冻结光标并只派发有界滚动且保持控制开启", async () => {
+  const { bridge, runFrame, container } = await renderDesktopApp();
+  vi.mocked(bridge.move).mockClear();
+  const scrollHand = (translateY: number) => makeGestureHand("scroll", { translateY });
+
+  for (const at of [16, 32, 48, 64, 80]) runFrame(at, scrollHand(0.5));
+  await waitFor(() => expect(vi.mocked(bridge.move).mock.calls.map((call) => call[2]))
+    .toEqual(expect.arrayContaining(["candidate-scroll", "scrolling"])));
+  expect(bridge.scroll).not.toHaveBeenCalled();
+  expect(container.querySelector(".virtual-cursor")).toHaveClass("is-scrolling");
+
+  runFrame(96, scrollHand(0.46));
+  await waitFor(() => expect(bridge.scroll).toHaveBeenCalledOnce());
+  const delta = vi.mocked(bridge.scroll).mock.calls[0]![0];
+  expect(Number.isInteger(delta)).toBe(true);
+  expect(delta).toBeGreaterThan(0);
+  expect(Math.abs(delta)).toBeLessThanOrEqual(12);
+
+  runFrame(112, handAt("tracking"));
+  runFrame(128, handAt("tracking"));
+  await waitFor(() => expect(vi.mocked(bridge.move).mock.calls.map((call) => call[2]))
+    .toContain("releasing-scroll"));
+
+  const scrollVisualMoves = vi.mocked(bridge.move).mock.calls.filter((call) => (
+    call[2] === "candidate-scroll" || call[2] === "scrolling" || call[2] === "releasing-scroll"
+  ));
+  expect(new Set(scrollVisualMoves.map(([x, y]) => `${x.toFixed(6)}:${y.toFixed(6)}`)).size).toBe(1);
+  expect(bridge.click).not.toHaveBeenCalled();
+  expect(bridge.rightClick).not.toHaveBeenCalled();
+  expect(bridge.mouseDown).not.toHaveBeenCalled();
+  expect(bridge.mouseUp).not.toHaveBeenCalled();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
+});
+
 it("长按先移动到锁定点再按下，保持时拖动，释放时抬起", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
   vi.mocked(bridge.move).mockClear();
@@ -269,9 +303,9 @@ it("世界坐标缺失或错误都不再阻断同帧真实接触", async () => {
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
 });
 
-it.each(["double", "scroll"] as const)("does not dispatch the disabled %s action", async (gesture) => {
+it("does not dispatch the disabled double action", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
-  for (let at = 16; at <= 128; at += 16) runFrame(at, handAt(gesture));
+  for (let at = 16; at <= 128; at += 16) runFrame(at, handAt("double"));
 
   expect(bridge.rightClick).not.toHaveBeenCalled();
   expect(bridge.doubleClick).not.toHaveBeenCalled();

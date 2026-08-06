@@ -58,6 +58,7 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
         <div><dt>追踪质量</dt><dd>{Math.round(diagnostics.trackingQuality * 100)}%</dd></div>
         <div><dt>异常关节点</dt><dd>{diagnostics.rejectedLandmarkCount}</dd></div>
         <div><dt>手掌尺度</dt><dd>{numberOrDash(diagnostics.palmScale)}</dd></div>
+        <div><dt>滚动姿势分数</dt><dd>{numberOrDash(diagnostics.scrollPoseScore)}</dd></div>
         <div><dt>二维捏合比例</dt><dd>{numberOrDash(diagnostics.pinchScreenRatio)}</dd></div>
         <div><dt>纵深捏合比例</dt><dd>{numberOrDash(diagnostics.pinchImageDepthGap)}</dd></div>
         <div><dt>空间捏合比例</dt><dd>{numberOrDash(diagnostics.pinchSpatialRatio)}</dd></div>

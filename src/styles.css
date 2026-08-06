@@ -1213,6 +1213,12 @@ h2 {
   box-shadow: 0 0 0 5px rgba(90, 167, 255, 0.28), 0 0 1.4rem #2687ff;
 }
 
+.virtual-cursor.is-candidate-scroll {
+  border-color: #2687ff;
+  background: #5aa7ff;
+  box-shadow: 0 0 0 5px rgba(90, 167, 255, 0.2), 0 0 1.1rem #2687ff;
+}
+
 .virtual-cursor.is-paused,
 .virtual-cursor.is-lost {
   opacity: 0.45;

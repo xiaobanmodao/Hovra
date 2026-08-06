@@ -65,6 +65,27 @@ describe("精确对齐的 2.5D 手部覆盖模型", () => {
     expect(holding?.statusLabel).toBe("长按中：松开以释放");
   });
 
+  it("滚动候选和锁定阶段不画捏合连接并显示滚动提示", () => {
+    const hand = makeGestureHand("scroll");
+    const candidate = buildHandOverlayModel(hand, null, {
+      phase: "candidate",
+      gesture: "scroll",
+      state: "tracking",
+      blockingReason: null,
+    });
+    const active = buildHandOverlayModel(hand, null, {
+      phase: "active",
+      gesture: "scroll",
+      state: "scrolling",
+      blockingReason: null,
+    });
+
+    expect(candidate?.pinchBridge).toBeNull();
+    expect(candidate?.statusLabel).toBe("双指滚动候选：保持姿势");
+    expect(active?.pinchBridge).toBeNull();
+    expect(active?.statusLabel).toBe("双指滚动中：上下移动手掌");
+  });
+
   it("点数不足或非法坐标时安全降级为无覆盖层", () => {
     expect(buildHandOverlayModel(makeGestureHand("tracking").slice(0, 20))).toBeNull();
     const invalid = makeGestureHand("tracking");

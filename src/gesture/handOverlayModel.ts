@@ -1,10 +1,11 @@
 import type { ClickBlockingReason } from "./pinchClickStateMachine";
-import type { GesturePhase, GestureState, Landmark } from "./types";
+import type { GestureKind, GesturePhase, GestureState, Landmark } from "./types";
 
 export type HandOverlayState = {
   phase: GesturePhase;
   blockingReason: ClickBlockingReason | null;
   state?: GestureState;
+  gesture?: GestureKind | null;
 };
 
 export type HandOverlayPoint = Required<Landmark> & { index: number };
@@ -90,10 +91,11 @@ export function buildHandOverlayModel(
     (sum, index) => sum + normalizedDepth(index),
     0,
   ) / PALM_INDICES.length;
-  const bridgeVisible = overlayState.phase === "candidate"
+  const scrollIntent = overlayState.gesture === "scroll" || overlayState.state === "scrolling";
+  const bridgeVisible = !scrollIntent && (overlayState.phase === "candidate"
     || overlayState.phase === "active"
     || overlayState.phase === "dragging"
-    || overlayState.phase === "releasing";
+    || overlayState.phase === "releasing");
   const blocked = overlayState.blockingReason !== null
     && overlayState.blockingReason !== "none"
     && overlayState.blockingReason !== "image";
@@ -134,6 +136,9 @@ function jointRadiusRatio(index: number): number {
 function overlayStatusLabel(state: HandOverlayState): string {
   if (state.state === "lost") return "未检测到手部";
   if (state.state === "paused") return "张开手掌：控制已停止";
+  if (state.gesture === "scroll" && state.phase === "candidate") return "双指滚动候选：保持姿势";
+  if (state.state === "scrolling" && state.phase === "releasing") return "正在退出双指滚动";
+  if (state.gesture === "scroll" || state.state === "scrolling") return "双指滚动中：上下移动手掌";
   if (state.blockingReason === "high-speed") return "移动过快：本次不会点击";
   if (state.blockingReason === "travel") return "移动范围过大：本次不会点击";
   if (state.blockingReason === "timeout") return "捏合时间过长：请重新操作";

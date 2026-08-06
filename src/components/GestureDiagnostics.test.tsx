@@ -82,6 +82,8 @@ describe("GestureDiagnostics", () => {
     expect(screen.getByText("0.500")).toBeInTheDocument();
     expect(screen.getByText("连续接触确认")).toBeInTheDocument();
     expect(screen.getByText("1/2")).toBeInTheDocument();
+    expect(screen.getByText("滚动姿势分数")).toBeInTheDocument();
+    expect(screen.getByText("0.430")).toBeInTheDocument();
     expect(screen.getByText("指尖在画面中重合，但纵深仍分离")).toBeInTheDocument();
     expect(screen.getByText("移动过快，已阻止点击")).toBeInTheDocument();
     expect(screen.getByText("2.40 屏/秒")).toBeInTheDocument();

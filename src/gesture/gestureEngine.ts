@@ -190,7 +190,7 @@ export class GestureEngine {
       suppressed: postureSuppressed || activeLock !== "scroll",
     }, nowMs);
     const selectedPinch = activeLock === "right" ? right : activeLock === "scroll" ? null : left;
-    const intentEvidence = activeLock === "right" ? null : leftEvidence;
+    const intentEvidence = activeLock === "right" || activeLock === "scroll" ? null : leftEvidence;
 
     if (activeLock && (
       activeLock === "scroll"

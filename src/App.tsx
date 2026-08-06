@@ -102,14 +102,12 @@ const mapSystemPoint = (point: Landmark, settings: GestureSettings): Point => {
 
 const desktopCursorState = (output: GestureOutput) => {
   if (output.phase === "candidate") {
-    return output.candidate === "right"
-      ? "candidate-right" as const
-      : "candidate-left" as const;
+    if (output.candidate === "scroll") return "candidate-scroll" as const;
+    return output.candidate === "right" ? "candidate-right" as const : "candidate-left" as const;
   }
   if (output.phase === "releasing") {
-    return output.lockedGesture === "right"
-      ? "releasing-right" as const
-      : "releasing-left" as const;
+    if (output.lockedGesture === "scroll") return "releasing-scroll" as const;
+    return output.lockedGesture === "right" ? "releasing-right" as const : "releasing-left" as const;
   }
   return output.state === "lost" || output.state === "paused" ? "tracking" : output.state;
 };
@@ -367,6 +365,11 @@ function App() {
       return;
     }
 
+    if (output.scrollY !== 0) {
+      enqueueDesktopCommand(() => desktopBridge.scroll(output.scrollY));
+      return;
+    }
+
     if (output.click) {
       const lockedCursor = output.clickCursor
         ? mapSystemPoint(output.clickCursor, settings)
@@ -509,6 +512,9 @@ function App() {
             nextOutput.cursor
             && nextOutput.state !== "paused"
             && nextOutput.state !== "lost"
+            && nextOutput.state !== "scrolling"
+            && nextOutput.candidate !== "scroll"
+            && nextOutput.lockedGesture !== "scroll"
           ) {
             const calibrated = mapSystemPoint(nextOutput.cursor, settings);
             const nextCursor = clampToViewport({
@@ -551,7 +557,7 @@ function App() {
           <p className="eyebrow">本机实时交互</p>
           <h1>Hovra</h1>
         </div>
-        <p>单手即可控制移动、左键、右键、长按和张手停止。</p>
+        <p>单手即可控制移动、左键、右键、长按、滚动和张手停止。</p>
       </header>
 
       <StatusPanel
@@ -596,6 +602,7 @@ function App() {
           worldLandmarks={worldLandmarks}
           overlayState={{
             phase: output.phase,
+            gesture: output.candidate ?? output.lockedGesture,
             blockingReason: output.diagnostics.clickBlockingReason
               ?? output.diagnostics.pinchBlockingReason,
             state: output.state,
@@ -609,7 +616,7 @@ function App() {
 
       {cursor && (
         <div
-          className={`virtual-cursor is-${output.state}${output.phase === "candidate" ? " is-candidate" : ""}${output.phase === "releasing" ? " is-releasing" : ""}`}
+          className={`virtual-cursor is-${output.state}${output.phase === "candidate" ? " is-candidate" : ""}${output.candidate === "scroll" ? " is-candidate-scroll" : ""}${output.phase === "releasing" ? " is-releasing" : ""}`}
           style={{
             left: cursor.x,
             top: cursor.y,

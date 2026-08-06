@@ -77,6 +77,7 @@ it("enables system control only after granted permission and an explicit click",
   expect(screen.getByText("已启用")).toBeInTheDocument();
   expect(screen.getByText(/保持捏合可长按/)).toBeInTheDocument();
   expect(screen.getByText(/拇指与中指短捏合可右键/)).toBeInTheDocument();
+  expect(screen.getByText(/食指与中指伸直可滚动/)).toBeInTheDocument();
 });
 
 it("labels a missing desktop bridge as browser demo mode", () => {

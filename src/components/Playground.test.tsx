@@ -60,17 +60,18 @@ beforeEach(() => {
 });
 
 describe("Playground", () => {
-  it("显示移动、左右键、长按和张掌停止说明", () => {
+  it("显示移动、左右键、长按、滚动和张掌停止说明", () => {
     render(<Playground cursor={null} output={idle} />);
 
     expect(screen.getByText(/移动光标/)).toBeInTheDocument();
     expect(screen.getByText(/拇指 \+ 食指：左键点击/)).toBeInTheDocument();
     expect(screen.getByText(/拇指 \+ 中指：右键/)).toBeInTheDocument();
     expect(screen.getByText(/保持捏合：长按/)).toBeInTheDocument();
+    expect(screen.getByText(/食指 \+ 中指：上下滚动/)).toBeInTheDocument();
     expect(screen.getByText(/张开手掌：停止/)).toBeInTheDocument();
     expect(screen.getByText("右键次数：0")).toBeInTheDocument();
+    expect(screen.getByText("累计滚动：0")).toBeInTheDocument();
     expect(screen.queryByText(/双击次数/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/滚动：/)).not.toBeInTheDocument();
     expect(screen.queryByTestId("draggable-card")).not.toBeInTheDocument();
   });
 
@@ -118,5 +119,16 @@ describe("Playground", () => {
     rerender(<Playground cursor={{ x: 20, y: 20 }} output={{ ...idle, rightClick: false }} />);
     rerender(<Playground cursor={{ x: 20, y: 20 }} output={{ ...idle, rightClick: true }} />);
     expect(screen.getByText("右键次数：1")).toBeInTheDocument();
+  });
+
+  it("累计显示每一帧有符号滚动量", () => {
+    const { rerender } = render(
+      <Playground cursor={null} output={{ ...idle, scrollY: 3 }} />,
+    );
+    expect(screen.getByText("累计滚动：3")).toBeInTheDocument();
+
+    rerender(<Playground cursor={null} output={{ ...idle, scrollY: 0 }} />);
+    rerender(<Playground cursor={null} output={{ ...idle, scrollY: -1 }} />);
+    expect(screen.getByText("累计滚动：2")).toBeInTheDocument();
   });
 });

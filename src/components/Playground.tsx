@@ -33,6 +33,7 @@ const containsPoint = (bounds: DOMRect, point: Point): boolean => (
 export function Playground({ cursor, output }: PlaygroundProps) {
   const [clickCount, setClickCount] = useState(0);
   const [rightClickCount, setRightClickCount] = useState(0);
+  const [scrollTotal, setScrollTotal] = useState(0);
   const [clickTargetPosition, setClickTargetPosition] = useState<Position>(getInitialTargetPosition);
   const clickTargetRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +56,12 @@ export function Playground({ cursor, output }: PlaygroundProps) {
       setRightClickCount((count) => count + 1);
     }
   }, [output.rightClick]);
+
+  useEffect(() => {
+    if (output.scrollY !== 0) {
+      setScrollTotal((total) => total + output.scrollY);
+    }
+  }, [output]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -88,7 +95,7 @@ export function Playground({ cursor, output }: PlaygroundProps) {
           <h2 id="playground-title">基础操作测试</h2>
         </div>
         <p className="gesture-hint">
-          移动光标 · 拇指 + 食指：左键点击 · 拇指 + 中指：右键 · 保持捏合：长按 · 张开手掌：停止
+          移动光标 · 拇指 + 食指：左键点击 · 拇指 + 中指：右键 · 保持捏合：长按 · 食指 + 中指：上下滚动 · 张开手掌：停止
         </p>
       </div>
 
@@ -101,6 +108,7 @@ export function Playground({ cursor, output }: PlaygroundProps) {
           <span>在此捏合</span>
           <strong>点击次数：{clickCount}</strong>
           <strong>右键次数：{rightClickCount}</strong>
+          <strong>累计滚动：{scrollTotal}</strong>
         </div>
 
       </div>
