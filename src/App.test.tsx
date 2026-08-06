@@ -220,3 +220,17 @@ it("releases desktop control during unmount", async () => {
   unmount();
   expect(bridge.releaseAndPause).toHaveBeenCalledOnce();
 });
+
+it("开始稳定性测试立即暂停系统控制且不再派发桌面事件", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  const start = await screen.findByRole("button", { name: "开始稳定性测试" });
+  fireEvent.click(start);
+  await waitFor(() => expect(bridge.releaseAndPause).toHaveBeenCalled());
+  vi.mocked(bridge.move).mockClear();
+  vi.mocked(bridge.click).mockClear();
+  runFrame(100, handAt("left"));
+  runFrame(116, handAt("left"));
+  expect(bridge.move).not.toHaveBeenCalled();
+  expect(bridge.click).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "启用系统控制" })).toBeDisabled();
+});

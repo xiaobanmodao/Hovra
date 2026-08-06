@@ -15,6 +15,7 @@ type HarnessProps = {
   pinchRatio?: number | null;
   gestureState?: GestureState;
   cursor?: Point | null;
+  disabled?: boolean;
 };
 
 function CalibrationPanelHarness({
@@ -23,6 +24,7 @@ function CalibrationPanelHarness({
   pinchRatio = 0.041,
   gestureState = "tracking",
   cursor = { x: 320, y: 240 },
+  disabled = false,
 }: HarnessProps) {
   const [settings, setSettings] = useState(initialSettings);
 
@@ -38,6 +40,7 @@ function CalibrationPanelHarness({
       pinchRatio={pinchRatio}
       gestureState={gestureState}
       cursor={cursor}
+      disabled={disabled}
     />
   );
 }
@@ -169,5 +172,11 @@ describe("CalibrationPanel", () => {
 
     expect(screen.queryByRole("button", { name: "开始个人点击校准" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "个人点击校准" })).not.toBeInTheDocument();
+  });
+
+  it("稳定性测试期间禁用全部参数按钮", () => {
+    render(<CalibrationPanelHarness disabled />);
+    expect(screen.getByRole("button", { name: "调高点击灵敏度" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "恢复默认设置" })).toBeDisabled();
   });
 });

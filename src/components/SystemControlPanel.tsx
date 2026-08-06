@@ -6,6 +6,7 @@ type SystemControlPanelProps = {
   enabled: boolean;
   onEnable: () => void | Promise<void>;
   onPause: () => void | Promise<void>;
+  disabled?: boolean;
 };
 
 const PERMISSION_POLL_MS = 2_000;
@@ -14,6 +15,7 @@ export function SystemControlPanel({
   enabled,
   onEnable,
   onPause,
+  disabled = false,
 }: SystemControlPanelProps) {
   const bridge = window.gestureDesktop;
   const [permission, setPermission] = useState<PermissionState>(
@@ -82,7 +84,7 @@ export function SystemControlPanel({
           <p>请在“系统设置”→“隐私与安全性”→“辅助功能”中允许此应用。</p>
         )}
         {permission === "granted" && !enabled && (
-          <p>系统控制已暂停，需由你主动启用。</p>
+          <p>{disabled ? "稳定性测试期间保持暂停" : "系统控制已暂停，需由你主动启用。"}</p>
         )}
         {permission === "granted" && enabled && (
           <p>现在可用手势移动、左键点击和张开手掌停止。</p>
@@ -94,7 +96,7 @@ export function SystemControlPanel({
           <button
             className="system-control-button"
             type="button"
-            disabled={permission !== "granted"}
+            disabled={disabled || permission !== "granted"}
             onClick={() => {
               if (enabled) {
                 void onPause();

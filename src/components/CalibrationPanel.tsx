@@ -14,6 +14,7 @@ type CalibrationPanelProps = {
   pinchRatio: number | null;
   gestureState: GestureState;
   cursor: Point | null;
+  disabled?: boolean;
 };
 
 type SettingControlProps = {
@@ -25,6 +26,7 @@ type SettingControlProps = {
   max: number;
   onDecrease: () => void;
   onIncrease: () => void;
+  disabled?: boolean;
 };
 
 function SettingControl({
@@ -36,6 +38,7 @@ function SettingControl({
   max,
   onDecrease,
   onIncrease,
+  disabled = false,
 }: SettingControlProps) {
   const labelId = useId();
 
@@ -46,7 +49,7 @@ function SettingControl({
         <button
           type="button"
           aria-label={`调低${accessibleLabel}`}
-          disabled={value <= min}
+          disabled={disabled || value <= min}
           onClick={onDecrease}
         >
           −
@@ -55,7 +58,7 @@ function SettingControl({
         <button
           type="button"
           aria-label={`调高${accessibleLabel}`}
-          disabled={value >= max}
+          disabled={disabled || value >= max}
           onClick={onIncrease}
         >
           +
@@ -79,6 +82,7 @@ export function CalibrationPanel({
   pinchRatio,
   gestureState,
   cursor,
+  disabled = false,
 }: CalibrationPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const contentId = useId();
@@ -148,6 +152,7 @@ export function CalibrationPanel({
                   max={metadata.max}
                   onDecrease={() => changeSetting(metadata, -metadata.step)}
                   onIncrease={() => changeSetting(metadata, metadata.step)}
+                  disabled={disabled}
                 />
               );
             })}
@@ -156,6 +161,7 @@ export function CalibrationPanel({
           <button
             type="button"
             className="calibration-reset"
+            disabled={disabled}
             onClick={() => {
               onSettingsChange({ ...DEFAULT_GESTURE_SETTINGS });
             }}

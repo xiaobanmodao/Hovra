@@ -89,3 +89,10 @@ it("labels a missing desktop bridge as browser demo mode", () => {
   expect(screen.getByText("浏览器演示模式")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "启用系统控制" })).not.toBeInTheDocument();
 });
+
+it("稳定性测试期间禁止重新启用系统控制", async () => {
+  window.gestureDesktop = desktopApi("granted");
+  render(<SystemControlPanel enabled={false} disabled onEnable={vi.fn()} onPause={vi.fn()} />);
+  expect(await screen.findByRole("button", { name: "启用系统控制" })).toBeDisabled();
+  expect(screen.getByText("稳定性测试期间保持暂停")).toBeInTheDocument();
+});

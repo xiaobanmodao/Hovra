@@ -6,9 +6,19 @@ import { GestureDiagnostics } from "./components/GestureDiagnostics";
 import { Playground } from "./components/Playground";
 import { StatusPanel } from "./components/StatusPanel";
 import { SystemControlPanel } from "./components/SystemControlPanel";
+import { StabilityTestPanel } from "./components/StabilityTestPanel";
 import { mapMirroredPoint, smoothPoint, type Point } from "./cursor/cursorController";
 import { DEFAULT_GESTURE_SETTINGS } from "./gesture/config";
 import { GestureEngine } from "./gesture/gestureEngine";
+import {
+  advanceStabilitySession,
+  cancelStabilitySession,
+  completeStabilitySession,
+  createStabilitySession,
+  type StabilitySession,
+} from "./gesture/stabilityTest";
+import { analyzeStabilitySamples, type StabilityReport } from "./gesture/stabilityTuning";
+import { resolveStablePinchThresholds } from "./gesture/stableHandMetrics";
 import { gestureStateLabel } from "./i18n/zh-CN";
 import {
   type GestureOutput,
@@ -63,6 +73,11 @@ const INITIAL_OUTPUT: GestureOutput = {
   },
 };
 
+const IDLE_STABILITY_SESSION: StabilitySession = {
+  phase: "idle", startedAt: 0, lastObservedAt: null, stepIndex: 0,
+  stepElapsedMs: 0, samples: [], quality: { valid: false, message: "尚未开始" },
+};
+
 const clampToViewport = (point: Point): Point => ({
   x: Math.min(window.innerWidth, Math.max(0, point.x)),
   y: Math.min(window.innerHeight, Math.max(0, point.y)),
@@ -93,6 +108,8 @@ function App() {
   const mountedRef = useRef(true);
   const lastDispatchedOutputRef = useRef<GestureOutput>(INITIAL_OUTPUT);
   const safetyGenerationRef = useRef(0);
+  const stabilityActiveRef = useRef(false);
+  const settingsBeforeTuningRef = useRef<GestureSettings | null>(null);
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_GESTURE_SETTINGS }));
   const engine = useMemo(() => new GestureEngine(settings), [settings]);
   const engineRef = useRef(engine);
@@ -106,6 +123,9 @@ function App() {
   const [cursor, setCursor] = useState<Point | null>(null);
   const [systemCursor, setSystemCursor] = useState<Point | null>(null);
   const [systemControlEnabled, setSystemControlEnabled] = useState(false);
+  const [stabilitySession, setStabilitySession] = useState<StabilitySession>(IDLE_STABILITY_SESSION);
+  const [stabilityReport, setStabilityReport] = useState<StabilityReport | null>(null);
+  const [stabilityApplied, setStabilityApplied] = useState(false);
   const handleCameraReady = useCallback(() => {
     setCameraReady(true);
     setCameraStatus("摄像头已启用");
@@ -171,7 +191,7 @@ function App() {
   }, [desktopBridge]);
 
   const enableSystemControl = useCallback(async () => {
-    if (!desktopBridge) {
+    if (!desktopBridge || stabilityActiveRef.current) {
       return;
     }
 
@@ -198,6 +218,34 @@ function App() {
       await pauseSystemControl();
     }
   }, [desktopBridge, pauseSystemControl]);
+
+  const startStabilityTest = useCallback(async () => {
+    await pauseSystemControl();
+    settingsBeforeTuningRef.current = { ...settings };
+    stabilityActiveRef.current = true;
+    setStabilityApplied(false);
+    setStabilityReport(null);
+    setStabilitySession(createStabilitySession(performance.now()));
+  }, [pauseSystemControl, settings]);
+
+  const cancelStabilityTest = useCallback(() => {
+    stabilityActiveRef.current = false;
+    setStabilitySession((current) => cancelStabilitySession(current));
+  }, []);
+
+  const applyStabilityRecommendation = useCallback(() => {
+    if (!stabilityReport?.recommendation.safe) return;
+    const { enterRatio, exitRatio } = stabilityReport.recommendation;
+    if (enterRatio === null || exitRatio === null) return;
+    handleSettingsChange({ ...settings, pinchEnterRatio: enterRatio, pinchExitRatio: exitRatio });
+    setStabilityApplied(true);
+  }, [handleSettingsChange, settings, stabilityReport]);
+
+  const restorePreTestSettings = useCallback(() => {
+    if (!settingsBeforeTuningRef.current) return;
+    handleSettingsChange({ ...settingsBeforeTuningRef.current });
+    setStabilityApplied(false);
+  }, [handleSettingsChange]);
 
   useEffect(() => {
     const handleSafetyPause = () => {
@@ -333,6 +381,18 @@ function App() {
 
           setLandmarks(nextLandmarks);
           setOutput(nextOutput);
+          if (stabilityActiveRef.current) {
+            setStabilitySession((current) => {
+              const next = advanceStabilitySession(current, {
+                nowMs,
+                output: nextOutput,
+                handPresent: nextLandmarks !== null,
+                pageFocused: typeof document.hasFocus !== "function" || document.hasFocus(),
+              });
+              if (next.phase === "analyzing") stabilityActiveRef.current = false;
+              return next;
+            });
+          }
           if (!failed) {
             setTrackerStatus(detectedHand ? "已检测到手部" : "未检测到手部");
           }
@@ -386,6 +446,20 @@ function App() {
     };
   }, [engine, landmarker, settings.cameraStaleFrameMs, settings.cursorOffsetX, settings.cursorOffsetY, settings.cursorSmoothingFactor]);
 
+  useEffect(() => {
+    if (stabilitySession.phase !== "analyzing") return;
+    setStabilityReport(analyzeStabilitySamples(
+      stabilitySession.samples,
+      resolveStablePinchThresholds(settings),
+    ));
+    setStabilitySession((current) => completeStabilitySession(current));
+  }, [settings, stabilitySession]);
+
+  const stabilityRunning = stabilitySession.phase === "readiness"
+    || stabilitySession.phase === "positive"
+    || stabilitySession.phase === "negative"
+    || stabilitySession.phase === "analyzing";
+
   return (
     <main className="app-shell">
       <header className="hero">
@@ -406,6 +480,7 @@ function App() {
         enabled={systemControlEnabled}
         onEnable={enableSystemControl}
         onPause={pauseSystemControl}
+        disabled={stabilityRunning}
       />
 
       <CalibrationPanel
@@ -414,6 +489,18 @@ function App() {
         pinchRatio={output.diagnostics.leftPinchRatio}
         gestureState={output.state}
         cursor={cursor}
+        disabled={stabilityRunning}
+      />
+
+      <StabilityTestPanel
+        session={stabilitySession}
+        report={stabilityReport}
+        applied={stabilityApplied}
+        canStart={cameraReady && landmarker !== null}
+        onStart={() => { void startStabilityTest(); }}
+        onCancel={cancelStabilityTest}
+        onApply={applyStabilityRecommendation}
+        onRestore={restorePreTestSettings}
       />
 
       <GestureDiagnostics
