@@ -101,6 +101,51 @@ describe("PinchClickStateMachine", () => {
     });
   });
 
+  it("长按进度使用真实时间并在按下帧精确到 1", () => {
+    const machine = new PinchClickStateMachine({ longPressMs: 420 });
+    machine.update(separated(), 0);
+    expect(machine.update(contact(), 16).holdProgress).toBe(0);
+    machine.update(contact(), 32);
+    machine.update(contact(), 132);
+    expect(machine.update(contact(), 226).holdProgress).toBeCloseTo(0.5, 6);
+    machine.update(contact(), 332);
+    expect(machine.update(contact(), 435).holdProgress).toBeCloseTo(419 / 420, 6);
+    expect(machine.update(contact(), 436)).toMatchObject({
+      holdStarted: true,
+      holding: true,
+      holdProgress: 1,
+    });
+    expect(machine.update(separated(), 452).holdProgress).toBe(1);
+    expect(machine.update(separated(), 468)).toMatchObject({
+      holdEnded: true,
+      holdProgress: 0,
+    });
+  });
+
+  it("非长按释放和安全中断立即清空进度", () => {
+    const release = new PinchClickStateMachine();
+    release.update(separated(), 0);
+    release.update(contact(), 16);
+    release.update(contact(), 32);
+    expect(release.update(separated(), 48).holdProgress).toBe(0);
+
+    const blocked = new PinchClickStateMachine();
+    blocked.update(separated(), 0);
+    blocked.update(contact(), 16);
+    expect(blocked.update({ ...contact(), suppressed: true }, 32).holdProgress).toBe(0);
+
+    const interrupted = new PinchClickStateMachine({ longPressMs: 150, maxFrameGapMs: 250 });
+    interrupted.update(separated(), 0);
+    interrupted.update(contact(), 16);
+    interrupted.update(contact(), 32);
+    interrupted.update(contact(), 116);
+    expect(interrupted.update(contact(), 166).holdProgress).toBe(1);
+    expect(interrupted.update(null, 182)).toMatchObject({
+      holdEnded: true,
+      holdProgress: 0,
+    });
+  });
+
   it("长按时丢手会立即产生一次安全抬起边沿", () => {
     const machine = new PinchClickStateMachine({ longPressMs: 150, maxFrameGapMs: 250 });
     machine.update(separated(), 0);

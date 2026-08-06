@@ -47,6 +47,7 @@ export type GestureOutput = {
   candidate: GestureKind | null;
   lockedGesture: GestureKind | null;
   confirmationProgress: number;
+  longPressProgress: number;
   diagnostics: GestureDiagnosticsSnapshot;
 };
 

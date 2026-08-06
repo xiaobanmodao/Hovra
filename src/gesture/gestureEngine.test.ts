@@ -71,13 +71,14 @@ describe("GestureEngine 稳定内核", () => {
     engine.update(left, 16);
     engine.update(left, 32);
     engine.update(left, 132);
-    engine.update(left, 232);
+    expect(engine.update(left, 232).longPressProgress).toBeCloseTo(216 / 420, 6);
     engine.update(left, 332);
     expect(engine.update(left, 435)).toMatchObject({
       state: "left-pinching",
       dragStart: false,
       dragEnd: false,
       click: false,
+      longPressProgress: 419 / 420,
     });
     expect(engine.update(left, 436)).toMatchObject({
       state: "dragging",
@@ -85,6 +86,7 @@ describe("GestureEngine 稳定内核", () => {
       dragStart: true,
       dragEnd: false,
       click: false,
+      longPressProgress: 1,
       clickCursor: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
     });
     expect(engine.update(left, 452)).toMatchObject({
@@ -93,15 +95,18 @@ describe("GestureEngine 稳定内核", () => {
       dragStart: false,
       dragEnd: false,
       click: false,
+      longPressProgress: 1,
     });
     expect(engine.update(tracking, 468)).toMatchObject({
       phase: "releasing",
       dragEnd: false,
+      longPressProgress: 1,
     });
     expect(engine.update(tracking, 484)).toMatchObject({
       dragStart: false,
       dragEnd: true,
       click: false,
+      longPressProgress: 0,
     });
   });
 
@@ -122,6 +127,7 @@ describe("GestureEngine 稳定内核", () => {
       dragStart: false,
       dragEnd: true,
       click: false,
+      longPressProgress: 0,
       diagnostics: {
         trackingSource: "predicted",
         trackingQuality: 0.15,

@@ -45,6 +45,7 @@ export type PinchClickOutput = {
   holdEnded: boolean;
   holdCursor: Landmark | null;
   holding: boolean;
+  holdProgress: number;
 };
 
 export const DEFAULT_PINCH_CLICK_CONFIG: Readonly<PinchClickConfig> = {
@@ -145,7 +146,7 @@ export class PinchClickStateMachine {
       if (evidence.contact) {
         this.releaseFrames = 0;
         this.phase = "dragging";
-        return this.output(false, null, cursorSpeed, null);
+        return this.output(false, null, cursorSpeed, null, false, false, null, 1);
       }
 
       this.releaseFrames = evidence.separated
@@ -161,7 +162,16 @@ export class PinchClickStateMachine {
         this.clearGesture();
         return this.output(false, null, cursorSpeed, null, false, true);
       }
-      return this.output(false, null, cursorSpeed, evidence.blockingReason);
+      return this.output(
+        false,
+        null,
+        cursorSpeed,
+        evidence.blockingReason,
+        false,
+        false,
+        null,
+        1,
+      );
     }
 
     if (cursorSpeed > this.config.maxCursorSpeed) {
@@ -196,9 +206,18 @@ export class PinchClickStateMachine {
         this.holding = true;
         this.phase = "dragging";
         const holdCursor = this.latchedCursor ? { ...this.latchedCursor } : { ...evidence.cursor };
-        return this.output(false, null, cursorSpeed, null, true, false, holdCursor);
+        return this.output(false, null, cursorSpeed, null, true, false, holdCursor, 1);
       }
-      return this.output(false, null, cursorSpeed, evidence.blockingReason === "none" ? null : evidence.blockingReason);
+      return this.output(
+        false,
+        null,
+        cursorSpeed,
+        evidence.blockingReason === "none" ? null : evidence.blockingReason,
+        false,
+        false,
+        null,
+        this.measureHoldProgress(nowMs),
+      );
     }
 
     if (this.phase === "candidate") {
@@ -260,6 +279,12 @@ export class PinchClickStateMachine {
     return Number.isFinite(speed) ? speed : Number.POSITIVE_INFINITY;
   }
 
+  private measureHoldProgress(nowMs: number): number {
+    if (this.holding) return 1;
+    if (this.gestureStartedAtMs === null) return 0;
+    return clamp01((nowMs - this.gestureStartedAtMs) / this.config.longPressMs);
+  }
+
   private enterSuppression(nowMs: number): void {
     this.hasTrackingBaseline = true;
     this.armed = false;
@@ -302,6 +327,7 @@ export class PinchClickStateMachine {
     holdStarted = false,
     holdEnded = false,
     holdCursor: Landmark | null = null,
+    holdProgress = 0,
   ): PinchClickOutput {
     return {
       phase: this.phase,
@@ -317,6 +343,7 @@ export class PinchClickStateMachine {
       holdEnded,
       holdCursor,
       holding: this.holding,
+      holdProgress: clamp01(holdProgress),
     };
   }
 }
@@ -336,6 +363,10 @@ export function resolvePinchClickConfig(input: Partial<PinchClickConfig> = {}): 
 
 function distance2(first: Landmark, second: Landmark): number {
   return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
 }
 
 function range(value: number | undefined, min: number, max: number, fallback: number): number {

@@ -22,6 +22,7 @@ const output = (overrides: Partial<GestureOutput["diagnostics"]> = {}, click = f
   candidate: null,
   lockedGesture: click ? "left" : null,
   confirmationProgress: click ? 1 : 0,
+  longPressProgress: 0,
   diagnostics: {
     timestampMs: 0, quality: 1, trackingSource: "observed", trackingQuality: 1,
     rejectedLandmarkCount: 0, palmScale: 0.2, screenPinchGap: 0.1,

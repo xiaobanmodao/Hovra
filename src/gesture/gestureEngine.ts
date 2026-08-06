@@ -156,6 +156,7 @@ export class GestureEngine {
         candidate: null,
         lockedGesture: "open-palm",
         confirmationProgress: 1,
+        longPressProgress: pinch.holdProgress,
         diagnostics: this.diagnostics(
           metrics,
           pinch,
@@ -195,6 +196,7 @@ export class GestureEngine {
       candidate,
       lockedGesture: pinch.active ? "left" : null,
       confirmationProgress,
+      longPressProgress: pinch.holdProgress,
       diagnostics: this.diagnostics(
         metrics,
         pinch,
@@ -230,6 +232,7 @@ export class GestureEngine {
       candidate: null,
       lockedGesture: remainPaused ? "open-palm" : null,
       confirmationProgress: remainPaused ? 1 : 0,
+      longPressProgress: 0,
       diagnostics: this.diagnostics(
         metrics,
         pinch,
@@ -264,6 +267,7 @@ export class GestureEngine {
       candidate: null,
       lockedGesture: null,
       confirmationProgress: 0,
+      longPressProgress: 0,
       diagnostics: this.diagnostics(
         null,
         pinch,
@@ -368,6 +372,7 @@ export class GestureEngine {
     candidate: GestureKind | null;
     lockedGesture: GestureKind | null;
     confirmationProgress: number;
+    longPressProgress: number;
     diagnostics: GestureDiagnosticsSnapshot;
   }): GestureOutput {
     return {

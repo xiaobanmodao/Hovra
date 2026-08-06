@@ -17,6 +17,7 @@ const output: GestureOutput = {
   candidate: "left",
   lockedGesture: null,
   confirmationProgress: 0.75,
+  longPressProgress: 0,
   diagnostics: {
     timestampMs: 120,
     quality: 1,

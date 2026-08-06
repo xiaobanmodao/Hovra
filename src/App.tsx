@@ -43,6 +43,7 @@ const INITIAL_OUTPUT: GestureOutput = {
   candidate: null,
   lockedGesture: null,
   confirmationProgress: 0,
+  longPressProgress: 0,
   diagnostics: {
     timestampMs: 0,
     quality: 0,
