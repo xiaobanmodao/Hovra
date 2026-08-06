@@ -116,7 +116,7 @@ const renderDesktopApp = async (bridge = desktopApi()) => {
 it("renders the simplified interaction description", () => {
   render(<App />);
   expect(screen.getByRole("heading", { name: "Hovra" })).toBeInTheDocument();
-  expect(screen.getByText("单手即可控制移动、左键点击和张手停止。")).toBeInTheDocument();
+  expect(screen.getByText("单手即可控制移动、左键点击、长按和张手停止。")).toBeInTheDocument();
 });
 
 it("moves the desktop pointer from a tracking hand", async () => {
@@ -161,6 +161,47 @@ it("稳定捏合后只在第二个释放帧点击一次且系统控制保持开�
   expect(bridge.doubleClick).not.toHaveBeenCalled();
   expect(bridge.scroll).not.toHaveBeenCalled();
   expect(bridge.mouseDown).not.toHaveBeenCalled();
+});
+
+it("长按先移动到锁定点再按下，保持时拖动，释放时抬起", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  vi.mocked(bridge.move).mockClear();
+  runFrame(16, handAt("left"));
+  runFrame(32, handAt("left"));
+  runFrame(132, handAt("left"));
+  runFrame(232, handAt("left"));
+  runFrame(332, handAt("left"));
+  runFrame(436, handAt("left"));
+
+  await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
+  expect(vi.mocked(bridge.move).mock.invocationCallOrder.at(-1))
+    .toBeLessThan(vi.mocked(bridge.mouseDown).mock.invocationCallOrder[0]!);
+
+  runFrame(452, handAt("left", 0.62, 0.4));
+  await waitFor(() => expect(bridge.drag).toHaveBeenCalled());
+  runFrame(468, handAt("tracking"));
+  runFrame(484, handAt("tracking"));
+
+  await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
+  expect(bridge.click).not.toHaveBeenCalled();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
+});
+
+it("长按时丢失手部会抬起鼠标且不会关闭系统控制", async () => {
+  const { bridge, runFrame } = await renderDesktopApp();
+  runFrame(16, handAt("left"));
+  runFrame(32, handAt("left"));
+  runFrame(132, handAt("left"));
+  runFrame(232, handAt("left"));
+  runFrame(332, handAt("left"));
+  runFrame(436, handAt("left"));
+  await waitFor(() => expect(bridge.mouseDown).toHaveBeenCalledOnce());
+
+  runFrame(452, null);
+
+  await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
+  expect(bridge.click).not.toHaveBeenCalled();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
 });
 
 it("指尖只在画面重合但同帧纵深分离时不点击", async () => {

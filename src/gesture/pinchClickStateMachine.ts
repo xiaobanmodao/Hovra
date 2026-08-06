@@ -24,7 +24,7 @@ export type PinchClickConfig = {
   requiredContactFrames: number;
   requiredReleaseFrames: number;
   maxFrameGapMs: number;
-  maxGestureMs: number;
+  longPressMs: number;
   maxCursorSpeed: number;
   maxTravel: number;
   suppressionCooldownMs: number;
@@ -41,13 +41,17 @@ export type PinchClickOutput = {
   releaseFrames: number;
   cursorSpeed: number;
   blockingReason: ClickBlockingReason | null;
+  holdStarted: boolean;
+  holdEnded: boolean;
+  holdCursor: Landmark | null;
+  holding: boolean;
 };
 
 export const DEFAULT_PINCH_CLICK_CONFIG: Readonly<PinchClickConfig> = {
   requiredContactFrames: 2,
   requiredReleaseFrames: 2,
   maxFrameGapMs: 120,
-  maxGestureMs: 650,
+  longPressMs: 420,
   maxCursorSpeed: 3.2,
   maxTravel: 0.12,
   suppressionCooldownMs: 120,
@@ -70,6 +74,7 @@ export class PinchClickStateMachine {
   private lastMotionCursor: Landmark | null = null;
   private lastTimestampMs: number | null = null;
   private peakSpeed = 0;
+  private holding = false;
 
   constructor(config: Partial<PinchClickConfig> = {}) {
     this.config = resolvePinchClickConfig(config);
@@ -77,27 +82,33 @@ export class PinchClickStateMachine {
 
   update(evidence: PinchClickEvidence | null, nowMs: number): PinchClickOutput {
     if (!Number.isFinite(nowMs) || (this.lastTimestampMs !== null && nowMs <= this.lastTimestampMs)) {
+      const holdEnded = this.holding;
       this.resetTracking("tracking-gap");
-      return this.output(false, null, 0, "tracking-gap");
+      return this.output(false, null, 0, "tracking-gap", false, holdEnded);
     }
 
     if (this.lastTimestampMs !== null && nowMs - this.lastTimestampMs > this.config.maxFrameGapMs) {
+      const holdEnded = this.holding;
       this.resetTracking("tracking-gap");
+      this.lastTimestampMs = nowMs;
+      return this.output(false, null, 0, "tracking-gap", false, holdEnded);
     }
 
     const cursorSpeed = evidence ? this.measureSpeed(evidence.motionCursor, nowMs) : 0;
     this.lastTimestampMs = nowMs;
 
     if (!evidence) {
+      const holdEnded = this.holding;
       this.resetTracking("tracking-gap");
       this.lastTimestampMs = nowMs;
-      return this.output(false, null, cursorSpeed, "tracking-gap");
+      return this.output(false, null, cursorSpeed, "tracking-gap", false, holdEnded);
     }
 
     if (evidence.suppressed) {
+      const holdEnded = this.holding;
       this.enterSuppression(nowMs);
       this.lastMotionCursor = { ...evidence.motionCursor };
-      return this.output(false, null, cursorSpeed, "suppressed");
+      return this.output(false, null, cursorSpeed, "suppressed", false, holdEnded);
     }
 
     if (!this.hasTrackingBaseline) {
@@ -130,9 +141,27 @@ export class PinchClickStateMachine {
       return this.output(false, null, cursorSpeed, this.phase === "cooldown" ? "suppressed" : null);
     }
 
-    if (this.gestureStartedAtMs !== null && nowMs - this.gestureStartedAtMs > this.config.maxGestureMs) {
-      this.cancelGesture(nowMs);
-      return this.output(false, null, cursorSpeed, "timeout");
+    if (this.holding) {
+      if (evidence.contact) {
+        this.releaseFrames = 0;
+        this.phase = "dragging";
+        return this.output(false, null, cursorSpeed, null);
+      }
+
+      this.releaseFrames = evidence.separated
+        ? Math.min(this.config.requiredReleaseFrames, this.releaseFrames + 1)
+        : 0;
+      this.phase = this.releaseFrames > 0 ? "releasing" : "dragging";
+      if (this.releaseFrames >= this.config.requiredReleaseFrames) {
+        this.armed = false;
+        this.suppressedUntilMs = nowMs + this.config.suppressionCooldownMs;
+        this.phase = "cooldown";
+        this.cleanFrames = 0;
+        this.lastSeparatedCursor = { ...evidence.cursor };
+        this.clearGesture();
+        return this.output(false, null, cursorSpeed, null, false, true);
+      }
+      return this.output(false, null, cursorSpeed, evidence.blockingReason);
     }
 
     if (cursorSpeed > this.config.maxCursorSpeed) {
@@ -159,6 +188,16 @@ export class PinchClickStateMachine {
       }
       this.contactFrames = Math.min(this.config.requiredContactFrames, this.contactFrames + 1);
       this.phase = this.contactFrames >= this.config.requiredContactFrames ? "active" : "candidate";
+      if (
+        this.phase === "active"
+        && this.gestureStartedAtMs !== null
+        && nowMs - this.gestureStartedAtMs >= this.config.longPressMs
+      ) {
+        this.holding = true;
+        this.phase = "dragging";
+        const holdCursor = this.latchedCursor ? { ...this.latchedCursor } : { ...evidence.cursor };
+        return this.output(false, null, cursorSpeed, null, true, false, holdCursor);
+      }
       return this.output(false, null, cursorSpeed, evidence.blockingReason === "none" ? null : evidence.blockingReason);
     }
 
@@ -207,6 +246,7 @@ export class PinchClickStateMachine {
     this.lastMotionCursor = null;
     this.lastTimestampMs = null;
     this.peakSpeed = 0;
+    this.holding = false;
   }
 
   private measureSpeed(cursor: Landmark, nowMs: number): number {
@@ -240,6 +280,7 @@ export class PinchClickStateMachine {
     this.latchedCursor = null;
     this.gestureOrigin = null;
     this.peakSpeed = 0;
+    this.holding = false;
   }
 
   private resetTracking(reason: ClickBlockingReason): void {
@@ -258,17 +299,24 @@ export class PinchClickStateMachine {
     clickCursor: Landmark | null,
     cursorSpeed: number,
     blockingReason: ClickBlockingReason | null,
+    holdStarted = false,
+    holdEnded = false,
+    holdCursor: Landmark | null = null,
   ): PinchClickOutput {
     return {
       phase: this.phase,
       clicked,
       clickCursor,
-      active: this.phase === "active" || this.phase === "releasing",
+      active: this.phase === "active" || this.phase === "dragging" || this.phase === "releasing",
       contactFrames: this.contactFrames,
       requiredContactFrames: this.config.requiredContactFrames,
       releaseFrames: this.releaseFrames,
       cursorSpeed,
       blockingReason,
+      holdStarted,
+      holdEnded,
+      holdCursor,
+      holding: this.holding,
     };
   }
 }
@@ -278,7 +326,7 @@ export function resolvePinchClickConfig(input: Partial<PinchClickConfig> = {}): 
     requiredContactFrames: integerInRange(input.requiredContactFrames, 2, 5, DEFAULT_PINCH_CLICK_CONFIG.requiredContactFrames),
     requiredReleaseFrames: integerInRange(input.requiredReleaseFrames, 2, 5, DEFAULT_PINCH_CLICK_CONFIG.requiredReleaseFrames),
     maxFrameGapMs: range(input.maxFrameGapMs, 50, 250, DEFAULT_PINCH_CLICK_CONFIG.maxFrameGapMs),
-    maxGestureMs: range(input.maxGestureMs, 150, 1_200, DEFAULT_PINCH_CLICK_CONFIG.maxGestureMs),
+    longPressMs: range(input.longPressMs, 150, 1_200, DEFAULT_PINCH_CLICK_CONFIG.longPressMs),
     maxCursorSpeed: range(input.maxCursorSpeed, 0.5, 12, DEFAULT_PINCH_CLICK_CONFIG.maxCursorSpeed),
     maxTravel: range(input.maxTravel, 0.03, 0.35, DEFAULT_PINCH_CLICK_CONFIG.maxTravel),
     suppressionCooldownMs: range(input.suppressionCooldownMs, 40, 500, DEFAULT_PINCH_CLICK_CONFIG.suppressionCooldownMs),

@@ -58,6 +58,84 @@ describe("PinchClickStateMachine", () => {
     expect(machine.update(separated(0.46, 0.39), 80).clicked).toBe(false);
   });
 
+  it("稳定捏合达到阈值只开始一次长按，释放时结束且不点击", () => {
+    const machine = new PinchClickStateMachine({ longPressMs: 420 });
+    machine.update(separated(0.42, 0.36), 0);
+    machine.update(contact(0.44, 0.37), 16);
+    machine.update(contact(0.44, 0.37), 32);
+    machine.update(contact(0.44, 0.37), 132);
+    machine.update(contact(0.44, 0.37), 232);
+    machine.update(contact(0.44, 0.37), 332);
+
+    expect(machine.update(contact(0.44, 0.37), 435)).toMatchObject({
+      holdStarted: false,
+      holdEnded: false,
+      holding: false,
+    });
+    expect(machine.update(contact(0.44, 0.37), 436)).toMatchObject({
+      phase: "dragging",
+      holdStarted: true,
+      holdEnded: false,
+      holding: true,
+      holdCursor: { x: 0.42, y: 0.36 },
+      clicked: false,
+    });
+    expect(machine.update(contact(0.6, 0.37), 452)).toMatchObject({
+      phase: "dragging",
+      holdStarted: false,
+      holdEnded: false,
+      holding: true,
+      clicked: false,
+    });
+    expect(machine.update(separated(0.6, 0.37), 468)).toMatchObject({
+      phase: "releasing",
+      holdEnded: false,
+      holding: true,
+    });
+    expect(machine.update(separated(0.6, 0.37), 484)).toMatchObject({
+      phase: "cooldown",
+      holdStarted: false,
+      holdEnded: true,
+      holding: false,
+      clicked: false,
+    });
+  });
+
+  it("长按时丢手会立即产生一次安全抬起边沿", () => {
+    const machine = new PinchClickStateMachine({ longPressMs: 150, maxFrameGapMs: 250 });
+    machine.update(separated(), 0);
+    machine.update(contact(), 16);
+    machine.update(contact(), 32);
+    machine.update(contact(), 116);
+    expect(machine.update(contact(), 166).holdStarted).toBe(true);
+
+    expect(machine.update(null, 182)).toMatchObject({
+      phase: "lost",
+      holdEnded: true,
+      holding: false,
+      clicked: false,
+    });
+    expect(machine.update(null, 198).holdEnded).toBe(false);
+  });
+
+  it("长按时张掌或握拳抑制会立即产生一次安全抬起边沿", () => {
+    const machine = new PinchClickStateMachine({ longPressMs: 150, maxFrameGapMs: 250 });
+    machine.update(separated(), 0);
+    machine.update(contact(), 16);
+    machine.update(contact(), 32);
+    machine.update(contact(), 116);
+    expect(machine.update(contact(), 166).holdStarted).toBe(true);
+
+    expect(machine.update({ ...contact(), suppressed: true }, 182)).toMatchObject({
+      phase: "cooldown",
+      holdEnded: true,
+      holding: false,
+      clicked: false,
+      blockingReason: "suppressed",
+    });
+    expect(machine.update({ ...contact(), suppressed: true }, 198).holdEnded).toBe(false);
+  });
+
   it("单帧重合和未完成释放都不能点击", () => {
     const machine = new PinchClickStateMachine();
     machine.update(separated(), 0);
@@ -95,13 +173,7 @@ describe("PinchClickStateMachine", () => {
     expect(machine.update(separated(), 224).clicked).toBe(true);
   });
 
-  it("过长捏合、移动范围过大和跟踪断帧都取消点击", () => {
-    const longHold = new PinchClickStateMachine({ maxGestureMs: 150, maxFrameGapMs: 250 });
-    longHold.update(separated(), 0);
-    longHold.update(contact(), 16);
-    longHold.update(contact(), 32);
-    expect(longHold.update(contact(), 200).blockingReason).toBe("timeout");
-
+  it("长按开始前移动范围过大和跟踪断帧都取消点击", () => {
     const travel = new PinchClickStateMachine({ maxCursorSpeed: 10, maxTravel: 0.08 });
     travel.update(separated(0.4), 0);
     travel.update(contact(0.4), 16);

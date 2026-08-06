@@ -112,6 +112,7 @@ function App() {
   const systemControlActiveRef = useRef(false);
   const activationPendingRef = useRef(false);
   const pendingPauseRef = useRef<Promise<void> | null>(null);
+  const desktopCommandQueueRef = useRef<Promise<void>>(Promise.resolve());
   const mountedRef = useRef(true);
   const lastDispatchedOutputRef = useRef<GestureOutput>(INITIAL_OUTPUT);
   const safetyGenerationRef = useRef(0);
@@ -211,6 +212,23 @@ function App() {
     return pause;
   }, [desktopBridge]);
 
+  const enqueueDesktopCommand = useCallback((command: () => Promise<void>) => {
+    const generation = safetyGenerationRef.current;
+    const queued = desktopCommandQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (
+          !systemControlActiveRef.current
+          || generation !== safetyGenerationRef.current
+        ) {
+          return;
+        }
+        await command();
+      });
+    desktopCommandQueueRef.current = queued;
+    void queued.catch(() => pauseSystemControl());
+  }, [pauseSystemControl]);
+
   const enableSystemControl = useCallback(async () => {
     if (!desktopBridge) {
       return;
@@ -305,20 +323,33 @@ function App() {
       return;
     }
 
-    if (output.state === "lost") {
-      if (systemControlActiveRef.current) {
-        void desktopBridge.mouseUp().catch(() => pauseSystemControl());
-      }
-      return;
-    }
-
     if (!systemControlActiveRef.current) {
       return;
     }
 
-    if (output.state === "paused") {
-      if (output.click) {
-        void desktopBridge.click().catch(() => pauseSystemControl());
+    if (output.state === "lost" || output.state === "paused" || output.dragEnd) {
+      enqueueDesktopCommand(() => desktopBridge.mouseUp());
+      return;
+    }
+
+    if (output.dragStart) {
+      const lockedCursor = output.clickCursor
+        ? mapSystemPoint(output.clickCursor, settings)
+        : systemCursor;
+      enqueueDesktopCommand(async () => {
+        if (lockedCursor) {
+          await desktopBridge.move(lockedCursor.x, lockedCursor.y, desktopCursorState(output));
+        }
+        await desktopBridge.mouseDown();
+      });
+      return;
+    }
+
+    if (output.state === "dragging" || (
+      output.phase === "releasing" && output.lockedGesture === "left"
+    )) {
+      if (systemCursor) {
+        enqueueDesktopCommand(() => desktopBridge.drag(systemCursor.x, systemCursor.y));
       }
       return;
     }
@@ -327,19 +358,22 @@ function App() {
       const lockedCursor = output.clickCursor
         ? mapSystemPoint(output.clickCursor, settings)
         : systemCursor;
-      void (async () => {
+      enqueueDesktopCommand(async () => {
         if (lockedCursor) {
           await desktopBridge.move(lockedCursor.x, lockedCursor.y, desktopCursorState(output));
         }
         await desktopBridge.click();
-      })().catch(() => pauseSystemControl());
+      });
       return;
     }
     if (systemCursor) {
-      void desktopBridge.move(systemCursor.x, systemCursor.y, desktopCursorState(output))
-        .catch(() => pauseSystemControl());
+      enqueueDesktopCommand(() => desktopBridge.move(
+        systemCursor.x,
+        systemCursor.y,
+        desktopCursorState(output),
+      ));
     }
-  }, [desktopBridge, output, pauseSystemControl, settings, systemCursor]);
+  }, [desktopBridge, enqueueDesktopCommand, output, settings, systemCursor]);
 
   useEffect(() => {
     if (!cameraReady) {
@@ -481,7 +515,7 @@ function App() {
           <p className="eyebrow">本机实时交互</p>
           <h1>Hovra</h1>
         </div>
-        <p>单手即可控制移动、左键点击和张手停止。</p>
+        <p>单手即可控制移动、左键点击、长按和张手停止。</p>
       </header>
 
       <StatusPanel

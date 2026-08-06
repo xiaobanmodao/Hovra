@@ -47,17 +47,6 @@ export const HAND_OVERLAY_CONNECTIONS: ReadonlyArray<readonly [number, number]> 
 const PALM_INDICES = [0, 5, 9, 13, 17] as const;
 const EPSILON = 1e-6;
 
-const FINGER_CONSTRAINTS: ReadonlyArray<{
-  chain: readonly number[];
-  ratios: readonly number[];
-}> = [
-  { chain: [0, 1, 2, 3, 4], ratios: [0.62, 0.44, 0.34, 0.28] },
-  { chain: [5, 6, 7, 8], ratios: [0.5, 0.34, 0.28] },
-  { chain: [9, 10, 11, 12], ratios: [0.55, 0.37, 0.3] },
-  { chain: [13, 14, 15, 16], ratios: [0.5, 0.34, 0.28] },
-  { chain: [17, 18, 19, 20], ratios: [0.42, 0.29, 0.24] },
-];
-
 export function buildHandOverlayModel(
   landmarks: Landmark[] | null,
   worldLandmarks: Landmark[] | null = null,
@@ -67,15 +56,15 @@ export function buildHandOverlayModel(
   const palmScale = distance2(landmarks[5]!, landmarks[17]!);
   if (!Number.isFinite(palmScale) || palmScale <= EPSILON) return null;
 
-  const constrained = constrainFingerLengths(landmarks, palmScale);
   const depthReliable = isValidHand(worldLandmarks);
   const depthSource = depthReliable ? worldLandmarks : landmarks;
   const depthValues = depthSource.map((point) => point.z ?? 0);
   const minDepth = Math.min(...depthValues);
   const maxDepth = Math.max(...depthValues);
   const depthRange = Math.max(EPSILON, maxDepth - minDepth);
-  const points: HandOverlayPoint[] = constrained.map((point, index) => ({
-    ...point,
+  const points: HandOverlayPoint[] = landmarks.map((point, index) => ({
+    x: point.x,
+    y: point.y,
     z: depthValues[index] ?? 0,
     index,
   }));
@@ -103,6 +92,7 @@ export function buildHandOverlayModel(
   ) / PALM_INDICES.length;
   const bridgeVisible = overlayState.phase === "candidate"
     || overlayState.phase === "active"
+    || overlayState.phase === "dragging"
     || overlayState.phase === "releasing";
   const blocked = overlayState.blockingReason !== null
     && overlayState.blockingReason !== "none"
@@ -117,42 +107,14 @@ export function buildHandOverlayModel(
     pinchBridge: bridgeVisible ? {
       from: 4,
       to: 8,
-      state: blocked ? "blocked" : overlayState.phase === "active" || overlayState.phase === "releasing"
+      state: blocked ? "blocked" : overlayState.phase === "active"
+        || overlayState.phase === "dragging"
+        || overlayState.phase === "releasing"
         ? "active" : "ready",
     } : null,
     statusLabel: overlayStatusLabel(overlayState),
     depthReliable,
   };
-}
-
-function constrainFingerLengths(landmarks: Landmark[], palmScale: number): HandOverlayPoint[] {
-  const points: HandOverlayPoint[] = landmarks.map((point, index) => ({
-    x: point.x,
-    y: point.y,
-    z: point.z ?? 0,
-    index,
-  }));
-  for (const { chain, ratios } of FINGER_CONSTRAINTS) {
-    for (let segment = 0; segment < ratios.length; segment += 1) {
-      const parentIndex = chain[segment]!;
-      const childIndex = chain[segment + 1]!;
-      const parent = points[parentIndex]!;
-      const child = points[childIndex]!;
-      const dx = child.x - parent.x;
-      const dy = child.y - parent.y;
-      const length = Math.hypot(dx, dy);
-      if (length <= EPSILON) continue;
-      const expected = palmScale * ratios[segment]!;
-      const constrainedLength = Math.min(expected * 1.55, Math.max(expected * 0.55, length));
-      const scale = constrainedLength / length;
-      points[childIndex] = {
-        ...child,
-        x: parent.x + dx * scale,
-        y: parent.y + dy * scale,
-      };
-    }
-  }
-  return points;
 }
 
 function boneWidthRatio(to: number): number {
@@ -179,6 +141,7 @@ function overlayStatusLabel(state: HandOverlayState): string {
   if (state.blockingReason === "depth") return "指尖仅在画面重合，纵深未接触";
   if (state.phase === "candidate") return "捏合候选：保持稳定后释放";
   if (state.phase === "active") return "已捏合：松开以点击";
+  if (state.phase === "dragging") return "长按中：松开以释放";
   if (state.phase === "releasing") return "正在确认释放";
   if (state.phase === "cooldown") return "防误触冷却中";
   return "移动食指控制光标";

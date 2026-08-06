@@ -87,7 +87,7 @@ export function SystemControlPanel({
           <p>{disabled ? "稳定性测试期间保持暂停" : "系统控制已暂停，需由你主动启用。"}</p>
         )}
         {permission === "granted" && enabled && (
-          <p>现在可用手势移动、左键点击和张开手掌停止。</p>
+          <p>现在可用手势移动、短捏合点击、保持捏合可长按，张开手掌停止。</p>
         )}
       </div>
 

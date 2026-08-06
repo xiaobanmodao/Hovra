@@ -77,7 +77,7 @@ export function Playground({ cursor, output }: PlaygroundProps) {
           <h2 id="playground-title">基础操作测试</h2>
         </div>
         <p className="gesture-hint">
-          移动光标 · 拇指 + 食指：左键点击 · 张开手掌：停止
+          移动光标 · 拇指 + 食指：左键点击 · 保持捏合：长按 · 张开手掌：停止
         </p>
       </div>
 

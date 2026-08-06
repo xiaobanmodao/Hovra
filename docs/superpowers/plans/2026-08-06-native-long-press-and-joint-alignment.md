@@ -110,7 +110,7 @@ Expected: 文件内全部测试通过，原有短捏合、抖动、高速和冷�
 
 **Interfaces:**
 - Consumes: Task 1 的 `holdStarted`、`holdEnded`、`holdCursor`、`holding`。
-- Produces: `GestureOutput.dragStart`、`dragEnd`、`state: "dragging"`、`phase: "dragging"`；Electron 调用顺序 `move → mouseDown` 和释放时 `mouseUp`。
+- Produces: `GestureOutput.dragStart`、`dragEnd`、`state: "dragging"`、`phase: "dragging"`；Electron 调用顺序 `move → mouseDown`、保持阶段 `drag` 和释放时 `mouseUp`。
 
 - [ ] **Step 1: 写引擎失败测试**
 
@@ -145,6 +145,7 @@ it("长按先移动到锁定点再按下，保持时移动，释放时抬起", a
   expect(vi.mocked(bridge.move).mock.invocationCallOrder.at(-1))
     .toBeLessThan(vi.mocked(bridge.mouseDown).mock.invocationCallOrder[0]!);
   runFrame(452, handAt("left", 0.62, 0.4));
+  await waitFor(() => expect(bridge.drag).toHaveBeenCalled());
   runFrame(468, handAt("tracking"));
   runFrame(484, handAt("tracking"));
   await waitFor(() => expect(bridge.mouseUp).toHaveBeenCalledOnce());
@@ -168,7 +169,7 @@ return {
 };
 ```
 
-在 App 中优先处理 `dragEnd`；处理 `dragStart` 时先等待 `move(holdCursor)` 完成再调用 `mouseDown()`；保持长按的普通帧继续调用 `move()`。丢手仍调用 `mouseUp()`，暂停和关闭使用既有 `releaseAndPause()` 安全释放。中文 `dragging` 状态和阶段统一显示“长按中”。
+在 App 中用一个串行 Promise 队列保护桌面命令，避免异步 `move` 尚未完成时先执行 `mouseUp`、随后又执行 `mouseDown` 的卡键竞态。优先处理 `dragEnd`；处理 `dragStart` 时先等待 `move(holdCursor)` 完成再调用 `mouseDown()`；保持长按的普通帧调用 Electron 专用 `drag()`（`move()` 在按钮按下时会被主进程安全拒绝）。丢手仍排队调用 `mouseUp()`，暂停和关闭使用既有 `releaseAndPause()` 安全释放。中文 `dragging` 状态和阶段统一显示“长按中”。
 
 - [ ] **Step 5: 运行引擎与 App 聚焦测试并确认通过**
 

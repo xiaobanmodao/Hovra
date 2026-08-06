@@ -34,7 +34,7 @@ export type GestureOutput = {
   state: GestureState;
   cursor: Landmark | null;
   click: boolean;
-  /** 释放确认后使用的捏合前锁定坐标。 */
+  /** 短按释放或长按开始时使用的捏合前锁定坐标。 */
   clickCursor?: Landmark | null;
   /** 与本帧点击状态机完全一致的数值证据，供本地离线重放使用。 */
   intentEvidence?: import("./pinchClickStateMachine").PinchClickEvidence | null;

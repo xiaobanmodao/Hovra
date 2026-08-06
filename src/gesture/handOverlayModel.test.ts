@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { makeGestureHand } from "./fixtures/stable-gesture-sequences";
 import { buildHandOverlayModel } from "./handOverlayModel";
 
-describe("受约束 2.5D 手部覆盖模型", () => {
+describe("精确对齐的 2.5D 手部覆盖模型", () => {
   it("生成完整掌面、21 个关节和由远到近排序的 20 个骨段", () => {
     const image = makeGestureHand("open-palm").map((point, index) => ({ ...point, z: index * 0.002 }));
     const model = buildHandOverlayModel(image, image, { phase: "neutral", blockingReason: null });
@@ -14,19 +14,32 @@ describe("受约束 2.5D 手部覆盖模型", () => {
     expect(model!.bones.every((bone, index, bones) => index === 0 || bones[index - 1]!.depth >= bone.depth)).toBe(true);
   });
 
-  it("骨段向指尖逐级变细并约束模型偶发的异常拉长", () => {
+  it("骨段向指尖逐级变细且 21 个覆盖点保留模型原始二维坐标", () => {
     const image = makeGestureHand("open-palm");
     image[8] = { ...image[8]!, x: image[7]!.x + 4, y: image[7]!.y + 4 };
     const model = buildHandOverlayModel(image, null, { phase: "neutral", blockingReason: null });
     const indexBase = model!.bones.find((bone) => bone.from === 5 && bone.to === 6)!;
     const indexTip = model!.bones.find((bone) => bone.from === 7 && bone.to === 8)!;
-    const tipDistance = Math.hypot(
-      model!.points[8]!.x - model!.points[7]!.x,
-      model!.points[8]!.y - model!.points[7]!.y,
-    );
 
     expect(indexTip.width).toBeLessThan(indexBase.width);
-    expect(tipDistance).toBeLessThan(model!.palmScale * 0.6);
+    expect(model!.points.map(({ x, y }) => ({ x, y }))).toEqual(
+      image.map(({ x, y }) => ({ x, y })),
+    );
+  });
+
+  it("世界坐标只提供纵深，不改变任何关节的二维位置", () => {
+    const image = makeGestureHand("open-palm");
+    const world = image.map((point, index) => ({
+      x: point.x + 10,
+      y: point.y - 10,
+      z: index * 0.01,
+    }));
+    const model = buildHandOverlayModel(image, world);
+
+    expect(model!.points.map(({ x, y }) => ({ x, y }))).toEqual(
+      image.map(({ x, y }) => ({ x, y })),
+    );
+    expect(model!.points.map(({ z }) => z)).toEqual(world.map(({ z }) => z));
   });
 
   it("候选捏合显示拇指与食指连接带并区分可点击和阻止状态", () => {
@@ -40,6 +53,18 @@ describe("受约束 2.5D 手部覆盖模型", () => {
     expect(blocked?.statusLabel).toContain("移动过快");
   });
 
+  it("长按阶段保持指尖连接并明确提示松开释放", () => {
+    const hand = makeGestureHand("left");
+    const holding = buildHandOverlayModel(hand, null, {
+      phase: "dragging",
+      state: "dragging",
+      blockingReason: null,
+    });
+
+    expect(holding?.pinchBridge).toMatchObject({ from: 4, to: 8, state: "active" });
+    expect(holding?.statusLabel).toBe("长按中：松开以释放");
+  });
+
   it("点数不足或非法坐标时安全降级为无覆盖层", () => {
     expect(buildHandOverlayModel(makeGestureHand("tracking").slice(0, 20))).toBeNull();
     const invalid = makeGestureHand("tracking");
@@ -47,4 +72,3 @@ describe("受约束 2.5D 手部覆盖模型", () => {
     expect(buildHandOverlayModel(invalid)).toBeNull();
   });
 });
-

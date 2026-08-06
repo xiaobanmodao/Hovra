@@ -122,6 +122,8 @@ export class GestureEngine {
         cursor: filteredCursor,
         click: false,
         clickCursor: null,
+        dragStart: false,
+        dragEnd: pinch.holdEnded,
         intentEvidence,
         phase: "active",
         candidate: null,
@@ -131,7 +133,9 @@ export class GestureEngine {
       });
     }
     const openPalmCandidate = this.openPalmEnterFrames > 0;
-    const state: GestureState = pinch.phase === "candidate"
+    const state: GestureState = pinch.holding
+      ? "dragging"
+      : pinch.phase === "candidate"
       || pinch.phase === "active"
       || pinch.phase === "releasing"
       ? "left-pinching" : "tracking";
@@ -149,7 +153,9 @@ export class GestureEngine {
       state,
       cursor: filteredCursor,
       click: pinch.clicked && !openPalmCandidate,
-      clickCursor: pinch.clickCursor,
+      clickCursor: pinch.clickCursor ?? pinch.holdCursor,
+      dragStart: pinch.holdStarted && !openPalmCandidate,
+      dragEnd: pinch.holdEnded,
       intentEvidence,
       phase,
       candidate,
@@ -174,6 +180,8 @@ export class GestureEngine {
       cursor: null,
       click: false,
       clickCursor: null,
+      dragStart: false,
+      dragEnd: pinch.holdEnded,
       intentEvidence: null,
       phase: "lost",
       candidate: null,
@@ -265,6 +273,8 @@ export class GestureEngine {
     cursor: Landmark | null;
     click: boolean;
     clickCursor: Landmark | null;
+    dragStart: boolean;
+    dragEnd: boolean;
     intentEvidence: import("./pinchClickStateMachine").PinchClickEvidence | null;
     phase: GesturePhase;
     candidate: GestureKind | null;
@@ -277,8 +287,6 @@ export class GestureEngine {
       rightClick: false,
       doubleClick: false,
       scrollY: 0,
-      dragStart: false,
-      dragEnd: false,
     };
   }
 
@@ -295,7 +303,10 @@ export class GestureEngine {
     if (this.traceEpochMs === null || safeNow < this.traceEpochMs) this.traceEpochMs = safeNow;
     const relativeTimestamp = Math.max(this.lastTraceTimestamp, safeNow - this.traceEpochMs);
     this.lastTraceTimestamp = relativeTimestamp;
-    const events: TraceGestureEvent[] = output.click ? ["click"] : [];
+    const events: TraceGestureEvent[] = [];
+    if (output.click) events.push("click");
+    if (output.dragStart) events.push("dragStart");
+    if (output.dragEnd) events.push("dragEnd");
 
     this.trace.push({
       t: relativeTimestamp,

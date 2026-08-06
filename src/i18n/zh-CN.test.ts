@@ -13,7 +13,7 @@ describe("Chinese gesture labels", () => {
     expect(gestureStateLabel("left-pinching")).toBe("左键捏合");
     expect(gestureStateLabel("right-pinching")).toBe("右键捏合");
     expect(gestureStateLabel("double-pinching")).toBe("双击捏合");
-    expect(gestureStateLabel("dragging")).toBe("拖动中");
+    expect(gestureStateLabel("dragging")).toBe("长按中");
     expect(gestureStateLabel("scrolling")).toBe("滚动中");
     expect(gestureStateLabel("paused")).toBe("已暂停");
     expect(gestureStateLabel("lost")).toBe("未检测到手部");
@@ -23,7 +23,7 @@ describe("Chinese gesture labels", () => {
     expect(gesturePhaseLabel("neutral")).toBe("空闲");
     expect(gesturePhaseLabel("candidate")).toBe("候选确认");
     expect(gesturePhaseLabel("active")).toBe("已确认");
-    expect(gesturePhaseLabel("dragging")).toBe("拖动中");
+    expect(gesturePhaseLabel("dragging")).toBe("长按中");
     expect(gesturePhaseLabel("releasing")).toBe("释放确认");
     expect(gesturePhaseLabel("cooldown")).toBe("冷却中");
     expect(gesturePhaseLabel("lost")).toBe("未检测到手部");

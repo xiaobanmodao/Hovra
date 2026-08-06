@@ -61,6 +61,7 @@ describe("Playground", () => {
 
     expect(screen.getByText(/移动光标/)).toBeInTheDocument();
     expect(screen.getByText(/拇指 \+ 食指：左键点击/)).toBeInTheDocument();
+    expect(screen.getByText(/保持捏合：长按/)).toBeInTheDocument();
     expect(screen.getByText(/张开手掌：停止/)).toBeInTheDocument();
     expect(screen.queryByText(/右键次数/)).not.toBeInTheDocument();
     expect(screen.queryByText(/双击次数/)).not.toBeInTheDocument();

@@ -62,6 +62,69 @@ describe("GestureEngine 稳定内核", () => {
     expect(engine.update(tracking, 576).click).toBe(true);
   });
 
+  it("持续捏合进入长按，松开只结束长按而不追加点击", () => {
+    const engine = new GestureEngine();
+    const left = makeGestureHand("left");
+    const tracking = makeGestureHand("tracking");
+
+    engine.update(tracking, 0);
+    engine.update(left, 16);
+    engine.update(left, 32);
+    engine.update(left, 132);
+    engine.update(left, 232);
+    engine.update(left, 332);
+    expect(engine.update(left, 435)).toMatchObject({
+      state: "left-pinching",
+      dragStart: false,
+      dragEnd: false,
+      click: false,
+    });
+    expect(engine.update(left, 436)).toMatchObject({
+      state: "dragging",
+      phase: "dragging",
+      dragStart: true,
+      dragEnd: false,
+      click: false,
+      clickCursor: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    });
+    expect(engine.update(left, 452)).toMatchObject({
+      state: "dragging",
+      phase: "dragging",
+      dragStart: false,
+      dragEnd: false,
+      click: false,
+    });
+    expect(engine.update(tracking, 468)).toMatchObject({
+      phase: "releasing",
+      dragEnd: false,
+    });
+    expect(engine.update(tracking, 484)).toMatchObject({
+      dragStart: false,
+      dragEnd: true,
+      click: false,
+    });
+  });
+
+  it("长按期间丢手会立即输出安全抬起事件", () => {
+    const engine = new GestureEngine();
+    const left = makeGestureHand("left");
+    engine.update(makeGestureHand("tracking"), 0);
+    engine.update(left, 16);
+    engine.update(left, 32);
+    engine.update(left, 132);
+    engine.update(left, 232);
+    engine.update(left, 332);
+    expect(engine.update(left, 436).dragStart).toBe(true);
+
+    expect(engine.update(null, 452)).toMatchObject({
+      state: "lost",
+      dragStart: false,
+      dragEnd: true,
+      click: false,
+    });
+    expect(engine.update(null, 468).dragEnd).toBe(false);
+  });
+
   it("忽略单帧指尖重合", () => {
     const engine = new GestureEngine();
 
