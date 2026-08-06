@@ -25,6 +25,7 @@ export type PinchClickConfig = {
   requiredReleaseFrames: number;
   maxFrameGapMs: number;
   longPressMs: number;
+  holdEnabled: boolean;
   maxCursorSpeed: number;
   maxTravel: number;
   suppressionCooldownMs: number;
@@ -53,6 +54,7 @@ export const DEFAULT_PINCH_CLICK_CONFIG: Readonly<PinchClickConfig> = {
   requiredReleaseFrames: 2,
   maxFrameGapMs: 120,
   longPressMs: 420,
+  holdEnabled: true,
   maxCursorSpeed: 3.2,
   maxTravel: 0.12,
   suppressionCooldownMs: 120,
@@ -203,6 +205,10 @@ export class PinchClickStateMachine {
         && this.gestureStartedAtMs !== null
         && nowMs - this.gestureStartedAtMs >= this.config.longPressMs
       ) {
+        if (!this.config.holdEnabled) {
+          this.cancelGesture(nowMs);
+          return this.output(false, null, cursorSpeed, "timeout");
+        }
         this.holding = true;
         this.phase = "dragging";
         const holdCursor = this.latchedCursor ? { ...this.latchedCursor } : { ...evidence.cursor };
@@ -354,6 +360,9 @@ export function resolvePinchClickConfig(input: Partial<PinchClickConfig> = {}): 
     requiredReleaseFrames: integerInRange(input.requiredReleaseFrames, 2, 5, DEFAULT_PINCH_CLICK_CONFIG.requiredReleaseFrames),
     maxFrameGapMs: range(input.maxFrameGapMs, 50, 250, DEFAULT_PINCH_CLICK_CONFIG.maxFrameGapMs),
     longPressMs: range(input.longPressMs, 150, 1_200, DEFAULT_PINCH_CLICK_CONFIG.longPressMs),
+    holdEnabled: typeof input.holdEnabled === "boolean"
+      ? input.holdEnabled
+      : DEFAULT_PINCH_CLICK_CONFIG.holdEnabled,
     maxCursorSpeed: range(input.maxCursorSpeed, 0.5, 12, DEFAULT_PINCH_CLICK_CONFIG.maxCursorSpeed),
     maxTravel: range(input.maxTravel, 0.03, 0.35, DEFAULT_PINCH_CLICK_CONFIG.maxTravel),
     suppressionCooldownMs: range(input.suppressionCooldownMs, 40, 500, DEFAULT_PINCH_CLICK_CONFIG.suppressionCooldownMs),

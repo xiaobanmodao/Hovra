@@ -101,6 +101,56 @@ describe("PinchClickStateMachine", () => {
     });
   });
 
+  it("禁用长按时三帧短捏合仍只在第二个释放帧点击一次", () => {
+    const machine = new PinchClickStateMachine({
+      holdEnabled: false,
+      requiredContactFrames: 3,
+      longPressMs: 650,
+    });
+    machine.update(separated(0.42, 0.36), 0);
+    machine.update(contact(0.44, 0.37), 16);
+    machine.update(contact(0.44, 0.37), 32);
+    expect(machine.update(contact(0.44, 0.37), 48)).toMatchObject({
+      phase: "active",
+      clicked: false,
+      holdStarted: false,
+      holding: false,
+    });
+    expect(machine.update(separated(0.46, 0.39), 64).clicked).toBe(false);
+    expect(machine.update(separated(0.46, 0.39), 80)).toMatchObject({
+      phase: "cooldown",
+      clicked: true,
+      holdStarted: false,
+      holding: false,
+      clickCursor: { x: 0.42, y: 0.36 },
+    });
+    expect(machine.update(separated(), 96).clicked).toBe(false);
+  });
+
+  it("禁用长按时接触达到 650 毫秒会超时取消且释放后不点击", () => {
+    const machine = new PinchClickStateMachine({
+      holdEnabled: false,
+      requiredContactFrames: 3,
+      longPressMs: 650,
+    });
+    machine.update(separated(), 0);
+    for (const at of [16, 32, 48, 148, 248, 348, 448, 548, 648]) {
+      expect(machine.update(contact(), at).holdStarted).toBe(false);
+    }
+
+    expect(machine.update(contact(), 666)).toMatchObject({
+      phase: "cooldown",
+      clicked: false,
+      holdStarted: false,
+      holdEnded: false,
+      holding: false,
+      holdProgress: 0,
+      blockingReason: "timeout",
+    });
+    machine.update(separated(), 682);
+    expect(machine.update(separated(), 698).clicked).toBe(false);
+  });
+
   it("长按进度使用真实时间并在按下帧精确到 1", () => {
     const machine = new PinchClickStateMachine({ longPressMs: 420 });
     machine.update(separated(), 0);
