@@ -10,7 +10,8 @@
     "electron:make": "sh scripts/build-cursor-visibility-helper.sh && electron-forge make && sh scripts/verify-packaged-macos-app.sh",
     "electron:typecheck": "tsc --noEmit -p tsconfig.electron.json",
     "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:gesture-regression": "vitest run src/gesture/gestureRegression.test.ts src/gesture/gestureRegressionSuite.test.ts"
   },
   "dependencies": {
     "@jitsi/robotjs": "0.6.24"

@@ -9,6 +9,17 @@
 - `npm run electron:typecheck` type-checks the Electron main/preload/config sources.
 - `npm run electron:make` creates the local macOS package.
 - `npm test` runs the test suite.
+- `npm run test:gesture-regression` 只运行手势轨迹自动回归。
+
+## 手势轨迹自动回归
+
+运行以下命令，可以把固定的隐私安全关节点轨迹重新送入当前真实识别引擎：
+
+```bash
+npm run test:gesture-regression
+```
+
+回归矩阵覆盖短捏合、长按、张掌停止、握拳、纵深分离和普通移动。失败表示动作发生了漏识别、重复、延迟超出允许时间窗或意外误触。轨迹只包含合成的 21 点手部关节点，不包含摄像头图片、视频、音频或个人信息。这两组回归测试也会由 `npm test` 和 GitHub CI 自动执行。
 
 ## Run locally
 
