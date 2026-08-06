@@ -1155,6 +1155,24 @@ h2 {
   transition: transform 45ms linear, border-color 45ms linear, background 45ms linear, box-shadow 45ms linear;
 }
 
+.virtual-cursor::before {
+  content: "";
+  position: absolute;
+  inset: -0.48rem;
+  border-radius: 50%;
+  background: conic-gradient(
+    #ffcc66 calc(var(--long-press-progress, 0) * 1turn),
+    transparent 0
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0);
+  opacity: var(--long-press-progress, 0);
+}
+
+.virtual-cursor.is-dragging::before {
+  opacity: 1;
+}
+
 .virtual-cursor.is-candidate {
   opacity: 0.62;
   filter: saturate(0.7);
@@ -1186,6 +1204,7 @@ h2 {
 .virtual-cursor.is-dragging {
   border-color: #ff9900;
   background: #ffcc66;
+  box-shadow: 0 0 0 4px rgba(255, 204, 102, 0.3), 0 0 1.4rem #ff9900;
 }
 
 .virtual-cursor.is-scrolling {

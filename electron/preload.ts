@@ -55,8 +55,18 @@ const gestureDesktop = {
   getPermissionStatus: (): Promise<PermissionStatus> =>
     ipcRenderer.invoke(channels.getPermissionStatus),
   activate: (): Promise<boolean> => ipcRenderer.invoke(channels.activate),
-  move: (x: number, y: number, state: CursorOverlayState = "tracking"): Promise<void> =>
-    invokeNormalizedMovement(channels.move, x, y, state),
+  move: (
+    x: number,
+    y: number,
+    state: CursorOverlayState = "tracking",
+    longPressProgress = 0,
+  ): Promise<void> => invokeNormalizedMovement(
+    channels.move,
+    x,
+    y,
+    state,
+    longPressProgress,
+  ),
   drag: (x: number, y: number): Promise<void> =>
     invokeNormalizedMovement(channels.drag, x, y),
   click: (): Promise<void> => ipcRenderer.invoke(channels.click),
@@ -114,6 +124,7 @@ function invokeNormalizedMovement(
   x: number,
   y: number,
   state?: CursorOverlayState,
+  longPressProgress = 0,
 ): Promise<void> {
   if (
     !Number.isFinite(x)
@@ -132,7 +143,21 @@ function invokeNormalizedMovement(
     return Promise.reject(new TypeError("Mouse movement requires a valid cursor state"));
   }
 
-  return ipcRenderer.invoke(channel, channel === channels.move ? { x, y, state } : { x, y });
+  if (
+    channel === channels.move
+    && (!Number.isFinite(longPressProgress)
+      || longPressProgress < 0
+      || longPressProgress > 1)
+  ) {
+    return Promise.reject(
+      new TypeError("Mouse movement requires long press progress from 0 to 1"),
+    );
+  }
+
+  return ipcRenderer.invoke(
+    channel,
+    channel === channels.move ? { x, y, state, longPressProgress } : { x, y },
+  );
 }
 
 contextBridge.exposeInMainWorld("gestureDesktop", gestureDesktop);

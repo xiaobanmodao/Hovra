@@ -124,8 +124,25 @@ it("moves the desktop pointer from a tracking hand", async () => {
   runFrame(16, handAt("tracking", 0.55, 0.4));
 
   await waitFor(() => expect(bridge.move).toHaveBeenCalledWith(
-    expect.any(Number), expect.any(Number), "tracking",
+    expect.any(Number), expect.any(Number), "tracking", 0,
   ));
+});
+
+it("网页与桌面光标使用同一长按进度", async () => {
+  const { bridge, runFrame, container } = await renderDesktopApp();
+  runFrame(16, handAt("left"));
+  runFrame(32, handAt("left"));
+  runFrame(132, handAt("left"));
+  runFrame(232, handAt("left"));
+
+  const progress = 216 / 420;
+  const cursor = container.querySelector<HTMLElement>(".virtual-cursor")!;
+  expect(Number(cursor.style.getPropertyValue("--long-press-progress")))
+    .toBeCloseTo(progress, 6);
+  await waitFor(() => expect(bridge.move).toHaveBeenCalled());
+  const [, , state, desktopProgress] = vi.mocked(bridge.move).mock.calls.at(-1)!;
+  expect(state).toBe("left-pinching");
+  expect(desktopProgress).toBeCloseTo(progress, 6);
 });
 
 it("实时帧只走同步 MediaPipe，不再编码或发送 Apple Vision 图像", async () => {

@@ -23,7 +23,7 @@ import "./preload";
 type ExposedApi = Record<string, unknown> & {
   getPermissionStatus(): Promise<"granted" | "denied">;
   activate(): Promise<boolean>;
-  move(x: number, y: number, state?: string): Promise<void>;
+  move(x: number, y: number, state?: string, longPressProgress?: number): Promise<void>;
   drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
   rightClick(): Promise<void>;
@@ -88,7 +88,7 @@ describe("gestureDesktop preload bridge", () => {
     await api.getPermissionStatus();
     await api.activate();
     await api.move(0.25, 0.75, "right-pinching");
-    await api.move(0.25, 0.75, "candidate-left");
+    await api.move(0.25, 0.75, "candidate-left", 0.5);
     await api.drag(0.75, 0.25);
     await api.click();
     await api.rightClick();
@@ -103,8 +103,12 @@ describe("gestureDesktop preload bridge", () => {
     expect(electronMocks.invoke.mock.calls).toEqual([
       ["gesture:get-permission-status"],
       ["gesture:activate"],
-      ["gesture:move", { x: 0.25, y: 0.75, state: "right-pinching" }],
-      ["gesture:move", { x: 0.25, y: 0.75, state: "candidate-left" }],
+      ["gesture:move", {
+        x: 0.25, y: 0.75, state: "right-pinching", longPressProgress: 0,
+      }],
+      ["gesture:move", {
+        x: 0.25, y: 0.75, state: "candidate-left", longPressProgress: 0.5,
+      }],
       ["gesture:drag", { x: 0.75, y: 0.25 }],
       ["gesture:click"],
       ["gesture:right-click"],
@@ -137,6 +141,17 @@ describe("gestureDesktop preload bridge", () => {
     await expect(api.drag(-0.01, 0.5)).rejects.toThrow("normalized coordinates");
     expect(electronMocks.invoke).not.toHaveBeenCalled();
   });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -0.01, 1.01])(
+    "rejects invalid long press progress %s before IPC",
+    async (progress) => {
+      const api = getExposedApi();
+
+      await expect(api.move(0.5, 0.5, "left-pinching", progress))
+        .rejects.toThrow("long press progress");
+      expect(electronMocks.invoke).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects unknown visual states and invalid scroll deltas before IPC", async () => {
     const api = getExposedApi();

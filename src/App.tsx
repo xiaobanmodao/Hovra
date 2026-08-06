@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { HandLandmarker } from "@mediapipe/tasks-vision";
 import { CalibrationPanel } from "./components/CalibrationPanel";
 import { CameraStage } from "./components/CameraStage";
@@ -342,7 +342,12 @@ function App() {
         : systemCursor;
       enqueueDesktopCommand(async () => {
         if (lockedCursor) {
-          await desktopBridge.move(lockedCursor.x, lockedCursor.y, desktopCursorState(output));
+          await desktopBridge.move(
+            lockedCursor.x,
+            lockedCursor.y,
+            desktopCursorState(output),
+            output.longPressProgress,
+          );
         }
         await desktopBridge.mouseDown();
       });
@@ -364,7 +369,12 @@ function App() {
         : systemCursor;
       enqueueDesktopCommand(async () => {
         if (lockedCursor) {
-          await desktopBridge.move(lockedCursor.x, lockedCursor.y, desktopCursorState(output));
+          await desktopBridge.move(
+            lockedCursor.x,
+            lockedCursor.y,
+            desktopCursorState(output),
+            output.longPressProgress,
+          );
         }
         await desktopBridge.click();
       });
@@ -375,6 +385,7 @@ function App() {
         systemCursor.x,
         systemCursor.y,
         desktopCursorState(output),
+        output.longPressProgress,
       ));
     }
   }, [desktopBridge, enqueueDesktopCommand, output, settings, systemCursor]);
@@ -578,7 +589,12 @@ function App() {
       {cursor && (
         <div
           className={`virtual-cursor is-${output.state}${output.phase === "candidate" ? " is-candidate" : ""}${output.phase === "releasing" ? " is-releasing" : ""}`}
-          style={{ left: cursor.x, top: cursor.y, pointerEvents: "none" }}
+          style={{
+            left: cursor.x,
+            top: cursor.y,
+            pointerEvents: "none",
+            "--long-press-progress": output.longPressProgress,
+          } as CSSProperties}
           aria-hidden="true"
         />
       )}
