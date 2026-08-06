@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Hovra uses macOS Accessibility APIs for system-level cursor control.
+    # Run the complete Electron integration suite on its supported platform.
+    runs-on: macos-latest
     timeout-minutes: 10
     steps:
       - name: Check out source
