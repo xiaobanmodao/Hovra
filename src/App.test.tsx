@@ -111,7 +111,7 @@ const renderDesktopApp = async (bridge = desktopApi()) => {
 
 it("renders the simplified interaction description", () => {
   render(<App />);
-  expect(screen.getByRole("heading", { name: "手势控制" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Hovra" })).toBeInTheDocument();
   expect(screen.getByText("单手即可控制移动、左键点击和张手停止。")).toBeInTheDocument();
 });
 

@@ -483,7 +483,7 @@ function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">本机实时交互</p>
-          <h1>手势控制</h1>
+          <h1>Hovra</h1>
         </div>
         <p>单手即可控制移动、左键点击和张手停止。</p>
       </header>

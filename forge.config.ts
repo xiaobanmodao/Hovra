@@ -7,9 +7,9 @@ import { execFile } from "node:child_process";
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    appBundleId: "com.hht.hand-gesture-control",
+    appBundleId: "com.xiaobanmodao.hovra",
     extendInfo: {
-      NSCameraUsageDescription: "手势控制需要使用摄像头在本机识别您的手部动作。",
+      NSCameraUsageDescription: "Hovra 需要使用摄像头在本机识别您的手部动作。",
     },
     extraResource: ["native/cursor-visibility.node"],
     afterCopyExtraResources: [(

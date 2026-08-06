@@ -1,6 +1,6 @@
 {
-  "name": "hand-gesture-control",
-  "productName": "手势控制",
+  "name": "hovra",
+  "productName": "Hovra",
   "private": true,
   "version": "0.0.0",
   "main": ".vite/build/main.js",

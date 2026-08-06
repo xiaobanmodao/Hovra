@@ -1,4 +1,4 @@
-# 手势控制
+# Hovra
 
 基于普通摄像头的本机手势控制应用。当前只启用光标移动、拇指与食指捏合左键点击、张开手掌停止。识别全部在本机完成，不上传摄像头画面。
 
@@ -27,7 +27,7 @@ uploaded.
 
 Use this checklist on an Apple silicon Mac with a camera before accepting the
 Electron package. Acceptance must use the exact packaged application at
-`out/手势控制-darwin-arm64/手势控制.app`, not the Vite
+`out/Hovra-darwin-arm64/Hovra.app`, not the Vite
 browser page or `electron:dev`. Do not enable system control until you are ready
 to test the physical pointer.
 
@@ -51,7 +51,7 @@ Gatekeeper system-wide; if macOS blocks the first launch, use Finder's normal
    ```
 
 3. In Finder, open
-   `out/手势控制-darwin-arm64/手势控制.app`. Confirm the
+   `out/Hovra-darwin-arm64/Hovra.app`. Confirm the
    running process is this packaged copy before granting any permission.
 4. When the app shows **Permission required**, click **Open Accessibility
    Settings**. In **System Settings → Privacy & Security → Accessibility**, add

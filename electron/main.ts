@@ -35,7 +35,7 @@ declare const MAIN_WINDOW_VITE_NAME: string;
 const ACCESSIBILITY_SETTINGS_URL =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 const CURSOR_OVERLAY_SIZE = 40;
-const APP_NAME = "手势控制";
+const APP_NAME = "Hovra";
 
 app.setName(APP_NAME);
 app.enableSandbox();

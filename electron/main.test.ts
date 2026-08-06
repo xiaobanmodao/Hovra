@@ -215,13 +215,13 @@ describe("main BrowserWindow security", () => {
   it("sets a Chinese native window title and application menu", async () => {
     const window = await bootMain("http://localhost:5173");
 
-    expect(window.options).toMatchObject({ title: "手势控制" });
-    expect(mainMocks.setName).toHaveBeenCalledWith("手势控制");
+    expect(window.options).toMatchObject({ title: "Hovra" });
+    expect(mainMocks.setName).toHaveBeenCalledWith("Hovra");
     expect(mainMocks.setName.mock.invocationCallOrder[0]).toBeLessThan(
       mainMocks.whenReady.mock.invocationCallOrder[0]!,
     );
     expect(mainMocks.setApplicationMenu).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ label: "手势控制" }),
+      expect.objectContaining({ label: "Hovra" }),
       expect.objectContaining({ label: "编辑" }),
       expect.objectContaining({ label: "视图" }),
       expect.objectContaining({ label: "窗口" }),
