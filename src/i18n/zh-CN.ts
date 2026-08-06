@@ -1,5 +1,6 @@
 import type { GestureKind, GesturePhase, GestureState } from "../gesture/types";
 import type { PinchBlockingReason } from "../gesture/pinchProbability";
+import type { ClickBlockingReason } from "../gesture/pinchClickStateMachine";
 import type { PinchQualityReason } from "../gesture/pinchQuality";
 
 const gestureStates: Record<GestureState, string> = {
@@ -66,4 +67,16 @@ export function pinchQualityReasonLabel(reason: PinchQualityReason): string {
 
 export function pinchBlockingReasonLabel(reason: PinchBlockingReason): string {
   return pinchBlockingReasons[reason];
+}
+
+const clickSafetyReasons: Partial<Record<ClickBlockingReason, string>> = {
+  "high-speed": "移动过快，已阻止点击",
+  travel: "移动范围过大，已阻止点击",
+  timeout: "捏合时间过长，请重新操作",
+  suppressed: "张掌、握拳或冷却期间禁止点击",
+  "tracking-gap": "跟踪中断，需稳定后重新操作",
+};
+
+export function clickBlockingReasonLabel(reason: ClickBlockingReason): string {
+  return clickSafetyReasons[reason] ?? pinchBlockingReasonLabel(reason as PinchBlockingReason);
 }

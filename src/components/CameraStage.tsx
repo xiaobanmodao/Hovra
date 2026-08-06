@@ -1,21 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  buildHandOverlayModel,
+  type HandOverlayModel,
+  type HandOverlayState,
+} from "../gesture/handOverlayModel";
 import type { Landmark } from "../gesture/types";
 
 type CameraStageProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
   landmarks: Landmark[] | null;
+  worldLandmarks?: Landmark[] | null;
+  overlayState?: HandOverlayState;
   onCameraReady: () => void;
   onCameraError: (message: string) => void;
   onCameraRetry: () => void;
 };
-
-const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
-  [0, 5], [5, 6], [6, 7], [7, 8],
-  [5, 9], [9, 10], [10, 11], [11, 12],
-  [9, 13], [13, 14], [14, 15], [15, 16],
-  [13, 17], [17, 18], [18, 19], [19, 20], [0, 17],
-];
 
 const cameraErrorMessage = (error: unknown): string => {
   if (error instanceof DOMException && error.name === "NotAllowedError") {
@@ -32,6 +31,8 @@ const cameraErrorMessage = (error: unknown): string => {
 export function CameraStage({
   videoRef,
   landmarks,
+  worldLandmarks = null,
+  overlayState = { phase: "neutral", blockingReason: null },
   onCameraReady,
   onCameraError,
   onCameraRetry,
@@ -40,6 +41,10 @@ export function CameraStage({
   const hasDrawnLandmarksRef = useRef(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [retryAttempt, setRetryAttempt] = useState(0);
+  const overlayModel = useMemo(
+    () => buildHandOverlayModel(landmarks, worldLandmarks, overlayState),
+    [landmarks, overlayState, worldLandmarks],
+  );
 
   useEffect(() => {
     let active = true;
@@ -120,14 +125,14 @@ export function CameraStage({
     setRetryAttempt((attempt) => attempt + 1);
   };
 
-  const drawOverlay = useCallback((points: Landmark[] | null) => {
+  const drawOverlay = useCallback((model: HandOverlayModel | null) => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) {
       return;
     }
 
-    if (!points && !hasDrawnLandmarksRef.current) {
+    if (!model && !hasDrawnLandmarksRef.current) {
       return;
     }
 
@@ -144,19 +149,19 @@ export function CameraStage({
     }
 
     context.clearRect(0, 0, width, height);
-    if (!points) {
+    if (!model) {
       hasDrawnLandmarksRef.current = false;
       return;
     }
 
     hasDrawnLandmarksRef.current = true;
 
-    drawHand(context, points, width, height, "rgba(91, 214, 255, 0.72)", "#ffffff", 3, 5);
+    drawHandOverlay(context, model, width, height);
   }, [videoRef]);
 
   useEffect(() => {
-    drawOverlay(landmarks);
-  }, [drawOverlay, landmarks]);
+    drawOverlay(overlayModel);
+  }, [drawOverlay, overlayModel]);
 
   return (
     <section className="camera-panel" aria-labelledby="camera-title">
@@ -177,6 +182,11 @@ export function CameraStage({
           aria-label="镜像摄像头预览"
         />
         <canvas ref={canvasRef} aria-hidden="true" />
+        {overlayModel && (
+          <span className={`hand-overlay-status is-${overlayModel.pinchBridge?.state ?? "tracking"}`}>
+            {overlayModel.statusLabel}
+          </span>
+        )}
         <div className="camera-reticle" aria-hidden="true" />
         {cameraError && (
           <div className="camera-error" role="alert">
@@ -189,32 +199,71 @@ export function CameraStage({
   );
 }
 
-function drawHand(
+function drawHandOverlay(
   context: CanvasRenderingContext2D,
-  points: Landmark[],
+  model: HandOverlayModel,
   width: number,
   height: number,
-  strokeStyle: string,
-  fillStyle: string,
-  lineWidth: number,
-  radius: number,
 ): void {
+  const scale = Math.min(width, height);
+  if (typeof context.save === "function") context.save();
   context.lineCap = "round";
-  context.lineWidth = lineWidth;
-  context.strokeStyle = strokeStyle;
-  for (const [fromIndex, toIndex] of HAND_CONNECTIONS) {
-    const from = points[fromIndex];
-    const to = points[toIndex];
-    if (!from || !to) continue;
+
+  const palmPoints = model.palm.indices.map((index) => model.points[index]!);
+  context.beginPath();
+  context.moveTo(palmPoints[0]!.x * width, palmPoints[0]!.y * height);
+  for (const point of palmPoints.slice(1)) context.lineTo(point.x * width, point.y * height);
+  if (typeof context.closePath === "function") context.closePath();
+  context.fillStyle = "rgba(28, 142, 177, 0.24)";
+  context.fill();
+  context.lineWidth = Math.max(1.5, model.palmScale * scale * 0.035);
+  context.strokeStyle = "rgba(142, 235, 255, 0.58)";
+  context.stroke();
+
+  for (const bone of model.bones) {
+    const from = model.points[bone.from]!;
+    const to = model.points[bone.to]!;
     context.beginPath();
     context.moveTo(from.x * width, from.y * height);
     context.lineTo(to.x * width, to.y * height);
+    context.lineWidth = Math.max(3, bone.width * scale * 1.85);
+    context.strokeStyle = `rgba(3, 18, 31, ${Math.min(0.72, bone.opacity)})`;
+    context.stroke();
+    context.beginPath();
+    context.moveTo(from.x * width, from.y * height);
+    context.lineTo(to.x * width, to.y * height);
+    context.lineWidth = Math.max(2, bone.width * scale);
+    context.strokeStyle = `rgba(91, 214, 255, ${bone.opacity})`;
     context.stroke();
   }
-  context.fillStyle = fillStyle;
-  for (const point of points) {
+
+  for (const joint of model.joints) {
+    const point = joint.point;
     context.beginPath();
-    context.arc(point.x * width, point.y * height, radius, 0, Math.PI * 2);
+    context.arc(
+      point.x * width,
+      point.y * height,
+      Math.max(2.5, joint.radius * scale),
+      0,
+      Math.PI * 2,
+    );
+    context.fillStyle = joint.role === "thumb-tip"
+      ? "#ffd36a"
+      : joint.role === "index-tip" ? "#72ffb2" : "rgba(238, 250, 255, 0.92)";
     context.fill();
   }
+
+  if (model.pinchBridge) {
+    const from = model.points[model.pinchBridge.from]!;
+    const to = model.points[model.pinchBridge.to]!;
+    context.beginPath();
+    context.moveTo(from.x * width, from.y * height);
+    context.lineTo(to.x * width, to.y * height);
+    context.lineWidth = Math.max(4, model.palmScale * scale * 0.08);
+    context.strokeStyle = model.pinchBridge.state === "blocked"
+      ? "rgba(255, 104, 128, 0.88)"
+      : model.pinchBridge.state === "active" ? "rgba(102, 255, 154, 0.92)" : "rgba(255, 211, 106, 0.9)";
+    context.stroke();
+  }
+  if (typeof context.restore === "function") context.restore();
 }

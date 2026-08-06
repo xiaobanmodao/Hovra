@@ -34,6 +34,10 @@ export type GestureOutput = {
   state: GestureState;
   cursor: Landmark | null;
   click: boolean;
+  /** 释放确认后使用的捏合前锁定坐标。 */
+  clickCursor?: Landmark | null;
+  /** 与本帧点击状态机完全一致的数值证据，供本地离线重放使用。 */
+  intentEvidence?: import("./pinchClickStateMachine").PinchClickEvidence | null;
   rightClick: boolean;
   doubleClick: boolean;
   scrollY: number;
@@ -84,6 +88,12 @@ export type GestureDiagnosticsSnapshot = {
   pinchEnterRatio?: number | null;
   /** 稳定内核重新武装点击的释放阈值。 */
   pinchExitRatio?: number | null;
+  /** 整只手的归一化移动速度，用于高速防误触。 */
+  cursorSpeed?: number | null;
+  /** 点击状态机给出的最终阻止原因。 */
+  clickBlockingReason?: import("./pinchClickStateMachine").ClickBlockingReason | null;
+  /** 四指均折回掌心时为真，只用于阻止点击，不会触发张掌暂停。 */
+  fistCandidate?: boolean;
 };
 
 export type GestureSettings = {
@@ -95,6 +105,10 @@ export type GestureSettings = {
   cameraStaleFrameMs: number;
   pinchEnterRatio?: number;
   pinchExitRatio?: number;
+  pinchContactFrames?: number;
+  pinchReleaseFrames?: number;
+  maxClickSpeed?: number;
+  maxClickTravel?: number;
 };
 
 export const WRIST = 0;

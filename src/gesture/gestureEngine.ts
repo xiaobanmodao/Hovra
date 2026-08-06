@@ -9,10 +9,11 @@ import {
   resolveStablePinchThresholds,
   type StableHandMetrics,
 } from "./stableHandMetrics";
+import { OneEuroPointFilter } from "./oneEuroFilter";
 import {
-  StablePinchRecognizer,
-  type StablePinchOutput,
-} from "./stablePinchRecognizer";
+  PinchClickStateMachine,
+  type PinchClickOutput,
+} from "./pinchClickStateMachine";
 import type {
   GestureDiagnosticsSnapshot,
   GestureKind,
@@ -28,7 +29,8 @@ const OPEN_PALM_EXIT_FRAMES = 2;
 
 export class GestureEngine {
   private readonly settings: GestureSettings;
-  private readonly pinch = new StablePinchRecognizer();
+  private readonly pinch: PinchClickStateMachine;
+  private readonly cursorFilter: OneEuroPointFilter;
   private readonly trace = new GestureTraceBuffer();
   private openPalmEnterFrames = 0;
   private openPalmExitFrames = 0;
@@ -43,6 +45,17 @@ export class GestureEngine {
     _legacyPinchBoundaries?: unknown,
   ) {
     this.settings = { ...settings };
+    this.pinch = new PinchClickStateMachine({
+      requiredContactFrames: settings.pinchContactFrames,
+      requiredReleaseFrames: settings.pinchReleaseFrames,
+      maxCursorSpeed: settings.maxClickSpeed,
+      maxTravel: settings.maxClickTravel,
+    });
+    const smoothing = Math.min(1, Math.max(0, settings.cursorSmoothingFactor));
+    this.cursorFilter = new OneEuroPointFilter({
+      minCutoff: 0.75 + smoothing * 1.5,
+      beta: 0.12 + smoothing * 0.3,
+    });
   }
 
   update(
@@ -91,25 +104,32 @@ export class GestureEngine {
   ): GestureOutput {
     this.updateOpenPalm(metrics.openPalmCandidate);
 
+    const filteredCursor = this.cursorFilter.filter(metrics.cursor, nowMs);
+    const suppressed = this.openPalmEnterFrames > 0 || this.openPalmPaused || metrics.fistCandidate;
+    const intentEvidence = {
+      contact: metrics.pinchContact,
+      separated: metrics.pinchSeparated,
+      blockingReason: metrics.pinchBlockingReason,
+      cursor: filteredCursor,
+      motionCursor: metrics.motionCursor,
+      suppressed,
+    } as const;
+    const pinch = this.pinch.update(intentEvidence, nowMs);
+
     if (this.openPalmPaused) {
-      this.pinch.reset();
       return this.output({
         state: "paused",
-        cursor: metrics.cursor,
+        cursor: filteredCursor,
         click: false,
+        clickCursor: null,
+        intentEvidence,
         phase: "active",
         candidate: null,
         lockedGesture: "open-palm",
         confirmationProgress: 1,
-        diagnostics: this.diagnostics(metrics, null, nowMs, inferenceMs, imageAspectRatio),
+        diagnostics: this.diagnostics(metrics, pinch, nowMs, inferenceMs, imageAspectRatio),
       });
     }
-
-    const pinch = this.pinch.update({
-      contact: metrics.pinchContact,
-      separated: metrics.pinchSeparated,
-      blockingReason: metrics.pinchBlockingReason,
-    }, nowMs);
     const openPalmCandidate = this.openPalmEnterFrames > 0;
     const state: GestureState = pinch.phase === "candidate"
       || pinch.phase === "active"
@@ -127,8 +147,10 @@ export class GestureEngine {
 
     return this.output({
       state,
-      cursor: metrics.cursor,
+      cursor: filteredCursor,
       click: pinch.clicked && !openPalmCandidate,
+      clickCursor: pinch.clickCursor,
+      intentEvidence,
       phase,
       candidate,
       lockedGesture: pinch.active ? "left" : null,
@@ -143,6 +165,7 @@ export class GestureEngine {
     imageAspectRatio: number,
   ): GestureOutput {
     const pinch = this.pinch.update(null, nowMs);
+    this.cursorFilter.reset();
     this.openPalmEnterFrames = 0;
     this.openPalmExitFrames = 0;
     this.openPalmPaused = false;
@@ -150,6 +173,8 @@ export class GestureEngine {
       state: "lost",
       cursor: null,
       click: false,
+      clickCursor: null,
+      intentEvidence: null,
       phase: "lost",
       candidate: null,
       lockedGesture: null,
@@ -184,7 +209,7 @@ export class GestureEngine {
 
   private diagnostics(
     metrics: StableHandMetrics | null,
-    pinch: StablePinchOutput | null,
+    pinch: PinchClickOutput | null,
     nowMs: number,
     inferenceMs: number | null,
     imageAspectRatio: number,
@@ -229,6 +254,9 @@ export class GestureEngine {
       pinchSpatialRatio: metrics?.spatialPinchRatio ?? null,
       pinchEnterRatio: metrics?.pinchEnterRatio ?? null,
       pinchExitRatio: metrics?.pinchExitRatio ?? null,
+      cursorSpeed: pinch?.cursorSpeed ?? null,
+      clickBlockingReason: pinch?.blockingReason ?? null,
+      fistCandidate: metrics?.fistCandidate ?? false,
     };
   }
 
@@ -236,6 +264,8 @@ export class GestureEngine {
     state: GestureState;
     cursor: Landmark | null;
     click: boolean;
+    clickCursor: Landmark | null;
+    intentEvidence: import("./pinchClickStateMachine").PinchClickEvidence | null;
     phase: GesturePhase;
     candidate: GestureKind | null;
     lockedGesture: GestureKind | null;

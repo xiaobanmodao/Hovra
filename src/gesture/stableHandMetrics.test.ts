@@ -68,6 +68,25 @@ describe("stable hand metrics", () => {
     expect(measureStableHand(almostOpen, 1, 0.5)?.openPalmCandidate).toBe(false);
   });
 
+  it("只把四指都折回掌心的姿态标记为握拳抑制", () => {
+    expect(measureStableHand(makeGestureHand("fist"), 1, 0.5)?.fistCandidate).toBe(true);
+    expect(measureStableHand(makeGestureHand("tracking"), 1, 0.5)?.fistCandidate).toBe(false);
+    expect(measureStableHand(makeGestureHand("left"), 1, 0.5)?.fistCandidate).toBe(false);
+    expect(measureStableHand(makeGestureHand("open-palm"), 1, 0.5)?.fistCandidate).toBe(false);
+  });
+
+  it("用掌部锚点而不是正在捏合的食指尖测量整手移动", () => {
+    const trackingHand = makeGestureHand("tracking");
+    const pinchedHand = trackingHand.map((point) => ({ ...point }));
+    pinchedHand[8] = { ...pinchedHand[4]!, x: pinchedHand[4]!.x + 0.005 };
+    const tracking = measureStableHand(trackingHand, 1, 0.5);
+    const pinched = measureStableHand(pinchedHand, 1, 0.5);
+
+    expect(tracking?.motionCursor).not.toEqual(tracking?.cursor);
+    expect(pinched?.motionCursor.x).toBeCloseTo(tracking!.motionCursor.x);
+    expect(pinched?.motionCursor.y).toBeCloseTo(tracking!.motionCursor.y);
+  });
+
   it("maps sensitivity to bounded contact and release thresholds", () => {
     const strict = stablePinchThresholds(0);
     const normal = stablePinchThresholds(0.5);

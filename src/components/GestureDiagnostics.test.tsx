@@ -51,6 +51,9 @@ const output: GestureOutput = {
     pinchSpatialRatio: 0.21,
     pinchEnterRatio: 0.33,
     pinchExitRatio: 0.5,
+    cursorSpeed: 2.4,
+    clickBlockingReason: "high-speed",
+    fistCandidate: false,
   },
 };
 
@@ -76,6 +79,8 @@ describe("GestureDiagnostics", () => {
     expect(screen.getByText("连续接触确认")).toBeInTheDocument();
     expect(screen.getByText("1/2")).toBeInTheDocument();
     expect(screen.getByText("指尖在画面中重合，但纵深仍分离")).toBeInTheDocument();
+    expect(screen.getByText("移动过快，已阻止点击")).toBeInTheDocument();
+    expect(screen.getByText("2.40 屏/秒")).toBeInTheDocument();
     expect(screen.getByText("58.4 帧/秒")).toBeInTheDocument();
     expect(screen.getByText("9.2 毫秒")).toBeInTheDocument();
     expect(screen.queryByText("Apple Vision")).not.toBeInTheDocument();

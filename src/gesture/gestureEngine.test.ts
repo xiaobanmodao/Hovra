@@ -15,24 +15,31 @@ describe("GestureEngine 稳定内核", () => {
       pinchExitRatio: 0.52,
     });
   });
-  it("在第二个连续接触帧立即点击一次", () => {
+  it("稳定捏合阶段不点击，只在第二个连续释放帧点击一次", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");
+    const tracking = makeGestureHand("tracking");
 
-    expect(engine.update(left, 0)).toMatchObject({
+    engine.update(tracking, 0);
+    expect(engine.update(left, 16)).toMatchObject({
       phase: "candidate",
       state: "left-pinching",
       click: false,
       confirmationProgress: 0.5,
     });
-    expect(engine.update(left, 16)).toMatchObject({
+    expect(engine.update(left, 32)).toMatchObject({
       phase: "active",
       state: "left-pinching",
-      click: true,
+      click: false,
       lockedGesture: "left",
       confirmationProgress: 1,
     });
-    expect(engine.update(left, 32).click).toBe(false);
+    expect(engine.update(tracking, 48)).toMatchObject({ phase: "releasing", click: false });
+    expect(engine.update(tracking, 64)).toMatchObject({
+      phase: "cooldown",
+      click: true,
+      clickCursor: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    });
   });
 
   it("持续捏合不连点，明确松开两帧后才能再次点击", () => {
@@ -40,23 +47,28 @@ describe("GestureEngine 稳定内核", () => {
     const left = makeGestureHand("left");
     const tracking = makeGestureHand("tracking");
 
-    engine.update(left, 0);
-    expect(engine.update(left, 16).click).toBe(true);
-    for (let at = 32; at <= 1_000; at += 16) {
+    engine.update(tracking, 0);
+    engine.update(left, 16);
+    expect(engine.update(left, 32).click).toBe(false);
+    for (let at = 48; at <= 320; at += 16) {
       expect(engine.update(left, at).click).toBe(false);
     }
-    expect(engine.update(tracking, 1_016).phase).toBe("releasing");
-    expect(engine.update(tracking, 1_032).phase).toBe("neutral");
-    expect(engine.update(left, 1_048).click).toBe(false);
-    expect(engine.update(left, 1_064).click).toBe(true);
+    expect(engine.update(tracking, 336).phase).toBe("releasing");
+    expect(engine.update(tracking, 352).click).toBe(true);
+    for (let at = 368; at <= 512; at += 16) engine.update(tracking, at);
+    expect(engine.update(left, 528).click).toBe(false);
+    expect(engine.update(left, 544).click).toBe(false);
+    engine.update(tracking, 560);
+    expect(engine.update(tracking, 576).click).toBe(true);
   });
 
   it("忽略单帧指尖重合", () => {
     const engine = new GestureEngine();
 
-    expect(engine.update(makeGestureHand("left"), 0).phase).toBe("candidate");
-    expect(engine.update(makeGestureHand("tracking"), 16).click).toBe(false);
+    engine.update(makeGestureHand("tracking"), 0);
+    expect(engine.update(makeGestureHand("left"), 16).phase).toBe("candidate");
     expect(engine.update(makeGestureHand("tracking"), 32).click).toBe(false);
+    expect(engine.update(makeGestureHand("tracking"), 48).click).toBe(false);
   });
 
   it("真实接触不再被错误的世界坐标阻断", () => {
@@ -65,15 +77,18 @@ describe("GestureEngine 稳定内核", () => {
     const misleadingWorld = makeGestureHand("left");
     misleadingWorld[8] = { ...misleadingWorld[4]!, z: 0.7 };
 
-    expect(engine.update(left, 0, misleadingWorld).click).toBe(false);
-    expect(engine.update(left, 16, misleadingWorld)).toMatchObject({
-      click: true,
+    engine.update(makeGestureHand("tracking"), 0, misleadingWorld);
+    expect(engine.update(left, 16, misleadingWorld).click).toBe(false);
+    expect(engine.update(left, 32, misleadingWorld)).toMatchObject({
+      click: false,
       lockedGesture: "left",
       diagnostics: {
         worldLeftPinchRatio: null,
         pinchModelMode: "mediapipe",
       },
     });
+    engine.update(makeGestureHand("tracking"), 48, misleadingWorld);
+    expect(engine.update(makeGestureHand("tracking"), 64, misleadingWorld).click).toBe(true);
   });
 
   it("画面重合但同帧归一化深度分离时绝不点击", () => {
@@ -144,6 +159,18 @@ describe("GestureEngine 稳定内核", () => {
     expect(paused).toMatchObject({ state: "paused", click: false, lockedGesture: "open-palm" });
   });
 
+  it("整手高速横移时不允许点击，静止后也必须重新完成释放冷却", () => {
+    const engine = new GestureEngine();
+    engine.update(makeGestureHand("tracking", { cursor: { x: 0.2, y: 0.4 } }), 0);
+    engine.update(makeGestureHand("left", { cursor: { x: 0.8, y: 0.4 } }), 16);
+    engine.update(makeGestureHand("left", { cursor: { x: 0.8, y: 0.4 } }), 32);
+    engine.update(makeGestureHand("tracking", { cursor: { x: 0.8, y: 0.4 } }), 48);
+    const released = engine.update(makeGestureHand("tracking", { cursor: { x: 0.8, y: 0.4 } }), 64);
+
+    expect(released.click).toBe(false);
+    expect(released.diagnostics.clickBlockingReason).toBe("suppressed");
+  });
+
   it.each(["right", "double", "scroll"] as const)("不启用已取消的 %s 动作", (gesture) => {
     const engine = new GestureEngine();
 
@@ -168,8 +195,11 @@ describe("GestureEngine 稳定内核", () => {
   it("记录不含图像数据且点击帧可回放", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");
-    engine.update(left, 0, left);
+    engine.update(makeGestureHand("tracking"), 0, left);
     engine.update(left, 16, left);
+    engine.update(left, 32, left);
+    engine.update(makeGestureHand("tracking"), 48, left);
+    engine.update(makeGestureHand("tracking"), 64, left);
 
     const trace = engine.getTrace();
     expect(trace.frames.at(-1)?.events).toEqual(["click"]);

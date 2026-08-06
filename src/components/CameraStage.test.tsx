@@ -2,6 +2,7 @@ import { createRef } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { CameraStage } from "./CameraStage";
+import { makeGestureHand } from "../gesture/fixtures/stable-gesture-sequences";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -82,4 +83,35 @@ it("offers a retry after camera failure and requests a new stream", async () => 
   await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(videoRef.current?.srcObject).toBe(retryStream));
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("绘制有掌面的 2.5D 手部并用中文显示当前捏合状态", async () => {
+  const stream = Object.assign(new EventTarget(), { getTracks: () => [] }) as unknown as MediaStream;
+  vi.stubGlobal("navigator", {
+    ...navigator,
+    mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+  });
+  const context = {
+    arc: vi.fn(), beginPath: vi.fn(), clearRect: vi.fn(), closePath: vi.fn(),
+    fill: vi.fn(), lineTo: vi.fn(), moveTo: vi.fn(), stroke: vi.fn(),
+    save: vi.fn(), restore: vi.fn(),
+  } as unknown as CanvasRenderingContext2D;
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context);
+  const videoRef = createRef<HTMLVideoElement>();
+
+  render(
+    <CameraStage
+      videoRef={videoRef}
+      landmarks={makeGestureHand("left")}
+      worldLandmarks={makeGestureHand("left")}
+      overlayState={{ phase: "candidate", blockingReason: null }}
+      onCameraReady={vi.fn()}
+      onCameraError={vi.fn()}
+      onCameraRetry={vi.fn()}
+    />,
+  );
+
+  expect(context.fill).toHaveBeenCalled();
+  expect(context.stroke).toHaveBeenCalled();
+  expect(screen.getByText("捏合候选：保持稳定后释放")).toBeInTheDocument();
 });

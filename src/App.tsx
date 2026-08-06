@@ -3,22 +3,23 @@ import type { HandLandmarker } from "@mediapipe/tasks-vision";
 import { CalibrationPanel } from "./components/CalibrationPanel";
 import { CameraStage } from "./components/CameraStage";
 import { GestureDiagnostics } from "./components/GestureDiagnostics";
+import { IntentFeedbackPanel } from "./components/IntentFeedbackPanel";
 import { Playground } from "./components/Playground";
 import { StatusPanel } from "./components/StatusPanel";
 import { SystemControlPanel } from "./components/SystemControlPanel";
-import { StabilityTestPanel } from "./components/StabilityTestPanel";
-import { mapMirroredPoint, smoothPoint, type Point } from "./cursor/cursorController";
+import { mapMirroredPoint, type Point } from "./cursor/cursorController";
 import { DEFAULT_GESTURE_SETTINGS } from "./gesture/config";
 import { GestureEngine } from "./gesture/gestureEngine";
 import {
-  advanceStabilitySession,
-  cancelStabilitySession,
-  completeStabilitySession,
-  createStabilitySession,
-  type StabilitySession,
-} from "./gesture/stabilityTest";
-import { analyzeStabilitySamples, type StabilityReport } from "./gesture/stabilityTuning";
-import { resolveStablePinchThresholds } from "./gesture/stableHandMetrics";
+  createIntentFeedbackState,
+  labelIntentEvent,
+  parseIntentFeedback,
+  recordIntentFrame,
+  serializeIntentFeedback,
+  type IntentLabel,
+} from "./gesture/intentFeedback";
+import { analyzeIntentFeedback } from "./gesture/intentTuning";
+import { resolvePinchClickConfig } from "./gesture/pinchClickStateMachine";
 import { gestureStateLabel } from "./i18n/zh-CN";
 import {
   type GestureOutput,
@@ -31,6 +32,8 @@ const INITIAL_OUTPUT: GestureOutput = {
   state: "lost",
   cursor: null,
   click: false,
+  clickCursor: null,
+  intentEvidence: null,
   rightClick: false,
   doubleClick: false,
   scrollY: 0,
@@ -73,10 +76,7 @@ const INITIAL_OUTPUT: GestureOutput = {
   },
 };
 
-const IDLE_STABILITY_SESSION: StabilitySession = {
-  phase: "idle", startedAt: 0, lastObservedAt: null, stepIndex: 0,
-  stepElapsedMs: 0, samples: [], quality: { valid: false, message: "尚未开始" },
-};
+const INTENT_FEEDBACK_STORAGE_KEY = "hovra.intent-feedback.v1";
 
 const clampToViewport = (point: Point): Point => ({
   x: Math.min(window.innerWidth, Math.max(0, point.x)),
@@ -87,6 +87,14 @@ const clampNormalizedPoint = (point: Point): Point => ({
   x: Math.min(1, Math.max(0, point.x)),
   y: Math.min(1, Math.max(0, point.y)),
 });
+
+const mapSystemPoint = (point: Landmark, settings: GestureSettings): Point => {
+  const mirrored = mapMirroredPoint(point, { width: 1, height: 1 });
+  return clampNormalizedPoint({
+    x: mirrored.x + settings.cursorOffsetX,
+    y: mirrored.y + settings.cursorOffsetY,
+  });
+};
 
 const desktopCursorState = (output: GestureOutput) => {
   if (output.phase === "candidate" && output.candidate === "left") {
@@ -101,15 +109,13 @@ const desktopCursorState = (output: GestureOutput) => {
 function App() {
   const desktopBridge = window.gestureDesktop;
   const videoRef = useRef<HTMLVideoElement>(null);
-  const normalizedCursorRef = useRef<Point | null>(null);
   const systemControlActiveRef = useRef(false);
   const activationPendingRef = useRef(false);
   const pendingPauseRef = useRef<Promise<void> | null>(null);
   const mountedRef = useRef(true);
   const lastDispatchedOutputRef = useRef<GestureOutput>(INITIAL_OUTPUT);
   const safetyGenerationRef = useRef(0);
-  const stabilityActiveRef = useRef(false);
-  const settingsBeforeTuningRef = useRef<GestureSettings | null>(null);
+  const settingsBeforeIntentTuningRef = useRef<GestureSettings | null>(null);
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_GESTURE_SETTINGS }));
   const engine = useMemo(() => new GestureEngine(settings), [settings]);
   const engineRef = useRef(engine);
@@ -119,13 +125,26 @@ function App() {
   const [trackerStatus, setTrackerStatus] = useState("等待摄像头");
   const [landmarker, setLandmarker] = useState<HandLandmarker | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
+  const [worldLandmarks, setWorldLandmarks] = useState<Landmark[] | null>(null);
   const [output, setOutput] = useState<GestureOutput>(INITIAL_OUTPUT);
   const [cursor, setCursor] = useState<Point | null>(null);
   const [systemCursor, setSystemCursor] = useState<Point | null>(null);
   const [systemControlEnabled, setSystemControlEnabled] = useState(false);
-  const [stabilitySession, setStabilitySession] = useState<StabilitySession>(IDLE_STABILITY_SESSION);
-  const [stabilityReport, setStabilityReport] = useState<StabilityReport | null>(null);
-  const [stabilityApplied, setStabilityApplied] = useState(false);
+  const [intentFeedback, setIntentFeedback] = useState(() => createIntentFeedbackState(
+    {},
+    parseIntentFeedback(localStorage.getItem(INTENT_FEEDBACK_STORAGE_KEY)),
+  ));
+  const [intentSettingsApplied, setIntentSettingsApplied] = useState(false);
+  const intentConfig = useMemo(() => resolvePinchClickConfig({
+    requiredContactFrames: settings.pinchContactFrames,
+    requiredReleaseFrames: settings.pinchReleaseFrames,
+    maxCursorSpeed: settings.maxClickSpeed,
+    maxTravel: settings.maxClickTravel,
+  }), [settings.maxClickSpeed, settings.maxClickTravel, settings.pinchContactFrames, settings.pinchReleaseFrames]);
+  const intentReport = useMemo(
+    () => analyzeIntentFeedback(intentFeedback.events, intentConfig),
+    [intentConfig, intentFeedback.events],
+  );
   const handleCameraReady = useCallback(() => {
     setCameraReady(true);
     setCameraStatus("摄像头已启用");
@@ -137,6 +156,7 @@ function App() {
     setCameraStatus(message);
     setTrackerStatus("不可用");
     setLandmarks(null);
+    setWorldLandmarks(null);
     setOutput(nextOutput);
   }, []);
 
@@ -145,6 +165,7 @@ function App() {
     setCameraStatus("正在请求摄像头权限");
     setTrackerStatus("等待摄像头");
     setLandmarks(null);
+    setWorldLandmarks(null);
     setOutput(engineRef.current.update(null, performance.now()));
   }, []);
 
@@ -191,7 +212,7 @@ function App() {
   }, [desktopBridge]);
 
   const enableSystemControl = useCallback(async () => {
-    if (!desktopBridge || stabilityActiveRef.current) {
+    if (!desktopBridge) {
       return;
     }
 
@@ -219,51 +240,37 @@ function App() {
     }
   }, [desktopBridge, pauseSystemControl]);
 
-  const startStabilityTest = useCallback(async () => {
-    await pauseSystemControl();
-    settingsBeforeTuningRef.current = { ...settings };
-    stabilityActiveRef.current = true;
-    setStabilityApplied(false);
-    setStabilityReport(null);
-    setStabilitySession(createStabilitySession(performance.now()));
-  }, [pauseSystemControl, settings]);
-
-  const cancelStabilityTest = useCallback(() => {
-    stabilityActiveRef.current = false;
-    setStabilitySession((current) => cancelStabilitySession(current));
+  const labelRecentIntent = useCallback((id: string, label: Exclude<IntentLabel, "unlabeled">) => {
+    setIntentFeedback((current) => labelIntentEvent(current, id, label));
   }, []);
 
-  const applyStabilityRecommendation = useCallback(() => {
-    if (!stabilityReport?.recommendation.safe) return;
-    const { enterRatio, exitRatio } = stabilityReport.recommendation;
-    if (enterRatio === null || exitRatio === null) return;
-    handleSettingsChange({ ...settings, pinchEnterRatio: enterRatio, pinchExitRatio: exitRatio });
-    setStabilityApplied(true);
-  }, [handleSettingsChange, settings, stabilityReport]);
+  const applyIntentRecommendation = useCallback(() => {
+    const recommendation = intentReport.recommendation;
+    if (!recommendation.safe || !recommendation.config) return;
+    if (!settingsBeforeIntentTuningRef.current) {
+      settingsBeforeIntentTuningRef.current = { ...settings };
+    }
+    const config = recommendation.config;
+    handleSettingsChange({
+      ...settings,
+      pinchContactFrames: config.requiredContactFrames,
+      pinchReleaseFrames: config.requiredReleaseFrames,
+      maxClickSpeed: config.maxCursorSpeed,
+      maxClickTravel: config.maxTravel,
+    });
+    setIntentSettingsApplied(true);
+  }, [handleSettingsChange, intentReport.recommendation, settings]);
 
-  const restorePreTestSettings = useCallback(() => {
-    if (!settingsBeforeTuningRef.current) return;
-    handleSettingsChange({ ...settingsBeforeTuningRef.current });
-    setStabilityApplied(false);
+  const restoreIntentSettings = useCallback(() => {
+    if (!settingsBeforeIntentTuningRef.current) return;
+    handleSettingsChange({ ...settingsBeforeIntentTuningRef.current });
+    setIntentSettingsApplied(false);
   }, [handleSettingsChange]);
 
-  const saveStabilityReport = useCallback(() => {
-    if (!stabilityReport) return;
-    const payload = JSON.stringify({
-      version: 1,
-      createdAt: new Date().toISOString(),
-      report: stabilityReport,
-      settings,
-      samples: stabilitySession.samples,
-      privacy: "不含摄像头图像或视频",
-    }, null, 2);
-    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "gesture-stability-report.json";
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  }, [settings, stabilityReport, stabilitySession.samples]);
+  const clearIntentFeedback = useCallback(() => {
+    setIntentFeedback(createIntentFeedbackState());
+    localStorage.removeItem(INTENT_FEEDBACK_STORAGE_KEY);
+  }, []);
 
   useEffect(() => {
     const handleSafetyPause = () => {
@@ -280,6 +287,13 @@ function App() {
     mountedRef.current = false;
     void pauseSystemControl();
   }, [pauseSystemControl]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      INTENT_FEEDBACK_STORAGE_KEY,
+      serializeIntentFeedback(intentFeedback.events),
+    );
+  }, [intentFeedback.events]);
 
   useEffect(() => {
     if (lastDispatchedOutputRef.current === output) {
@@ -309,14 +323,23 @@ function App() {
       return;
     }
 
+    if (output.click) {
+      const lockedCursor = output.clickCursor
+        ? mapSystemPoint(output.clickCursor, settings)
+        : systemCursor;
+      void (async () => {
+        if (lockedCursor) {
+          await desktopBridge.move(lockedCursor.x, lockedCursor.y, desktopCursorState(output));
+        }
+        await desktopBridge.click();
+      })().catch(() => pauseSystemControl());
+      return;
+    }
     if (systemCursor) {
       void desktopBridge.move(systemCursor.x, systemCursor.y, desktopCursorState(output))
         .catch(() => pauseSystemControl());
     }
-    if (output.click) {
-      void desktopBridge.click().catch(() => pauseSystemControl());
-    }
-  }, [desktopBridge, output, pauseSystemControl, systemCursor]);
+  }, [desktopBridge, output, pauseSystemControl, settings, systemCursor]);
 
   useEffect(() => {
     if (!cameraReady) {
@@ -398,19 +421,16 @@ function App() {
           );
 
           setLandmarks(nextLandmarks);
+          setWorldLandmarks(nextWorldLandmarks);
           setOutput(nextOutput);
-          if (stabilityActiveRef.current) {
-            setStabilitySession((current) => {
-              const next = advanceStabilitySession(current, {
-                nowMs,
-                output: nextOutput,
-                handPresent: nextLandmarks !== null,
-                pageFocused: typeof document.hasFocus !== "function" || document.hasFocus(),
-              });
-              if (next.phase === "analyzing") stabilityActiveRef.current = false;
-              return next;
-            });
-          }
+          setIntentFeedback((current) => recordIntentFrame(current, {
+            t: nowMs,
+            evidence: nextOutput.intentEvidence ?? null,
+            clicked: nextOutput.click && systemControlActiveRef.current,
+            pinchRatio: nextOutput.diagnostics.pinchSpatialRatio ?? null,
+          }, nextOutput.click && systemControlActiveRef.current
+            ? nextOutput.clickCursor ?? nextOutput.cursor
+            : null));
           if (!failed) {
             setTrackerStatus(detectedHand ? "已检测到手部" : "未检测到手部");
           }
@@ -420,22 +440,11 @@ function App() {
             && nextOutput.state !== "paused"
             && nextOutput.state !== "lost"
           ) {
-            const mapped = mapMirroredPoint(nextOutput.cursor, {
-              width: 1,
-              height: 1,
-            });
-            const smoothed = normalizedCursorRef.current
-              ? smoothPoint(normalizedCursorRef.current, mapped, settings.cursorSmoothingFactor)
-              : mapped;
-            const calibrated = clampNormalizedPoint({
-              x: smoothed.x + settings.cursorOffsetX,
-              y: smoothed.y + settings.cursorOffsetY,
-            });
+            const calibrated = mapSystemPoint(nextOutput.cursor, settings);
             const nextCursor = clampToViewport({
               x: calibrated.x * window.innerWidth,
               y: calibrated.y * window.innerHeight,
             });
-            normalizedCursorRef.current = smoothed;
             setSystemCursor(calibrated);
             setCursor(nextCursor);
           }
@@ -448,6 +457,7 @@ function App() {
         ) {
           staleFrameHandled = true;
           setLandmarks(null);
+          setWorldLandmarks(null);
           setOutput(engine.update(null, nowMs));
           setTrackerStatus("摄像头画面停滞");
         }
@@ -463,20 +473,6 @@ function App() {
       cancelAnimationFrame(animationFrame);
     };
   }, [engine, landmarker, settings.cameraStaleFrameMs, settings.cursorOffsetX, settings.cursorOffsetY, settings.cursorSmoothingFactor]);
-
-  useEffect(() => {
-    if (stabilitySession.phase !== "analyzing") return;
-    setStabilityReport(analyzeStabilitySamples(
-      stabilitySession.samples,
-      resolveStablePinchThresholds(settings),
-    ));
-    setStabilitySession((current) => completeStabilitySession(current));
-  }, [settings, stabilitySession]);
-
-  const stabilityRunning = stabilitySession.phase === "readiness"
-    || stabilitySession.phase === "positive"
-    || stabilitySession.phase === "negative"
-    || stabilitySession.phase === "analyzing";
 
   return (
     <main className="app-shell">
@@ -498,7 +494,6 @@ function App() {
         enabled={systemControlEnabled}
         onEnable={enableSystemControl}
         onPause={pauseSystemControl}
-        disabled={stabilityRunning}
       />
 
       <CalibrationPanel
@@ -507,19 +502,16 @@ function App() {
         pinchRatio={output.diagnostics.leftPinchRatio}
         gestureState={output.state}
         cursor={cursor}
-        disabled={stabilityRunning}
       />
 
-      <StabilityTestPanel
-        session={stabilitySession}
-        report={stabilityReport}
-        applied={stabilityApplied}
-        canStart={cameraReady && landmarker !== null}
-        onStart={() => { void startStabilityTest(); }}
-        onCancel={cancelStabilityTest}
-        onApply={applyStabilityRecommendation}
-        onRestore={restorePreTestSettings}
-        onSave={desktopBridge ? saveStabilityReport : undefined}
+      <IntentFeedbackPanel
+        events={intentFeedback.events}
+        report={intentReport}
+        applied={intentSettingsApplied}
+        onLabel={labelRecentIntent}
+        onApply={applyIntentRecommendation}
+        onRestore={restoreIntentSettings}
+        onClear={clearIntentFeedback}
       />
 
       <GestureDiagnostics
@@ -531,6 +523,13 @@ function App() {
         <CameraStage
           videoRef={videoRef}
           landmarks={landmarks}
+          worldLandmarks={worldLandmarks}
+          overlayState={{
+            phase: output.phase,
+            blockingReason: output.diagnostics.clickBlockingReason
+              ?? output.diagnostics.pinchBlockingReason,
+            state: output.state,
+          }}
           onCameraReady={handleCameraReady}
           onCameraError={handleCameraError}
           onCameraRetry={handleCameraRetry}

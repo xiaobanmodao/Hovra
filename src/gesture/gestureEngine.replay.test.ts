@@ -11,7 +11,7 @@ describe("GestureEngine replay", () => {
     const original = new GestureEngine();
     const left = makeGestureHand("left");
     const tracking = makeGestureHand("tracking");
-    original.update(left, 0, left, null, 16 / 9);
+    original.update(tracking, 0, tracking, null, 16 / 9);
     original.update(left, 16, left, null, 16 / 9);
     original.update(left, 32, left, null, 16 / 9);
     original.update(left, 48, left, null, 16 / 9);

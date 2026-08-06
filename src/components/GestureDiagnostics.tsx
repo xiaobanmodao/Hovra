@@ -4,6 +4,7 @@ import type { GestureOutput } from "../gesture/types";
 import {
   gestureKindLabel,
   gesturePhaseLabel,
+  clickBlockingReasonLabel,
   pinchBlockingReasonLabel,
 } from "../i18n/zh-CN";
 
@@ -59,10 +60,19 @@ export function GestureDiagnostics({ output, onSaveTrace }: GestureDiagnosticsPr
           <dd>{diagnostics.pinchEnterVotes}/{diagnostics.pinchRequiredVotes}</dd>
         </div>
         <div>
-          <dt>阻断原因</dt>
+          <dt>几何阻断</dt>
           <dd>{diagnostics.pinchBlockingReason === null
             ? "—"
             : pinchBlockingReasonLabel(diagnostics.pinchBlockingReason)}</dd>
+        </div>
+        <div><dt>整手速度</dt><dd>{diagnostics.cursorSpeed == null
+          ? "—"
+          : `${diagnostics.cursorSpeed.toFixed(2)} 屏/秒`}</dd></div>
+        <div>
+          <dt>点击安全门</dt>
+          <dd>{diagnostics.clickBlockingReason == null
+            ? "允许"
+            : clickBlockingReasonLabel(diagnostics.clickBlockingReason)}</dd>
         </div>
         <div><dt>有效帧率</dt><dd>{diagnostics.effectiveFps === null
           ? "—"

@@ -19,9 +19,13 @@ vi.mock("./vision/handLandmarker", () => ({
 
 import App from "./App";
 
-const handAt = (gesture: "tracking" | "left" | "right" | "double" | "scroll" | "open-palm", x = 0.45, y = 0.45): Landmark[] => (
-  makeGestureHand(gesture, { cursor: { x, y } })
-);
+const handAt = (
+  gesture: "tracking" | "left" | "right" | "double" | "scroll" | "open-palm",
+  x?: number,
+  y?: number,
+): Landmark[] => x === undefined || y === undefined
+  ? makeGestureHand(gesture)
+  : makeGestureHand(gesture, { cursor: { x, y } });
 
 beforeEach(() => {
   localStorage.clear();
@@ -128,9 +132,6 @@ it("实时帧只走同步 MediaPipe，不再编码或发送 Apple Vision 图像"
   const { runFrame, video } = await renderDesktopApp();
   Object.defineProperty(video, "videoWidth", { configurable: true, value: 1280 });
   Object.defineProperty(video, "videoHeight", { configurable: true, value: 720 });
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
-    drawImage: vi.fn(),
-  } as unknown as CanvasRenderingContext2D);
   const toBlob = vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => {
     callback(new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" }));
   });
@@ -142,15 +143,17 @@ it("实时帧只走同步 MediaPipe，不再编码或发送 Apple Vision 图像"
   expect(toBlob).not.toHaveBeenCalled();
 });
 
-it("第二个真实接触帧立即点击一次且系统控制保持开启", async () => {
+it("稳定捏合后只在第二个释放帧点击一次且系统控制保持开启", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
   runFrame(16, handAt("left"));
   runFrame(32, handAt("left"));
 
+  expect(bridge.click).not.toHaveBeenCalled();
+  runFrame(48, handAt("tracking"));
+  runFrame(64, handAt("tracking"));
+
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
   expect(screen.getByText("已启用")).toBeInTheDocument();
-  runFrame(48, handAt("left"));
-  runFrame(64, handAt("tracking"));
   runFrame(80, handAt("tracking", 0.55, 0.4));
   await waitFor(() => expect(bridge.move).toHaveBeenCalled());
   expect(bridge.click).toHaveBeenCalledOnce();
@@ -180,6 +183,8 @@ it("世界坐标缺失或错误都不再阻断同帧真实接触", async () => {
   misleadingWorld[8] = { ...misleadingWorld[4]!, z: 0.7 };
   runFrame(16, handAt("left"), misleadingWorld);
   runFrame(32, handAt("left"), misleadingWorld);
+  runFrame(48, handAt("tracking"), misleadingWorld);
+  runFrame(64, handAt("tracking"), misleadingWorld);
 
   await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
 });
@@ -221,16 +226,18 @@ it("releases desktop control during unmount", async () => {
   expect(bridge.releaseAndPause).toHaveBeenCalledOnce();
 });
 
-it("开始稳定性测试立即暂停系统控制且不再派发桌面事件", async () => {
+it("旧图片稳定性测试退出主流程，真实点击可以直接标记误触", async () => {
   const { bridge, runFrame } = await renderDesktopApp();
-  const start = await screen.findByRole("button", { name: "开始稳定性测试" });
-  fireEvent.click(start);
-  await waitFor(() => expect(bridge.releaseAndPause).toHaveBeenCalled());
-  vi.mocked(bridge.move).mockClear();
-  vi.mocked(bridge.click).mockClear();
-  runFrame(100, handAt("left"));
-  runFrame(116, handAt("left"));
-  expect(bridge.move).not.toHaveBeenCalled();
-  expect(bridge.click).not.toHaveBeenCalled();
-  expect(screen.getByRole("button", { name: "启用系统控制" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "开始稳定性测试" })).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "真实使用反馈" })).toBeInTheDocument();
+
+  runFrame(16, handAt("left"));
+  runFrame(32, handAt("left"));
+  runFrame(48, handAt("tracking"));
+  runFrame(64, handAt("tracking"));
+  await waitFor(() => expect(bridge.click).toHaveBeenCalledOnce());
+  fireEvent.click(await screen.findByRole("button", { name: "这是误触" }));
+
+  expect(screen.getByText("误触 1")).toBeInTheDocument();
+  expect(screen.getByText("已启用")).toBeInTheDocument();
 });

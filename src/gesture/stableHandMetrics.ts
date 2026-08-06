@@ -31,6 +31,7 @@ export type StablePinchThresholds = {
 
 export type StableHandMetrics = {
   cursor: Landmark;
+  motionCursor: Landmark;
   palmScale: number;
   screenPinchGap: number;
   depthPinchGap: number | null;
@@ -46,6 +47,7 @@ export type StableHandMetrics = {
   pinchBlockingReason: PinchBlockingReason;
   openPalmCandidate: boolean;
   openPalmScore: number;
+  fistCandidate: boolean;
 };
 
 const EPSILON = 1e-6;
@@ -114,9 +116,11 @@ export function measureStableHand(
       && (depthPinchRatio ?? Number.POSITIVE_INFINITY) > thresholds.enterRatio
     ) ? "depth" : "image";
   const openPalm = measureOpenPalm(points, palmScale);
+  const fistCandidate = measureFist(points, palmScale);
 
   return {
     cursor: { ...landmarks[INDEX_FINGER_TIP]! },
+    motionCursor: { ...landmarks[MIDDLE_FINGER_MCP]! },
     palmScale,
     screenPinchGap,
     depthPinchGap,
@@ -132,7 +136,13 @@ export function measureStableHand(
     pinchBlockingReason,
     openPalmCandidate: openPalm.candidate,
     openPalmScore: openPalm.score,
+    fistCandidate,
   };
+}
+
+function measureFist(points: MetricPoint[], palmScale: number): boolean {
+  const tips = [INDEX_FINGER_TIP, MIDDLE_FINGER_TIP, RING_FINGER_TIP, PINKY_TIP];
+  return tips.every((tip) => distance3(points[WRIST]!, points[tip]!) / palmScale < 0.55);
 }
 
 function measureOpenPalm(
