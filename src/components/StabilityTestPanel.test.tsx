@@ -20,7 +20,7 @@ const report = (safe: boolean): StabilityReport => ({
     ? { safe: true, enterRatio: 0.35, exitRatio: 0.52, reason: "样本边界清晰，可安全应用" }
     : { safe: false, enterRatio: null, exitRatio: null, reason: "测试样本不足" },
 });
-const callbacks = () => ({ onStart: vi.fn(), onCancel: vi.fn(), onApply: vi.fn(), onRestore: vi.fn() });
+const callbacks = () => ({ onStart: vi.fn(), onCancel: vi.fn(), onApply: vi.fn(), onRestore: vi.fn(), onSave: vi.fn() });
 
 describe("StabilityTestPanel", () => {
   it("从中文入口开始测试", () => {
@@ -52,6 +52,8 @@ describe("StabilityTestPanel", () => {
     expect(screen.getByText("95.0%")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "应用推荐设置" }));
     expect(actions.onApply).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "保存测试报告" }));
+    expect(actions.onSave).toHaveBeenCalledOnce();
     rerender(<StabilityTestPanel session={{ ...idle, phase: "complete" }} report={report(true)} applied canStart {...actions} />);
     expect(screen.getByRole("button", { name: "恢复测试前设置" })).toBeEnabled();
   });

@@ -18,6 +18,7 @@ type Props = {
   onCancel: () => void;
   onApply: () => void;
   onRestore: () => void;
+  onSave?: () => void;
 };
 
 const illustrations = {
@@ -31,7 +32,7 @@ const isRunning = (phase: StabilitySession["phase"]) =>
   phase === "readiness" || phase === "positive" || phase === "negative" || phase === "analyzing";
 
 export function StabilityTestPanel({
-  session, report, applied, canStart, onStart, onCancel, onApply, onRestore,
+  session, report, applied, canStart, onStart, onCancel, onApply, onRestore, onSave,
 }: Props) {
   const step = currentStabilityStep(session);
   const illustration = step ? illustrations[step.illustration] : illustrations.front;
@@ -101,6 +102,7 @@ export function StabilityTestPanel({
           <div className="stability-actions">
             <button type="button" disabled={!report.recommendation.safe || applied} onClick={onApply}>应用推荐设置</button>
             <button type="button" className="secondary-button" disabled={!applied} onClick={onRestore}>恢复测试前设置</button>
+            {onSave && <button type="button" className="secondary-button" onClick={onSave}>保存测试报告</button>}
             <button type="button" className="secondary-button" onClick={onStart}>重新测试</button>
           </div>
         </div>

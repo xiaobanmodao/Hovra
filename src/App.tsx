@@ -247,6 +247,24 @@ function App() {
     setStabilityApplied(false);
   }, [handleSettingsChange]);
 
+  const saveStabilityReport = useCallback(() => {
+    if (!stabilityReport) return;
+    const payload = JSON.stringify({
+      version: 1,
+      createdAt: new Date().toISOString(),
+      report: stabilityReport,
+      settings,
+      samples: stabilitySession.samples,
+      privacy: "不含摄像头图像或视频",
+    }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "gesture-stability-report.json";
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, [settings, stabilityReport, stabilitySession.samples]);
+
   useEffect(() => {
     const handleSafetyPause = () => {
       void pauseSystemControl();
@@ -501,6 +519,7 @@ function App() {
         onCancel={cancelStabilityTest}
         onApply={applyStabilityRecommendation}
         onRestore={restorePreTestSettings}
+        onSave={desktopBridge ? saveStabilityReport : undefined}
       />
 
       <GestureDiagnostics
