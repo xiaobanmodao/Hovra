@@ -44,6 +44,17 @@ describe("evaluateGestureEvents", () => {
     });
   });
 
+  it("matches a semantic right-click event independently from left click", () => {
+    const testCase: GestureRegressionCase = {
+      name: "右键短捏合",
+      trace: EMPTY_TRACE,
+      expectations: [{ event: "rightClick", startMs: 90, endMs: 130 }],
+    };
+
+    expect(evaluateGestureEvents(testCase, [{ event: "rightClick", t: 112 }]))
+      .toMatchObject({ passed: true, failures: [] });
+  });
+
   it("reports a missing event with its required count and window", () => {
     expect(evaluateGestureEvents(clickCase(), []).failures).toEqual([
       {

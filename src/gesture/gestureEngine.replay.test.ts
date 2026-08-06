@@ -35,6 +35,31 @@ describe("GestureEngine replay", () => {
     expect(replayedAspectRatios.every((ratio) => ratio === 16 / 9)).toBe(true);
     expect(outputs.some((output) => output.rightClick || output.doubleClick || output.scrollY !== 0)).toBe(false);
   });
+
+  it("reproduces exactly one right click without trusting the stored event", () => {
+    const source = new GestureEngine();
+    const tracking = makeGestureHand("tracking");
+    const right = makeGestureHand("right");
+    source.update(tracking, 0);
+    source.update(right, 16);
+    source.update(right, 32);
+    source.update(right, 48);
+    source.update(tracking, 64);
+    source.update(tracking, 80);
+    const trace = source.getTrace();
+    trace.frames.forEach((frame) => {
+      frame.events = [];
+    });
+
+    const replay = new GestureEngine();
+    const outputs = replayGestureTrace(
+      trace,
+      (image, world, nowMs, ratio) => replay.update(image, nowMs, world, null, ratio),
+    );
+
+    expect(outputs.filter((output) => output.rightClick)).toHaveLength(1);
+    expect(outputs.some((output) => output.click || output.dragStart || output.dragEnd)).toBe(false);
+  });
 });
 
 type ReplayFrame = {

@@ -2,7 +2,12 @@ import { GestureEngine } from "./gestureEngine";
 import { replayGestureTrace } from "./gestureReplay";
 import { parseGestureTrace, type GestureTrace } from "./gestureTrace";
 
-export type GestureRegressionEventKind = "click" | "dragStart" | "dragEnd" | "pause";
+export type GestureRegressionEventKind =
+  | "click"
+  | "rightClick"
+  | "dragStart"
+  | "dragEnd"
+  | "pause";
 
 export type GestureRegressionEvent = {
   event: GestureRegressionEventKind;
@@ -58,6 +63,7 @@ export function runGestureRegression(
   outputs.forEach((output, index) => {
     const t = trace.frames[index]!.t;
     if (output.click) events.push({ event: "click", t });
+    if (output.rightClick) events.push({ event: "rightClick", t });
     if (output.dragStart) events.push({ event: "dragStart", t });
     if (output.dragEnd) events.push({ event: "dragEnd", t });
     if (output.state === "paused" && !wasPaused) {

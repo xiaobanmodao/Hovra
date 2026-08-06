@@ -42,6 +42,109 @@ describe("GestureEngine 稳定内核", () => {
     });
   });
 
+  it("右键需要三帧排他接触并只在第二个释放帧触发一次", () => {
+    const engine = new GestureEngine();
+    const right = makeGestureHand("right");
+    const tracking = makeGestureHand("tracking");
+
+    engine.update(tracking, 0);
+    expect(engine.update(right, 16)).toMatchObject({
+      phase: "candidate",
+      state: "right-pinching",
+      candidate: "right",
+      rightClick: false,
+      click: false,
+      confirmationProgress: 1 / 3,
+      longPressProgress: 0,
+    });
+    expect(engine.update(right, 32)).toMatchObject({
+      phase: "candidate",
+      state: "right-pinching",
+      rightClick: false,
+      confirmationProgress: 2 / 3,
+    });
+    expect(engine.update(right, 48)).toMatchObject({
+      phase: "active",
+      state: "right-pinching",
+      lockedGesture: "right",
+      rightClick: false,
+      confirmationProgress: 1,
+    });
+    expect(engine.update(tracking, 64)).toMatchObject({
+      phase: "releasing",
+      lockedGesture: "right",
+      rightClick: false,
+    });
+    expect(engine.update(tracking, 80)).toMatchObject({
+      phase: "cooldown",
+      rightClick: true,
+      click: false,
+      dragStart: false,
+      dragEnd: false,
+      clickCursor: expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    });
+    expect(engine.update(tracking, 96).rightClick).toBe(false);
+  });
+
+  it("右键保持超过 650 毫秒会取消且永远不转成左键或拖动", () => {
+    const engine = new GestureEngine();
+    const right = makeGestureHand("right");
+    const tracking = makeGestureHand("tracking");
+    const outputs = [engine.update(tracking, 0)];
+    for (const at of [16, 32, 48, 148, 248, 348, 448, 548, 648, 666]) {
+      outputs.push(engine.update(right, at));
+    }
+    outputs.push(engine.update(tracking, 682));
+    outputs.push(engine.update(tracking, 698));
+
+    expect(outputs.some((output) => output.rightClick)).toBe(false);
+    expect(outputs.some((output) => output.click)).toBe(false);
+    expect(outputs.some((output) => output.dragStart || output.dragEnd)).toBe(false);
+    expect(outputs.at(-3)?.diagnostics.clickBlockingReason).toBe("timeout");
+  });
+
+  it("拇指同时靠近食指与中指的含糊姿态不会选择任何点击动作", () => {
+    const engine = new GestureEngine();
+    const ambiguous = makeGestureHand("right");
+    ambiguous[8] = { ...ambiguous[4]!, x: ambiguous[4]!.x + 0.002 };
+    const tracking = makeGestureHand("tracking");
+    const outputs = [engine.update(tracking, 0)];
+    for (const at of [16, 32, 48, 64]) outputs.push(engine.update(ambiguous, at));
+    outputs.push(engine.update(tracking, 80));
+    outputs.push(engine.update(tracking, 96));
+
+    expect(outputs.some((output) => output.click || output.rightClick)).toBe(false);
+    expect(outputs.some((output) => output.lockedGesture === "left"
+      || output.lockedGesture === "right")).toBe(false);
+  });
+
+  it("丢手和张掌都会取消未完成右键且不制造释放事件", () => {
+    const right = makeGestureHand("right");
+
+    const lost = new GestureEngine();
+    lost.update(makeGestureHand("tracking"), 0);
+    lost.update(right, 16);
+    lost.update(right, 32);
+    expect(lost.update(null, 48)).toMatchObject({
+      rightClick: false,
+      click: false,
+      dragStart: false,
+      dragEnd: false,
+    });
+
+    const paused = new GestureEngine();
+    paused.update(makeGestureHand("tracking"), 0);
+    paused.update(right, 16);
+    paused.update(right, 32);
+    paused.update(makeGestureHand("open-palm"), 48);
+    paused.update(makeGestureHand("open-palm"), 64);
+    expect(paused.update(makeGestureHand("open-palm"), 80)).toMatchObject({
+      state: "paused",
+      rightClick: false,
+      click: false,
+    });
+  });
+
   it("持续捏合不连点，明确松开两帧后才能再次点击", () => {
     const engine = new GestureEngine();
     const left = makeGestureHand("left");
@@ -285,7 +388,7 @@ describe("GestureEngine 稳定内核", () => {
     expect(released.diagnostics.clickBlockingReason).toBe("suppressed");
   });
 
-  it.each(["right", "double", "scroll"] as const)("不启用已取消的 %s 动作", (gesture) => {
+  it.each(["double", "scroll"] as const)("不启用已取消的 %s 动作", (gesture) => {
     const engine = new GestureEngine();
 
     for (let at = 0; at <= 128; at += 16) {
@@ -327,6 +430,22 @@ describe("GestureEngine 稳定内核", () => {
     expect(trace.frames.at(-1)?.events).toEqual(["click"]);
     expect(JSON.stringify(trace)).not.toContain("data:image");
     expect(JSON.stringify(trace)).not.toContain("imageData");
+  });
+
+  it("右键轨迹记录真实比例和单次释放事件", () => {
+    const engine = new GestureEngine();
+    const tracking = makeGestureHand("tracking");
+    const right = makeGestureHand("right");
+    engine.update(tracking, 0);
+    engine.update(right, 16);
+    engine.update(right, 32);
+    engine.update(right, 48);
+    engine.update(tracking, 64);
+    engine.update(tracking, 80);
+
+    const last = engine.getTrace().frames.at(-1)!;
+    expect(last.events).toEqual(["rightClick"]);
+    expect(last.features?.rightPinchRatio).not.toBe(1);
   });
 
   it("轨迹保留原始异常点但记录稳定层质量与安全门", () => {

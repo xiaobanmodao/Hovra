@@ -53,6 +53,18 @@ const shortPinch: GestureRegressionCase = {
   ],
 };
 
+const rightClick: GestureRegressionCase = {
+  name: "右键短捏合",
+  trace: trace([
+    ...gestureFrames("tracking", 0, 3),
+    ...gestureFrames("right", 48, 3),
+    ...gestureFrames("tracking", 96, 4),
+  ]),
+  expectations: [
+    { event: "rightClick", startMs: 96, endMs: 144 },
+  ],
+};
+
 const longPress: GestureRegressionCase = {
   name: "长按",
   trace: trace([
@@ -64,6 +76,16 @@ const longPress: GestureRegressionCase = {
     { event: "dragStart", startMs: 464, endMs: 528 },
     { event: "dragEnd", startMs: 544, endMs: 592 },
   ],
+};
+
+const rightHoldSafety: GestureRegressionCase = {
+  name: "右键保持防误触",
+  trace: trace([
+    ...gestureFrames("tracking", 0, 3),
+    ...gestureFrames("right", 48, 45),
+    ...gestureFrames("tracking", 768, 4),
+  ]),
+  expectations: [],
 };
 
 const openPalmPause: GestureRegressionCase = {
@@ -108,6 +130,39 @@ const depthSeparationSafety: GestureRegressionCase = {
   expectations: [],
 };
 
+const rightImageOverlap = makeGestureHand("right");
+rightImageOverlap[4] = { ...rightImageOverlap[4]!, z: -0.15 };
+rightImageOverlap[12] = { ...rightImageOverlap[12]!, z: 0.15 };
+
+const rightDepthSeparationSafety: GestureRegressionCase = {
+  name: "右键纵深分离防误触",
+  trace: trace([
+    ...gestureFrames("tracking", 0, 3),
+    ...Array.from({ length: 10 }, (_, index) => rawFrame(
+      48 + index * FRAME_INTERVAL_MS,
+      rightImageOverlap,
+    )),
+    ...gestureFrames("tracking", 208, 3),
+  ]),
+  expectations: [],
+};
+
+const ambiguousPinch = makeGestureHand("right");
+ambiguousPinch[8] = { ...ambiguousPinch[4]!, x: ambiguousPinch[4]!.x + 0.002 };
+
+const ambiguousSafety: GestureRegressionCase = {
+  name: "多指含糊防误触",
+  trace: trace([
+    ...gestureFrames("tracking", 0, 3),
+    ...Array.from({ length: 10 }, (_, index) => rawFrame(
+      48 + index * FRAME_INTERVAL_MS,
+      ambiguousPinch,
+    )),
+    ...gestureFrames("tracking", 208, 3),
+  ]),
+  expectations: [],
+};
+
 const movementSafety: GestureRegressionCase = {
   name: "移动防误触",
   trace: trace(Array.from({ length: 16 }, (_, index) => {
@@ -125,9 +180,13 @@ const movementSafety: GestureRegressionCase = {
 
 export const GESTURE_REGRESSION_CASES: readonly GestureRegressionCase[] = [
   shortPinch,
+  rightClick,
   longPress,
+  rightHoldSafety,
   openPalmPause,
   fistSafety,
   depthSeparationSafety,
+  rightDepthSeparationSafety,
+  ambiguousSafety,
   movementSafety,
 ];
