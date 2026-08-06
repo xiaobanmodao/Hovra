@@ -142,6 +142,61 @@ describe("stable hand metrics", () => {
     expect(measureStableHand(makeGestureHand("open-palm"), 1, 0.5)?.fistCandidate).toBe(false);
   });
 
+  it.each([
+    [0.18, 0, 1],
+    [0.3, Math.PI / 3, 16 / 9],
+    [0.48, -Math.PI / 4, 4 / 3],
+  ] as const)(
+    "在尺度 %s、旋转 %s、宽高比 %s 下识别严格双指滚动姿势",
+    (scale, rotation, aspectRatio) => {
+      const metrics = measureStableHand(
+        makeGestureHand("scroll", { scale, rotation }),
+        aspectRatio,
+        0.5,
+      )!;
+
+      expect(metrics).toMatchObject({
+        scrollPoseContact: true,
+        scrollPoseRetained: true,
+        scrollAnchor: {
+          x: expect.any(Number),
+          y: expect.any(Number),
+        },
+      });
+      expect(metrics.scrollPoseScore).toBeGreaterThanOrEqual(0.8);
+    },
+  );
+
+  it.each(["tracking", "open-palm", "fist", "left", "right", "double"] as const)(
+    "%s 不会误入双指滚动",
+    (gesture) => {
+      expect(measureStableHand(makeGestureHand(gesture), 16 / 9, 0.5))
+        .toMatchObject({ scrollPoseContact: false });
+    },
+  );
+
+  it("拇指靠近无名指或缺少关键纵深时阻断滚动", () => {
+    const overlap = makeGestureHand("scroll");
+    overlap[16] = { ...overlap[4]!, x: overlap[4]!.x + 0.002 };
+    expect(measureStableHand(overlap, 16 / 9, 0.5))
+      .toMatchObject({ scrollPoseContact: false });
+
+    const missingDepth = makeGestureHand("scroll");
+    missingDepth[16] = { x: missingDepth[16]!.x, y: missingDepth[16]!.y };
+    expect(measureStableHand(missingDepth, 16 / 9, 0.5))
+      .toMatchObject({ scrollPoseContact: false });
+  });
+
+  it("掌部滚动锚点随整手平移且不依赖指尖位置", () => {
+    const first = measureStableHand(makeGestureHand("scroll", { translateY: 0.4 }), 1, 0.5)!;
+    const secondHand = makeGestureHand("scroll", { translateY: 0.48 });
+    secondHand[8] = { ...secondHand[8]!, y: secondHand[8]!.y + 0.04 };
+    const second = measureStableHand(secondHand, 1, 0.5)!;
+
+    expect(second.scrollAnchor.y - first.scrollAnchor.y).toBeCloseTo(0.08, 6);
+    expect(second.scrollAnchor.y).not.toBeCloseTo(second.cursor.y, 3);
+  });
+
   it("用掌部锚点而不是正在捏合的食指尖测量整手移动", () => {
     const trackingHand = makeGestureHand("tracking");
     const pinchedHand = trackingHand.map((point) => ({ ...point }));

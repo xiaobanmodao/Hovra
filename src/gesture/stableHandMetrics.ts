@@ -32,6 +32,7 @@ export type StablePinchThresholds = {
 export type StableHandMetrics = {
   cursor: Landmark;
   motionCursor: Landmark;
+  scrollAnchor: Landmark;
   palmScale: number;
   screenPinchGap: number;
   depthPinchGap: number | null;
@@ -52,6 +53,9 @@ export type StableHandMetrics = {
   rightPinchContact: boolean;
   rightPinchSeparated: boolean;
   rightPinchBlockingReason: PinchBlockingReason;
+  scrollPoseScore: number;
+  scrollPoseContact: boolean;
+  scrollPoseRetained: boolean;
   openPalmCandidate: boolean;
   openPalmScore: number;
   fistCandidate: boolean;
@@ -61,6 +65,8 @@ const EPSILON = 1e-6;
 const OPEN_PALM_STRAIGHTNESS = 0.82;
 const OPEN_PALM_REACH = 1.45;
 const OPEN_PALM_TIP_ADVANCE = 0.28;
+const SCROLL_POSE_ENTER_SCORE = 0.8;
+const SCROLL_POSE_EXIT_SCORE = 0.55;
 
 export function stablePinchThresholds(sensitivity: number): StablePinchThresholds {
   const normalized = clamp01(Number.isFinite(sensitivity) ? sensitivity : 0.5);
@@ -159,12 +165,33 @@ export function measureStableHand(
       rightScreenPinchRatio <= thresholds.enterRatio
       && (rightDepthPinchRatio ?? Number.POSITIVE_INFINITY) > thresholds.enterRatio
     ) ? "depth" : "image";
-  const openPalm = measureOpenPalm(points, palmScale);
+  const fingerExtension = measureFingerExtension(points, palmScale);
+  const openPalmScore = Math.min(...fingerExtension);
+  const scrollPoseScore = Math.min(
+    fingerExtension[0],
+    fingerExtension[1],
+    1 - fingerExtension[2],
+    1 - fingerExtension[3],
+  );
+  const scrollSeparationSafe = depthReliable
+    && rightDepthReliable
+    && ringDepthReliable
+    && spatialPinchRatio >= thresholds.exitRatio
+    && rightSpatialPinchRatio >= thresholds.exitRatio
+    && ringSpatialPinchRatio >= thresholds.exitRatio;
   const fistCandidate = measureFist(points, palmScale);
+  const scrollAnchor = averageLandmarks([
+    landmarks[WRIST]!,
+    landmarks[INDEX_FINGER_MCP]!,
+    landmarks[MIDDLE_FINGER_MCP]!,
+    landmarks[RING_FINGER_MCP]!,
+    landmarks[PINKY_MCP]!,
+  ]);
 
   return {
     cursor: { ...landmarks[INDEX_FINGER_TIP]! },
     motionCursor: { ...landmarks[MIDDLE_FINGER_MCP]! },
+    scrollAnchor,
     palmScale,
     screenPinchGap,
     depthPinchGap,
@@ -185,8 +212,11 @@ export function measureStableHand(
     rightPinchContact,
     rightPinchSeparated,
     rightPinchBlockingReason,
-    openPalmCandidate: openPalm.candidate,
-    openPalmScore: openPalm.score,
+    scrollPoseScore,
+    scrollPoseContact: scrollSeparationSafe && scrollPoseScore >= SCROLL_POSE_ENTER_SCORE,
+    scrollPoseRetained: scrollSeparationSafe && scrollPoseScore >= SCROLL_POSE_EXIT_SCORE,
+    openPalmCandidate: openPalmScore >= 1,
+    openPalmScore,
     fistCandidate,
   };
 }
@@ -196,17 +226,17 @@ function measureFist(points: MetricPoint[], palmScale: number): boolean {
   return tips.every((tip) => distance3(points[WRIST]!, points[tip]!) / palmScale < 0.55);
 }
 
-function measureOpenPalm(
+function measureFingerExtension(
   points: MetricPoint[],
   palmScale: number,
-): { candidate: boolean; score: number } {
+): number[] {
   const fingers = [
     [INDEX_FINGER_MCP, INDEX_FINGER_PIP, INDEX_FINGER_DIP, INDEX_FINGER_TIP],
     [MIDDLE_FINGER_MCP, MIDDLE_FINGER_PIP, MIDDLE_FINGER_DIP, MIDDLE_FINGER_TIP],
     [RING_FINGER_MCP, RING_FINGER_PIP, RING_FINGER_DIP, RING_FINGER_TIP],
     [PINKY_MCP, PINKY_PIP, PINKY_DIP, PINKY_TIP],
   ] as const;
-  const scores = fingers.map(([mcp, pip, dip, tip]) => {
+  return fingers.map(([mcp, pip, dip, tip]) => {
     const pathLength = distance3(points[mcp]!, points[pip]!)
       + distance3(points[pip]!, points[dip]!)
       + distance3(points[dip]!, points[tip]!);
@@ -223,8 +253,19 @@ function measureOpenPalm(
       ramp(tipAdvance, OPEN_PALM_TIP_ADVANCE - 0.18, OPEN_PALM_TIP_ADVANCE),
     );
   });
-  const score = Math.min(...scores);
-  return { candidate: score >= 1, score };
+}
+
+function averageLandmarks(points: Landmark[]): Landmark {
+  const total = points.reduce((sum, point) => ({
+    x: sum.x + point.x,
+    y: sum.y + point.y,
+    z: sum.z + (point.z ?? 0),
+  }), { x: 0, y: 0, z: 0 });
+  return {
+    x: total.x / points.length,
+    y: total.y / points.length,
+    z: total.z / points.length,
+  };
 }
 
 function isValidHand(landmarks: Landmark[] | null): landmarks is Landmark[] {
