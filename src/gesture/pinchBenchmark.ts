@@ -10,6 +10,7 @@ export type PinchBenchmarkMetrics = {
   recall: number | null;
   p95ActivationLatencyMs: number | null;
   effectiveFps: number;
+  p95InferenceMs: number | null;
 };
 
 export function benchmarkPinchTrace(
@@ -61,7 +62,15 @@ export function benchmarkPinchTrace(
     recall: positives === 0 ? null : truePositives / positives,
     p95ActivationLatencyMs: activationLatencies.length === 0 ? null : percentile95(activationLatencies),
     effectiveFps: effectiveFps(trace.frames.map((frame) => frame.t)),
+    p95InferenceMs: percentile95OrNull(trace.frames.flatMap((frame) => {
+      const value = frame.features?.inferenceMs;
+      return value !== null && value !== undefined && Number.isFinite(value) ? [value] : [];
+    })),
   };
+}
+
+function percentile95OrNull(values: number[]): number | null {
+  return values.length === 0 ? null : percentile95(values);
 }
 
 function percentile95(values: number[]): number {

@@ -83,6 +83,7 @@ describe("benchmarkPinchTrace", () => {
       recall: 1,
       p95ActivationLatencyMs: 16,
       effectiveFps: 62.5,
+      p95InferenceMs: 8,
     });
   });
 
@@ -95,6 +96,7 @@ describe("benchmarkPinchTrace", () => {
       recall: null,
       p95ActivationLatencyMs: null,
       effectiveFps: 50,
+      p95InferenceMs: 8,
     });
   });
 });
