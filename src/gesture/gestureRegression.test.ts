@@ -55,6 +55,17 @@ describe("evaluateGestureEvents", () => {
       .toMatchObject({ passed: true, failures: [] });
   });
 
+  it("matches semantic scroll output independently from clicks", () => {
+    const testCase: GestureRegressionCase = {
+      name: "双指滚动",
+      trace: EMPTY_TRACE,
+      expectations: [{ event: "scroll", startMs: 100, endMs: 180, minCount: 1, maxCount: 4 }],
+    };
+
+    expect(evaluateGestureEvents(testCase, [{ event: "scroll", t: 144 }]))
+      .toMatchObject({ passed: true, failures: [] });
+  });
+
   it("reports a missing event with its required count and window", () => {
     expect(evaluateGestureEvents(clickCase(), []).failures).toEqual([
       {

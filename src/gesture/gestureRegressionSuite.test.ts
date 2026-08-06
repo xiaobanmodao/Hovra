@@ -8,6 +8,7 @@ describe("关键手势轨迹自动回归", () => {
     expect(GESTURE_REGRESSION_CASES.map((testCase) => testCase.name)).toEqual([
       "短捏合",
       "右键短捏合",
+      "双指滚动",
       "长按",
       "右键保持防误触",
       "张掌停止",

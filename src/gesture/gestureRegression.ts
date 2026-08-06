@@ -5,6 +5,7 @@ import { parseGestureTrace, type GestureTrace } from "./gestureTrace";
 export type GestureRegressionEventKind =
   | "click"
   | "rightClick"
+  | "scroll"
   | "dragStart"
   | "dragEnd"
   | "pause";
@@ -64,6 +65,7 @@ export function runGestureRegression(
     const t = trace.frames[index]!.t;
     if (output.click) events.push({ event: "click", t });
     if (output.rightClick) events.push({ event: "rightClick", t });
+    if (output.scrollY !== 0) events.push({ event: "scroll", t });
     if (output.dragStart) events.push({ event: "dragStart", t });
     if (output.dragEnd) events.push({ event: "dragEnd", t });
     if (output.state === "paused" && !wasPaused) {

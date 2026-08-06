@@ -41,12 +41,12 @@ export function makeGestureHand(
     curlFinger(hand, 13, 14, 15, 16, 0.16);
     curlFinger(hand, 17, 18, 19, 20, 0.3);
   } else if (gesture === "scroll") {
-    hand[14] = { x: 0.18, y: -0.06, z: 0 };
-    hand[15] = { x: 0.09, y: 0.04, z: 0 };
-    hand[16] = { x: 0.17, y: 0.08, z: 0 };
-    hand[18] = { x: 0.32, y: 0.02, z: 0 };
-    hand[19] = { x: 0.25, y: 0.12, z: 0 };
-    hand[20] = { x: 0.31, y: 0.16, z: 0 };
+    hand[14] = { x: 0.35, y: 0.24, z: 0 };
+    hand[15] = { x: 0.2, y: 0.42, z: 0 };
+    hand[16] = { x: 0.05, y: 0.29, z: 0 };
+    hand[18] = { x: 0.49, y: 0.32, z: 0 };
+    hand[19] = { x: 0.34, y: 0.5, z: 0 };
+    hand[20] = { x: 0.19, y: 0.37, z: 0 };
   } else if (gesture !== "open-palm") {
     curlFinger(hand, 5, 6, 7, 8, -0.12);
     curlFinger(hand, 9, 10, 11, 12, 0.02);

@@ -65,6 +65,21 @@ const rightClick: GestureRegressionCase = {
   ],
 };
 
+const scroll: GestureRegressionCase = {
+  name: "双指滚动",
+  trace: trace([
+    ...gestureFrames("tracking", 0, 3),
+    ...gestureFrames("scroll", 48, 5, { translateY: 0.5 }),
+    ...gestureFrames("scroll", 128, 1, { translateY: 0.48 }),
+    ...gestureFrames("scroll", 144, 1, { translateY: 0.46 }),
+    ...gestureFrames("scroll", 160, 1, { translateY: 0.5 }),
+    ...gestureFrames("tracking", 176, 3),
+  ]),
+  expectations: [
+    { event: "scroll", startMs: 128, endMs: 176, minCount: 1, maxCount: 3 },
+  ],
+};
+
 const longPress: GestureRegressionCase = {
   name: "长按",
   trace: trace([
@@ -181,6 +196,7 @@ const movementSafety: GestureRegressionCase = {
 export const GESTURE_REGRESSION_CASES: readonly GestureRegressionCase[] = [
   shortPinch,
   rightClick,
+  scroll,
   longPress,
   rightHoldSafety,
   openPalmPause,

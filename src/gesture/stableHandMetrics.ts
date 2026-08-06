@@ -256,7 +256,7 @@ function measureFingerExtension(
 }
 
 function averageLandmarks(points: Landmark[]): Landmark {
-  const total = points.reduce((sum, point) => ({
+  const total = points.reduce<MetricPoint>((sum, point) => ({
     x: sum.x + point.x,
     y: sum.y + point.y,
     z: sum.z + (point.z ?? 0),

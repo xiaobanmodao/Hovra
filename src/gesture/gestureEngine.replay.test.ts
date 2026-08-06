@@ -60,6 +60,28 @@ describe("GestureEngine replay", () => {
     expect(outputs.filter((output) => output.rightClick)).toHaveLength(1);
     expect(outputs.some((output) => output.click || output.dragStart || output.dragEnd)).toBe(false);
   });
+
+  it("reproduces bounded scrolling from landmarks without trusting stored events", () => {
+    const source = new GestureEngine();
+    [0, 16, 32, 48, 64].forEach((at) => {
+      source.update(makeGestureHand("scroll", { translateY: 0.5 }), at);
+    });
+    source.update(makeGestureHand("scroll", { translateY: 0.46 }), 80);
+    const trace = source.getTrace();
+    trace.frames.forEach((frame) => {
+      frame.events = [];
+    });
+
+    const replay = new GestureEngine();
+    const outputs = replayGestureTrace(
+      trace,
+      (image, world, nowMs, ratio) => replay.update(image, nowMs, world, null, ratio),
+    );
+
+    expect(outputs.filter((output) => output.scrollY !== 0)).toHaveLength(1);
+    expect(outputs.at(-1)!.scrollY).toBeGreaterThan(0);
+    expect(outputs.some((output) => output.click || output.rightClick || output.dragStart)).toBe(false);
+  });
 });
 
 type ReplayFrame = {

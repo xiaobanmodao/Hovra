@@ -18,6 +18,10 @@ import {
   PinchClickStateMachine,
   type PinchClickOutput,
 } from "./pinchClickStateMachine";
+import {
+  ScrollGestureStateMachine,
+  type ScrollGestureOutput,
+} from "./scrollGestureStateMachine";
 import type {
   GestureDiagnosticsSnapshot,
   GestureKind,
@@ -35,6 +39,7 @@ export class GestureEngine {
   private readonly settings: GestureSettings;
   private readonly leftPinch: PinchClickStateMachine;
   private readonly rightPinch: PinchClickStateMachine;
+  private readonly scrollGesture = new ScrollGestureStateMachine();
   private readonly cursorFilter: OneEuroPointFilter;
   private readonly handTracking = new HandTrackingStabilizer();
   private readonly trace = new GestureTraceBuffer();
@@ -45,7 +50,7 @@ export class GestureEngine {
   private lastFrameIntervalMs: number | null = null;
   private traceEpochMs: number | null = null;
   private lastTraceTimestamp = 0;
-  private gestureLock: "left" | "right" | null = null;
+  private gestureLock: "left" | "right" | "scroll" | null = null;
 
   constructor(
     settings: GestureSettings = DEFAULT_GESTURE_SETTINGS,
@@ -149,7 +154,9 @@ export class GestureEngine {
       && metrics.rightDepthReliable
       && metrics.rightSpatialPinchRatio <= metrics.pinchEnterRatio;
     if (!this.gestureLock && !postureSuppressed) {
-      if (metrics.rightPinchContact) {
+      if (metrics.scrollPoseContact) {
+        this.gestureLock = "scroll";
+      } else if (metrics.rightPinchContact) {
         this.gestureLock = "right";
       } else if (metrics.pinchContact && !ambiguousMultiPinch) {
         this.gestureLock = "left";
@@ -163,7 +170,7 @@ export class GestureEngine {
       blockingReason: metrics.pinchBlockingReason,
       cursor: filteredCursor,
       motionCursor: metrics.motionCursor,
-      suppressed: postureSuppressed || activeLock === "right" || suppressAmbiguous,
+      suppressed: postureSuppressed || activeLock === "right" || activeLock === "scroll" || suppressAmbiguous,
     } as const;
     const rightEvidence = {
       contact: metrics.rightPinchContact,
@@ -171,14 +178,25 @@ export class GestureEngine {
       blockingReason: metrics.rightPinchBlockingReason,
       cursor: filteredCursor,
       motionCursor: metrics.motionCursor,
-      suppressed: postureSuppressed || activeLock === "left" || suppressAmbiguous,
+      suppressed: postureSuppressed || activeLock === "left" || activeLock === "scroll" || suppressAmbiguous,
     } as const;
     const left = this.leftPinch.update(leftEvidence, nowMs);
     const right = this.rightPinch.update(rightEvidence, nowMs);
-    const selected = activeLock === "right" ? right : left;
+    const scroll = this.scrollGesture.update({
+      contact: metrics.scrollPoseContact,
+      retained: metrics.scrollPoseRetained,
+      anchor: metrics.scrollAnchor,
+      palmScale: metrics.palmScale,
+      suppressed: postureSuppressed || activeLock !== "scroll",
+    }, nowMs);
+    const selectedPinch = activeLock === "right" ? right : activeLock === "scroll" ? null : left;
     const intentEvidence = activeLock === "right" ? null : leftEvidence;
 
-    if (activeLock && !keepsGestureLock(selected)) {
+    if (activeLock && (
+      activeLock === "scroll"
+        ? !keepsScrollLock(scroll)
+        : !keepsGestureLock(selectedPinch!)
+    )) {
       this.gestureLock = null;
     }
 
@@ -201,6 +219,7 @@ export class GestureEngine {
           metrics,
           left,
           right,
+          scroll,
           activeLock,
           trackingFrame,
           nowMs,
@@ -212,40 +231,51 @@ export class GestureEngine {
     const openPalmCandidate = this.openPalmEnterFrames > 0;
     const state: GestureState = activeLock === "left" && left.holding
       ? "dragging"
-      : activeLock && (
-        selected.phase === "candidate"
-        || selected.phase === "active"
-        || selected.phase === "releasing"
-      ) ? activeLock === "right" ? "right-pinching" : "left-pinching"
+      : activeLock === "scroll" && scroll.active
+        ? "scrolling"
+        : selectedPinch && (
+          selectedPinch.phase === "candidate"
+          || selectedPinch.phase === "active"
+          || selectedPinch.phase === "releasing"
+        ) ? activeLock === "right" ? "right-pinching" : "left-pinching"
         : "tracking";
-    const phase: GesturePhase = openPalmCandidate ? "candidate" : selected.phase;
+    const selectedPhase: GesturePhase = activeLock === "scroll"
+      ? scroll.phase
+      : selectedPinch?.phase ?? "neutral";
+    const phase: GesturePhase = openPalmCandidate ? "candidate" : selectedPhase;
     const candidate: GestureKind | null = openPalmCandidate
       ? "open-palm"
-      : selected.phase === "candidate" ? activeLock : null;
+      : selectedPhase === "candidate" ? activeLock : null;
     const confirmationProgress = openPalmCandidate
       ? this.openPalmEnterFrames / OPEN_PALM_ENTER_FRAMES
-      : selected.phase === "candidate"
-        ? selected.contactFrames / selected.requiredContactFrames
-        : selected.active ? 1 : 0;
+      : activeLock === "scroll" && selectedPhase === "candidate"
+        ? scroll.contactFrames / scroll.requiredContactFrames
+        : selectedPinch?.phase === "candidate"
+          ? selectedPinch.contactFrames / selectedPinch.requiredContactFrames
+          : activeLock === "scroll" ? Number(scroll.active) : selectedPinch?.active ? 1 : 0;
 
     return this.output({
       state,
       cursor: filteredCursor,
       click: activeLock === "left" && left.clicked && !openPalmCandidate,
       rightClick: activeLock === "right" && right.clicked && !openPalmCandidate,
-      clickCursor: selected.clickCursor ?? selected.holdCursor,
+      clickCursor: selectedPinch?.clickCursor ?? selectedPinch?.holdCursor ?? null,
+      scrollY: activeLock === "scroll" && !openPalmCandidate ? scroll.scrollY : 0,
       dragStart: activeLock === "left" && left.holdStarted && !openPalmCandidate,
       dragEnd: left.holdEnded,
       intentEvidence,
       phase,
       candidate,
-      lockedGesture: selected.active ? activeLock : null,
+      lockedGesture: activeLock === "scroll"
+        ? scroll.active ? "scroll" : null
+        : selectedPinch?.active ? activeLock : null,
       confirmationProgress,
       longPressProgress: activeLock === "left" ? left.holdProgress : 0,
       diagnostics: this.diagnostics(
         metrics,
         left,
         right,
+        scroll,
         activeLock,
         trackingFrame,
         nowMs,
@@ -266,6 +296,7 @@ export class GestureEngine {
     const activeLock = this.gestureLock;
     const left = this.leftPinch.update(null, nowMs);
     const right = this.rightPinch.update(null, nowMs);
+    const scroll = this.scrollGesture.update(null, nowMs);
     this.gestureLock = null;
     const remainPaused = this.openPalmPaused;
     this.openPalmEnterFrames = remainPaused ? OPEN_PALM_ENTER_FRAMES : 0;
@@ -288,6 +319,7 @@ export class GestureEngine {
         metrics,
         left,
         right,
+        scroll,
         activeLock,
         trackingFrame,
         nowMs,
@@ -306,6 +338,7 @@ export class GestureEngine {
     const activeLock = this.gestureLock;
     const left = this.leftPinch.update(null, nowMs);
     const right = this.rightPinch.update(null, nowMs);
+    const scroll = this.scrollGesture.update(null, nowMs);
     this.gestureLock = null;
     this.cursorFilter.reset();
     this.openPalmEnterFrames = 0;
@@ -329,6 +362,7 @@ export class GestureEngine {
         null,
         left,
         right,
+        scroll,
         activeLock,
         trackingFrame,
         nowMs,
@@ -360,6 +394,7 @@ export class GestureEngine {
       this.openPalmEnterFrames = OPEN_PALM_ENTER_FRAMES;
       this.leftPinch.reset();
       this.rightPinch.reset();
+      this.scrollGesture.reset();
       this.gestureLock = null;
     }
   }
@@ -368,7 +403,8 @@ export class GestureEngine {
     metrics: StableHandMetrics | null,
     left: PinchClickOutput | null,
     right: PinchClickOutput | null,
-    activeLock: "left" | "right" | null,
+    scroll: ScrollGestureOutput | null,
+    activeLock: "left" | "right" | "scroll" | null,
     trackingFrame: StabilizedHandFrame,
     nowMs: number,
     inferenceMs: number | null,
@@ -387,8 +423,8 @@ export class GestureEngine {
         depthRatio: metrics.depthPinchRatio,
         blockingReason: metrics.pinchBlockingReason,
       } : null;
-    const selectedPinch = activeLock === "right" ? right : left;
-    const pinchProbability = metrics && selectedMetrics ? closeness(
+    const selectedPinch = activeLock === "right" ? right : activeLock === "scroll" ? null : left;
+    const pinchProbability = activeLock !== "scroll" && metrics && selectedMetrics ? closeness(
       selectedMetrics.spatialRatio,
       metrics.pinchEnterRatio,
       metrics.pinchExitRatio,
@@ -410,14 +446,18 @@ export class GestureEngine {
       rightPinchRatio: metrics?.rightSpatialPinchRatio ?? null,
       doublePinchRatio: null,
       openPalmScore: metrics?.openPalmScore ?? null,
-      scrollPoseScore: null,
+      scrollPoseScore: metrics?.scrollPoseScore ?? null,
       pinchProbability,
       pinchImageDepthGap: selectedMetrics?.depthRatio ?? null,
       pinchWorldQuality: 0,
       pinchQualityReasons: [],
       pinchBlockingReason: selectedMetrics?.blockingReason ?? null,
-      pinchEnterVotes: selectedPinch?.contactFrames ?? 0,
-      pinchRequiredVotes: selectedPinch?.requiredContactFrames ?? 2,
+      pinchEnterVotes: activeLock === "scroll"
+        ? scroll?.contactFrames ?? 0
+        : selectedPinch?.contactFrames ?? 0,
+      pinchRequiredVotes: activeLock === "scroll"
+        ? scroll?.requiredContactFrames ?? 5
+        : selectedPinch?.requiredContactFrames ?? 2,
       effectiveFps: this.lastFrameIntervalMs && this.lastFrameIntervalMs > 0
         ? 1_000 / this.lastFrameIntervalMs : null,
       inferenceMs: inferenceMs !== null && Number.isFinite(inferenceMs) ? Math.max(0, inferenceMs) : null,
@@ -443,6 +483,7 @@ export class GestureEngine {
     click: boolean;
     rightClick: boolean;
     clickCursor: Landmark | null;
+    scrollY?: number;
     dragStart: boolean;
     dragEnd: boolean;
     intentEvidence: import("./pinchClickStateMachine").PinchClickEvidence | null;
@@ -456,7 +497,7 @@ export class GestureEngine {
     return {
       ...input,
       doubleClick: false,
-      scrollY: 0,
+      scrollY: input.scrollY ?? 0,
     };
   }
 
@@ -477,6 +518,7 @@ export class GestureEngine {
     const events: TraceGestureEvent[] = [];
     if (output.click) events.push("click");
     if (output.rightClick) events.push("rightClick");
+    if (output.scrollY !== 0) events.push("scroll");
     if (output.dragStart) events.push("dragStart");
     if (output.dragEnd) events.push("dragEnd");
 
@@ -492,7 +534,7 @@ export class GestureEngine {
         rightPinchRatio: metrics.rightSpatialPinchRatio,
         doublePinchRatio: 1,
         openPalmScore: metrics.openPalmScore,
-        scrollPoseScore: 0,
+        scrollPoseScore: metrics.scrollPoseScore,
         palmScale: metrics.palmScale,
         screenPinchGap: metrics.screenPinchGap,
         imageAspectRatio: sanitizeAspectRatio(imageAspectRatio),
@@ -506,7 +548,9 @@ export class GestureEngine {
         qualityReasons: [],
         pinchProbability: output.diagnostics.pinchProbability,
         safetyGatePassed: trackingFrame.gestureSafe && (
-          output.lockedGesture === "right"
+          output.lockedGesture === "scroll"
+            ? metrics.scrollPoseRetained
+            : output.lockedGesture === "right"
             ? metrics.rightPinchContact
             : metrics.pinchContact
         ),
@@ -536,6 +580,12 @@ function keepsGestureLock(output: PinchClickOutput): boolean {
   return output.phase === "candidate"
     || output.phase === "active"
     || output.phase === "dragging"
+    || output.phase === "releasing";
+}
+
+function keepsScrollLock(output: ScrollGestureOutput): boolean {
+  return output.phase === "candidate"
+    || output.phase === "active"
     || output.phase === "releasing";
 }
 

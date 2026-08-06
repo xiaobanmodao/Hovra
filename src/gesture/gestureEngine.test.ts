@@ -103,6 +103,89 @@ describe("GestureEngine 稳定内核", () => {
     expect(outputs.at(-3)?.diagnostics.clickBlockingReason).toBe("timeout");
   });
 
+  it("严格双指姿势需要五帧才锁定且第一帧滚动量为零", () => {
+    const engine = new GestureEngine();
+    const scroll = makeGestureHand("scroll");
+    engine.update(makeGestureHand("tracking"), 0);
+
+    for (const [index, at] of [16, 32, 48, 64].entries()) {
+      const result = engine.update(scroll, at);
+      expect(result).toMatchObject({
+        phase: "candidate",
+        state: "tracking",
+        candidate: "scroll",
+        lockedGesture: null,
+        confirmationProgress: (index + 1) / 5,
+        scrollY: 0,
+        click: false,
+        rightClick: false,
+      });
+    }
+    expect(engine.update(scroll, 80)).toMatchObject({
+      phase: "active",
+      state: "scrolling",
+      candidate: null,
+      lockedGesture: "scroll",
+      confirmationProgress: 1,
+      scrollY: 0,
+    });
+  });
+
+  it("滚动锁定后按掌心纵向位移输出方向相反的有界整数且不点击", () => {
+    const engine = new GestureEngine();
+    engine.update(makeGestureHand("tracking"), 0);
+    for (const at of [16, 32, 48, 64, 80]) {
+      engine.update(makeGestureHand("scroll", { translateY: 0.5 }), at);
+    }
+
+    const upward = engine.update(makeGestureHand("scroll", { translateY: 0.46 }), 96);
+    const downward = engine.update(makeGestureHand("scroll", { translateY: 0.52 }), 112);
+
+    expect(upward.scrollY).toBeGreaterThan(0);
+    expect(downward.scrollY).toBeLessThan(0);
+    for (const output of [upward, downward]) {
+      expect(output).toMatchObject({
+        state: "scrolling",
+        lockedGesture: "scroll",
+        click: false,
+        rightClick: false,
+        doubleClick: false,
+        dragStart: false,
+        dragEnd: false,
+      });
+      expect(Number.isInteger(output.scrollY)).toBe(true);
+      expect(Math.abs(output.scrollY)).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it("滚动退出需三帧，丢手和张掌会立即取消且不产生残余滚动", () => {
+    const engine = new GestureEngine();
+    engine.update(makeGestureHand("tracking"), 0);
+    for (const at of [16, 32, 48, 64, 80]) engine.update(makeGestureHand("scroll"), at);
+
+    expect(engine.update(makeGestureHand("tracking"), 96)).toMatchObject({
+      phase: "releasing", state: "scrolling", lockedGesture: "scroll", scrollY: 0,
+    });
+    expect(engine.update(makeGestureHand("tracking"), 112)).toMatchObject({
+      phase: "releasing", state: "scrolling", lockedGesture: "scroll", scrollY: 0,
+    });
+    expect(engine.update(makeGestureHand("tracking"), 128)).toMatchObject({
+      phase: "neutral", state: "tracking", lockedGesture: null, scrollY: 0,
+    });
+
+    const lost = new GestureEngine();
+    for (const at of [0, 16, 32, 48, 64]) lost.update(makeGestureHand("scroll"), at);
+    expect(lost.update(null, 80)).toMatchObject({ lockedGesture: null, scrollY: 0 });
+
+    const paused = new GestureEngine();
+    for (const at of [0, 16, 32, 48, 64]) paused.update(makeGestureHand("scroll"), at);
+    paused.update(makeGestureHand("open-palm"), 80);
+    paused.update(makeGestureHand("open-palm"), 96);
+    expect(paused.update(makeGestureHand("open-palm"), 112)).toMatchObject({
+      state: "paused", lockedGesture: "open-palm", scrollY: 0,
+    });
+  });
+
   it("拇指同时靠近食指与中指的含糊姿态不会选择任何点击动作", () => {
     const engine = new GestureEngine();
     const ambiguous = makeGestureHand("right");
@@ -388,11 +471,11 @@ describe("GestureEngine 稳定内核", () => {
     expect(released.diagnostics.clickBlockingReason).toBe("suppressed");
   });
 
-  it.each(["double", "scroll"] as const)("不启用已取消的 %s 动作", (gesture) => {
+  it("不启用已取消的 double 动作", () => {
     const engine = new GestureEngine();
 
     for (let at = 0; at <= 128; at += 16) {
-      const output = engine.update(makeGestureHand(gesture), at);
+      const output = engine.update(makeGestureHand("double"), at);
       expect(output.rightClick).toBe(false);
       expect(output.doubleClick).toBe(false);
       expect(output.scrollY).toBe(0);
@@ -446,6 +529,18 @@ describe("GestureEngine 稳定内核", () => {
     const last = engine.getTrace().frames.at(-1)!;
     expect(last.events).toEqual(["rightClick"]);
     expect(last.features?.rightPinchRatio).not.toBe(1);
+  });
+
+  it("滚动轨迹记录真实姿势分数和滚动事件", () => {
+    const engine = new GestureEngine();
+    for (const at of [0, 16, 32, 48, 64]) {
+      engine.update(makeGestureHand("scroll", { translateY: 0.5 }), at);
+    }
+    engine.update(makeGestureHand("scroll", { translateY: 0.46 }), 80);
+
+    const last = engine.getTrace().frames.at(-1)!;
+    expect(last.events).toEqual(["scroll"]);
+    expect(last.features?.scrollPoseScore).toBeGreaterThanOrEqual(0.8);
   });
 
   it("轨迹保留原始异常点但记录稳定层质量与安全门", () => {
