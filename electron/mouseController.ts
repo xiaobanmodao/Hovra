@@ -52,7 +52,12 @@ export interface MouseControllerDependencies {
   isActive(): boolean;
   mouse: SystemMouseAdapter;
   overlay?: {
-    show(x: number, y: number, state: CursorOverlayState): void;
+    show(
+      x: number,
+      y: number,
+      state: CursorOverlayState,
+      longPressProgress: number,
+    ): void;
     hide(): void;
     refresh?(): void;
     pulse?(action: CursorPulse): void;
@@ -67,7 +72,12 @@ export interface MouseControllerDependencies {
 export interface MouseController {
   permissionStatus(): Promise<PermissionStatus>;
   activate(): Promise<boolean>;
-  move(x: number, y: number, state?: CursorOverlayState): Promise<void>;
+  move(
+    x: number,
+    y: number,
+    state?: CursorOverlayState,
+    longPressProgress?: number,
+  ): Promise<void>;
   drag(x: number, y: number): Promise<void>;
   click(): Promise<void>;
   rightClick(): Promise<void>;
@@ -175,13 +185,19 @@ export function createMouseController(
       return true;
     },
 
-    move(x: number, y: number, state: CursorOverlayState = "tracking"): Promise<void> {
+    move(
+      x: number,
+      y: number,
+      state: CursorOverlayState = "tracking",
+      longPressProgress = 0,
+    ): Promise<void> {
       return queueAction(async () => {
         if (
           isButtonDown
           || !Number.isFinite(x)
           || !Number.isFinite(y)
           || !isCursorOverlayState(state)
+          || !isLongPressProgress(longPressProgress)
           || !(await canAct())
         ) {
           return;
@@ -189,7 +205,7 @@ export function createMouseController(
 
         await deps.mouse.move(x, y);
         deps.cursor?.refresh?.();
-        deps.overlay?.show(x, y, state);
+        deps.overlay?.show(x, y, state, longPressProgress);
       });
     },
 
@@ -206,7 +222,7 @@ export function createMouseController(
 
         await deps.mouse.drag(x, y);
         deps.cursor?.refresh?.();
-        deps.overlay?.show(x, y, "dragging");
+        deps.overlay?.show(x, y, "dragging", 1);
       });
     },
 
@@ -297,6 +313,7 @@ export function registerMouseControllerIpc(
       bounds.x + payload.x * Math.max(0, bounds.width - 1),
       bounds.y + payload.y * Math.max(0, bounds.height - 1),
       payload.state ?? "tracking",
+      payload.longPressProgress ?? 0,
     );
   });
   ipcMain.handle("gesture:drag", async (event, payload) => {
@@ -375,12 +392,22 @@ export async function pauseForLifecycle(
 
 function isNormalizedMovePayload(
   payload: unknown,
-): payload is { x: number; y: number; state?: CursorOverlayState } {
+): payload is {
+  x: number;
+  y: number;
+  state?: CursorOverlayState;
+  longPressProgress?: number;
+} {
   if (typeof payload !== "object" || payload === null) {
     return false;
   }
 
-  const candidate = payload as { x?: unknown; y?: unknown; state?: unknown };
+  const candidate = payload as {
+    x?: unknown;
+    y?: unknown;
+    state?: unknown;
+    longPressProgress?: unknown;
+  };
   return (
     typeof candidate.x === "number" &&
     Number.isFinite(candidate.x) &&
@@ -390,8 +417,17 @@ function isNormalizedMovePayload(
     Number.isFinite(candidate.y) &&
     candidate.y >= 0 &&
     candidate.y <= 1 &&
-    (candidate.state === undefined || isCursorOverlayState(candidate.state))
+    (candidate.state === undefined || isCursorOverlayState(candidate.state)) &&
+    (candidate.longPressProgress === undefined
+      || isLongPressProgress(candidate.longPressProgress))
   );
+}
+
+function isLongPressProgress(value: unknown): value is number {
+  return typeof value === "number"
+    && Number.isFinite(value)
+    && value >= 0
+    && value <= 1;
 }
 
 function isCursorOverlayState(value: unknown): value is CursorOverlayState {

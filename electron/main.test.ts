@@ -11,6 +11,7 @@ interface CapturedControllerDependencies {
       y: number,
       state: "tracking" | "left-pinching" | "right-pinching" | "double-pinching" | "dragging" | "scrolling"
         | "candidate-left" | "releasing-left",
+      longPressProgress?: number,
     ): void;
     hide(): void;
     refresh?(): void;
@@ -277,6 +278,8 @@ describe("main BrowserWindow security", () => {
     expect(overlayDocument).toContain(".cursor.scrolling");
     expect(overlayDocument).toContain(".cursor.candidate-left");
     expect(overlayDocument).toContain(".cursor.releasing-left");
+    expect(overlayDocument).toContain("--long-press-progress");
+    expect(overlayDocument).toContain("conic-gradient");
     expect(overlayDocument).toContain("@keyframes click-pulse");
   });
 
@@ -325,6 +328,7 @@ describe("main BrowserWindow security", () => {
     ] as const) {
       mainMocks.controllerDependencies?.overlay?.show(600, 400, state);
     }
+    mainMocks.controllerDependencies?.overlay?.show(600, 400, "left-pinching", 0.5);
     mainMocks.controllerDependencies?.overlay?.pulse?.("left");
     mainMocks.controllerDependencies?.overlay?.pulse?.("left");
 
@@ -340,6 +344,7 @@ describe("main BrowserWindow security", () => {
     ]) {
       expect(scripts.some((script) => script.includes(`\"state\":\"${state}\"`))).toBe(true);
     }
+    expect(scripts.some((script) => script.includes(`\"longPressProgress\":0.5`))).toBe(true);
     const pulses = scripts.filter((script) => script.includes(`\"pulse\":\"left\"`));
     expect(pulses).toHaveLength(2);
     expect(pulses[0]).not.toBe(pulses[1]);

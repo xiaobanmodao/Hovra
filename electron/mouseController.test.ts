@@ -219,14 +219,14 @@ describe("createMouseController", () => {
     const controller = createMouseController(deps);
     await controller.activate();
 
-    await controller.move(320, 240, "right-pinching");
+    await controller.move(320, 240, "right-pinching", 0.5);
     await controller.rightClick();
     await controller.doubleClick();
     await controller.scroll(-4);
     await controller.scroll(13);
     await controller.scroll(1.5);
 
-    expect(deps.overlay.show).toHaveBeenCalledWith(320, 240, "right-pinching");
+    expect(deps.overlay.show).toHaveBeenCalledWith(320, 240, "right-pinching", 0.5);
     expect(deps.mouse.rightClick).toHaveBeenCalledOnce();
     expect(deps.mouse.doubleClick).toHaveBeenCalledOnce();
     expect(deps.mouse.scroll).toHaveBeenCalledOnce();
@@ -262,6 +262,7 @@ describe("createMouseController", () => {
 
     expect(deps.mouse.drag).toHaveBeenCalledOnce();
     expect(deps.mouse.drag).toHaveBeenCalledWith(320.5, -12);
+    expect(deps.overlay.show).toHaveBeenCalledWith(320.5, -12, "dragging", 1);
   });
 
   it("drops hover movement and clicks while the tracked button remains down", async () => {
@@ -456,16 +457,27 @@ describe("main-process mouse IPC", () => {
       "gesture:scroll",
     ]);
 
-    await handlers.get("gesture:move")?.(trustedEvent, { x: 0.25, y: 0.5, state: "left-pinching" });
+    await handlers.get("gesture:move")?.(trustedEvent, {
+      x: 0.25,
+      y: 0.5,
+      state: "left-pinching",
+      longPressProgress: 0.5,
+    });
     await handlers.get("gesture:drag")?.(trustedEvent, { x: 0.75, y: 0.25 });
     await handlers.get("gesture:drag")?.(trustedEvent, { x: -0.01, y: 0.25 });
     await handlers.get("gesture:drag")?.(trustedEvent, { x: 0.75 });
     await handlers.get("gesture:move")?.(trustedEvent, { x: Number.NaN, y: 0.5 });
     await handlers.get("gesture:move")?.(trustedEvent, { x: 2, y: 0.5 });
     await handlers.get("gesture:move")?.(trustedEvent, { x: 0.25 });
+    await handlers.get("gesture:move")?.(trustedEvent, {
+      x: 0.5,
+      y: 0.5,
+      state: "left-pinching",
+      longPressProgress: 1.01,
+    });
 
     expect(controller.move).toHaveBeenCalledTimes(1);
-    expect(controller.move).toHaveBeenCalledWith(-1134.25, 532.5, "left-pinching");
+    expect(controller.move).toHaveBeenCalledWith(-1134.25, 532.5, "left-pinching", 0.5);
     expect(controller.drag).toHaveBeenCalledOnce();
     expect(controller.drag).toHaveBeenCalledWith(-378.75, 287.25);
   });
@@ -545,8 +557,8 @@ describe("main-process mouse IPC", () => {
     await handlers.get("gesture:move")?.(trustedEvent, { x: 1, y: 1 });
 
     expect(vi.mocked(controller.move).mock.calls).toEqual([
-      [-1512, 42, "tracking"],
-      [-1, 1023, "tracking"],
+      [-1512, 42, "tracking", 0],
+      [-1, 1023, "tracking", 0],
     ]);
   });
 

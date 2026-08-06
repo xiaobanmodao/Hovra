@@ -233,11 +233,13 @@ function createCursorOverlay(): BrowserWindow {
   overlay.webContents.on("will-navigate", (event) => event.preventDefault());
   void overlay.loadURL(`data:text/html,${encodeURIComponent(`<!doctype html><style>
 html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden;cursor:none}
-.cursor{position:absolute;left:6px;top:6px;width:28px;height:28px;border:3px solid #7cf7ff;border-radius:50%;box-sizing:border-box;box-shadow:0 0 12px #00d9ff;transition:transform 45ms linear,border-color 45ms linear,background 45ms linear,box-shadow 45ms linear}
+.cursor{--long-press-progress:0;position:absolute;left:6px;top:6px;width:28px;height:28px;border:3px solid #7cf7ff;border-radius:50%;box-sizing:border-box;box-shadow:0 0 12px #00d9ff;transition:transform 45ms linear,border-color 45ms linear,background 45ms linear,box-shadow 45ms linear}
+.cursor::before{content:"";position:absolute;inset:-5px;border-radius:50%;background:conic-gradient(#ffcc66 calc(var(--long-press-progress)*1turn),transparent 0);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 0);mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 0);opacity:var(--long-press-progress);pointer-events:none}
 .cursor.left-pinching{transform:scale(.72);border-color:#66ff9a;background:rgba(102,255,154,.2);box-shadow:0 0 14px #20df71}
 .cursor.right-pinching{transform:scale(.78);border-color:#b88cff;background:rgba(184,140,255,.2);box-shadow:0 0 14px #8e57ff}
 .cursor.double-pinching{transform:scale(.68);border-color:#ff70dc;background:rgba(255,112,220,.24);box-shadow:0 0 0 4px rgba(255,112,220,.25),0 0 14px #ff39c5}
-.cursor.dragging{border-color:#ffcc66;background:rgba(255,204,102,.18);box-shadow:0 0 12px #ff9900}
+.cursor.dragging{border-color:#ffcc66;background:#ffcc66;box-shadow:0 0 0 4px rgba(255,204,102,.3),0 0 16px #ff9900}
+.cursor.dragging::before{opacity:1}
 .cursor.scrolling{border-color:#5aa7ff;box-shadow:0 0 0 5px rgba(90,167,255,.22),0 0 14px #2687ff}
 .cursor.candidate-left,.cursor.candidate-right,.cursor.candidate-double,.cursor.candidate-scroll{opacity:.62;filter:saturate(.7)}
 .cursor.candidate-left,.cursor.releasing-left{border-color:#66ff9a}
@@ -251,7 +253,7 @@ html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden
 @keyframes click-pulse{from{opacity:1;transform:scale(.65)}to{opacity:0;transform:scale(1.55)}}
 </style><div id="cursor" class="cursor tracking"><div id="pulse" class="pulse"></div></div><script>
 const cursor=document.getElementById('cursor');const pulse=document.getElementById('pulse');
-window.addEventListener('message',event=>{const data=event.data;if(!data||data.type!=='gesture-overlay')return;if(data.state)cursor.className='cursor '+data.state;if(data.pulse){pulse.className='pulse '+data.pulse;void pulse.offsetWidth;pulse.className='pulse '+data.pulse+' animate'}})
+window.addEventListener('message',event=>{const data=event.data;if(!data||data.type!=='gesture-overlay')return;if(data.state)cursor.className='cursor '+data.state;if(Number.isFinite(data.longPressProgress)&&data.longPressProgress>=0&&data.longPressProgress<=1)cursor.style.setProperty('--long-press-progress',String(data.longPressProgress));if(data.pulse){pulse.className='pulse '+data.pulse;void pulse.offsetWidth;pulse.className='pulse '+data.pulse+' animate'}})
 </script>`)} `);
   cursorOverlay = overlay;
   return overlay;
@@ -261,13 +263,26 @@ function setCursorOverlayState(
   x: number,
   y: number,
   state: CursorOverlayState,
+  longPressProgress = 0,
 ): void {
-  if (!cursorOverlay || cursorOverlay.isDestroyed() || !Number.isFinite(x) || !Number.isFinite(y)) {
+  if (
+    !cursorOverlay
+    || cursorOverlay.isDestroyed()
+    || !Number.isFinite(x)
+    || !Number.isFinite(y)
+    || !Number.isFinite(longPressProgress)
+    || longPressProgress < 0
+    || longPressProgress > 1
+  ) {
     return;
   }
   cursorOverlay.setBounds(cursorOverlayBounds({ x, y }, CURSOR_OVERLAY_SIZE));
   cursorOverlay.webContents.executeJavaScript(
-    `window.postMessage(${JSON.stringify({ type: "gesture-overlay", state })}, "*")`,
+    `window.postMessage(${JSON.stringify({
+      type: "gesture-overlay",
+      state,
+      longPressProgress,
+    })}, "*")`,
   ).catch(() => undefined);
   cursorOverlay.showInactive();
   cursorOverlayVisible = true;
