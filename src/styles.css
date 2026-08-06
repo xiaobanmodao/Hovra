@@ -6,10 +6,40 @@
 }
 
 .stability-test-panel {
+  margin-bottom: 1rem;
   padding: 24px;
   border: 1px solid rgba(123, 154, 255, 0.28);
   border-radius: 22px;
   background: linear-gradient(145deg, rgba(21, 29, 54, 0.96), rgba(12, 18, 35, 0.96));
+}
+
+.stability-test-panel button {
+  min-height: 2.6rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid rgba(99, 215, 238, 0.48);
+  border-radius: 0.7rem;
+  color: #e6fbff;
+  background: rgba(99, 215, 238, 0.12);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.stability-test-panel button:hover:not(:disabled) {
+  border-color: rgba(99, 215, 238, 0.78);
+  background: rgba(99, 215, 238, 0.2);
+}
+
+.stability-test-panel button:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.stability-test-panel button:disabled {
+  border-color: #35465b;
+  color: #70839a;
+  background: rgba(53, 70, 91, 0.2);
+  cursor: not-allowed;
 }
 
 .stability-test-heading,

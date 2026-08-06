@@ -29,7 +29,7 @@
 - Consumes: `GestureOutput` and its `diagnostics` from `src/gesture/types.ts`.
 - Produces: `createStabilitySession(nowMs)`, `advanceStabilitySession(session, observation)`, `StabilitySession`, `StabilityStep`, `StabilitySample`, `StabilityLabel`.
 
-- [ ] **Step 1: Write failing tests for the complete protocol**
+- [x] **Step 1: Write failing tests for the complete protocol**
 
 ```ts
 it("按准备、20 次捏合和四类负样本推进", () => {
@@ -47,12 +47,12 @@ it("坏帧暂停计时且不进入样本", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `npx vitest run src/gesture/stabilityTest.test.ts`
 Expected: FAIL because `stabilityTest.ts` does not exist.
 
-- [ ] **Step 3: Implement the deterministic protocol and bounded sample storage**
+- [x] **Step 3: Implement the deterministic protocol and bounded sample storage**
 
 ```ts
 export type StabilityPhase = "idle" | "readiness" | "positive" | "negative" | "analyzing" | "complete" | "cancelled";
@@ -71,12 +71,12 @@ export function advanceStabilitySession(
 
 Each positive repetition uses separate → ignore → contact → ignore → separate windows. Readiness and active windows advance only on valid frames. Export Chinese action titles and quality messages as data on each step.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run: `npx vitest run src/gesture/stabilityTest.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/gesture/stabilityTest.ts src/gesture/stabilityTest.test.ts
@@ -95,7 +95,7 @@ git commit -m "feat: add guided stability test protocol"
 - Consumes: `StabilitySample[]` and current `StablePinchThresholds`.
 - Produces: `analyzeStabilitySession(samples, currentThresholds): StabilityReport`, including `metrics`, per-scenario results and `recommendation`.
 
-- [ ] **Step 1: Write failing metric and threshold tests**
+- [x] **Step 1: Write failing metric and threshold tests**
 
 ```ts
 it("从完全分离的正负分布生成有迟滞的安全建议", () => {
@@ -111,12 +111,12 @@ it("分布重叠时拒绝建议", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `npx vitest run src/gesture/stabilityTuning.test.ts src/gesture/pinchBenchmark.test.ts`
 Expected: FAIL for missing analyzer and inference P95/scenario metrics.
 
-- [ ] **Step 3: Implement robust analysis**
+- [x] **Step 3: Implement robust analysis**
 
 ```ts
 export type StabilityRecommendation = {
@@ -132,12 +132,12 @@ const exit = clamp(Math.max(enter + 0.12, percentile(contactRatios, 0.95) + 0.16
 
 Reject non-finite values, fewer than 20 completed positive trials, missing scenario coverage, any negative click, overlapping distributions, or replay regressions. Add inference P95 and completed/missed trial counts without changing current benchmark behavior.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run: `npx vitest run src/gesture/stabilityTuning.test.ts src/gesture/pinchBenchmark.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/gesture/stabilityTuning.ts src/gesture/stabilityTuning.test.ts src/gesture/pinchBenchmark.ts src/gesture/pinchBenchmark.test.ts
@@ -158,7 +158,7 @@ git commit -m "feat: analyze gesture stability and recommend thresholds"
 - Consumes: optional `pinchEnterRatio` and `pinchExitRatio` from `GestureSettings`.
 - Produces: `resolveStablePinchThresholds(settings)` and engine diagnostics reflecting the effective values.
 
-- [ ] **Step 1: Write failing compatibility and override tests**
+- [x] **Step 1: Write failing compatibility and override tests**
 
 ```ts
 it("没有个人阈值时保持当前默认边界", () => {
@@ -171,12 +171,12 @@ it("只接受安全且有迟滞的个人边界", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `npx vitest run src/gesture/stableHandMetrics.test.ts src/gesture/gestureEngine.test.ts`
 Expected: FAIL for missing optional settings and resolver.
 
-- [ ] **Step 3: Implement validated overrides**
+- [x] **Step 3: Implement validated overrides**
 
 ```ts
 export type GestureSettings = {
@@ -195,12 +195,12 @@ export function resolveStablePinchThresholds(settings: GestureSettings): StableP
 
 Pass the resolved thresholds into `measureStableHand`; preserve the existing sensitivity signature for direct callers.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run: `npx vitest run src/gesture/stableHandMetrics.test.ts src/gesture/gestureEngine.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/gesture/types.ts src/gesture/config.ts src/gesture/stableHandMetrics.ts src/gesture/stableHandMetrics.test.ts src/gesture/gestureEngine.ts src/gesture/gestureEngine.test.ts
@@ -222,7 +222,7 @@ git commit -m "feat: support safe personalized pinch thresholds"
 - Consumes: current session, report and callbacks `onStart`, `onCancel`, `onApply`, `onRestore`, `onSave`.
 - Produces: accessible Chinese UI for idle, running, paused-quality and complete states.
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 ```tsx
 it("显示动作、进度和实时质量原因", () => {
@@ -238,21 +238,21 @@ it("不安全建议不能应用", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `npx vitest run src/components/StabilityTestPanel.test.tsx`
 Expected: FAIL because component does not exist.
 
-- [ ] **Step 3: Implement the panel and responsive styles**
+- [x] **Step 3: Implement the panel and responsive styles**
 
 Render one primary instruction, one clear hand illustration, countdown/progress, a live status region and result cards. Keep controls keyboard accessible and avoid color-only status. Do not add manual sliders for the generated thresholds.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run: `npx vitest run src/components/StabilityTestPanel.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/StabilityTestPanel.tsx src/components/StabilityTestPanel.test.tsx src/styles.css
@@ -273,7 +273,7 @@ git commit -m "feat: add Chinese guided stability test UI"
 - Consumes: live `GestureOutput`, focus state, session reducer and `StabilityReport`.
 - Produces: end-to-end safe test flow and settings restore snapshot.
 
-- [ ] **Step 1: Write failing integration tests**
+- [x] **Step 1: Write failing integration tests**
 
 ```tsx
 it("开始测试立即暂停系统控制且测试期间不派发桌面事件", async () => {
@@ -292,12 +292,12 @@ it("应用建议后可恢复且不会自动启用系统控制", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 Run: `npx vitest run src/App.test.tsx src/components/CalibrationPanel.test.tsx src/components/SystemControlPanel.test.tsx`
 Expected: FAIL for missing stability test integration and disabled state.
 
-- [ ] **Step 3: Implement App ownership and safety wiring**
+- [x] **Step 3: Implement App ownership and safety wiring**
 
 ```tsx
 const startStabilityTest = useCallback(async () => {
@@ -309,12 +309,12 @@ const startStabilityTest = useCallback(async () => {
 
 Feed every fresh recognized frame into the session while active. Pause valid time when `document.hasFocus()` is false. Disable system and calibration controls through explicit `disabled` props. Applying/restoring settings rebuilds the engine through the existing settings path and never calls `activate`.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run: `npx vitest run src/App.test.tsx src/components/CalibrationPanel.test.tsx src/components/SystemControlPanel.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/App.tsx src/App.test.tsx src/components/CalibrationPanel.tsx src/components/CalibrationPanel.test.tsx src/components/SystemControlPanel.tsx src/components/SystemControlPanel.test.tsx
@@ -331,11 +331,11 @@ git commit -m "feat: integrate safe gesture stability testing"
 - Consumes: all prior tasks.
 - Produces: verified build and user instructions.
 
-- [ ] **Step 1: Document the exact workflow and privacy boundary**
+- [x] **Step 1: Document the exact workflow and privacy boundary**
 
 Add Chinese instructions for starting the 4-minute test, understanding insufficient-data messages, applying/restoring recommendations, and confirm no image/video is stored.
 
-- [ ] **Step 2: Run all verification commands**
+- [x] **Step 2: Run all verification commands**
 
 Run:
 
@@ -348,12 +348,12 @@ npm run electron:make
 
 Expected: all tests and type checks pass; production build and signed macOS ZIP complete.
 
-- [ ] **Step 3: Launch packaged app and perform a non-physical smoke check**
+- [x] **Step 3: Launch packaged app and perform a non-physical smoke check**
 
 Run: `open out/手势控制-darwin-arm64/手势控制.app`
 Expected: app launches, Chinese stability panel renders, start button is available once camera/tracker conditions allow. Do not claim physical-hand accuracy from this smoke check.
 
-- [ ] **Step 4: Mark every completed plan checkbox and commit documentation**
+- [x] **Step 4: Mark every completed plan checkbox and commit documentation**
 
 ```bash
 git add README.md docs/superpowers/plans/2026-08-06-guided-stability-tuning.md
